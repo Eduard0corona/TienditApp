@@ -4674,6 +4674,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "OrderType", "Status");
 
+                    b.HasIndex(new[] { "TenantId", "CreatedAt" }, "IX_Orders_OnlineMenu_TenantId_CreatedAt")
+                        .HasFilter("[Channel] = 2 AND [CreatedByBusiness] = 0 AND [TableNumber] IS NULL AND [OpenTableId] IS NULL AND [CustomerPhone] IS NOT NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex(new[] { "TenantId", "CreatedAt" }, "IX_Orders_OnlineMenu_TenantId_CreatedAt"), new[] { "CustomerPhone", "Status" });
+
                     b.ToTable("Orders", null, t =>
                         {
                             t.HasCheckConstraint("CK_Orders_CustomerLink", "([CustomerUserId] IS NULL OR [TemporaryCustomerId] IS NULL) AND ([CreatedByBusiness] = 1 OR [CustomerUserId] IS NOT NULL OR [TemporaryCustomerId] IS NOT NULL)");
@@ -6880,6 +6885,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int>("AnswerReminderMinutes")
+                        .HasColumnType("int")
+                        .HasDefaultValue(60);
+
                     b.Property<int>("AppointmentReminderHoursBefore")
                         .HasColumnType("int");
 
@@ -7016,6 +7025,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantSettings", null, t =>
                         {
+                            t.HasCheckConstraint("CK_TenantSettings_AnswerReminderMinutes", "[AnswerReminderMinutes] IN (0, 30, 60, 120, 180)");
+
                             t.HasCheckConstraint("CK_TenantSettings_CreditDueSoonDaysBefore", "[CreditDueSoonDaysBefore] >= 1 AND [CreditDueSoonDaysBefore] <= 7");
 
                             t.HasCheckConstraint("CK_TenantSettings_CreditReminderEveryDays", "[CreditReminderEveryDays] >= 1 AND [CreditReminderEveryDays] <= 30");
@@ -7042,6 +7053,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool?>("OrderCancellationEmails")
+                        .HasColumnType("bit");
 
                     b.Property<string>("PermissionCodes")
                         .HasMaxLength(1000)

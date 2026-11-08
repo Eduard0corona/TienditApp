@@ -246,6 +246,20 @@ public class TenantSettings : BaseEntity, ITenantScoped
     /// <summary>Appointments the business attends at once: a time is offered online while fewer than these overlap it.</summary>
     public int OnlineBookingCapacity { get; private set; } = OnlineBookingRules.DefaultCapacity;
 
+    /// <summary>
+    /// How many minutes before its limit the business is reminded of a request online still waiting (Fase 30B, ADR 0082):
+    /// one of <see cref="ResponseTimes.ReminderMinuteChoices"/>, or <see cref="ResponseTimes.NoReminder"/> for none. An hour
+    /// until it picks, as since the Fase 29U.
+    /// </summary>
+    public int AnswerReminderMinutes { get; private set; } = ResponseTimes.DefaultReminderMinutes;
+
+    public void SetAnswerReminder(int minutes)
+    {
+        if (!ResponseTimes.IsReminderChoice(minutes))
+            throw new DomainException(ResponseTimes.ReminderChoiceMessage);
+        AnswerReminderMinutes = minutes;
+    }
+
     public void UpdateOnlineBooking(bool enabled, int capacity)
     {
         if (capacity is < 1 or > OnlineBookingRules.MaxCapacity)

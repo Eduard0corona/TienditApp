@@ -32,6 +32,13 @@ public class OnlineBookingSettingsDto
     /// <see cref="Capacity"/> is not used.
     /// </summary>
     public int StaffCount { get; set; }
+    /// <summary>
+    /// How many minutes before its limit the business is reminded of a request still waiting (Fase 30B, ADR 0082); 0 for
+    /// none. One of <see cref="AnswerReminderChoices"/>.
+    /// </summary>
+    public int AnswerReminderMinutes { get; set; } = ResponseTimes.DefaultReminderMinutes;
+    /// <summary>The minutes it may pick, besides 0.</summary>
+    public IReadOnlyList<int> AnswerReminderChoices { get; set; } = ResponseTimes.ReminderMinuteChoices;
 }
 
 /// <summary>The setting for online appointments, for everyone on the team who manages the agenda.</summary>
@@ -39,16 +46,24 @@ public class OnlineBookingSettingsDto
 [RequiresCapability(TenantCapability.Appointments)]
 public record GetOnlineBookingSettingsQuery : IRequest<OnlineBookingSettingsDto>;
 
-/// <summary>Turns online appointments on or off and says how many the business attends at once (owners and admins).</summary>
+/// <summary>
+/// Turns online appointments on or off and says how many the business attends at once (owners and admins). Since the Fase
+/// 30B (ADR 0082), also how long before its limit it is reminded of a request still waiting, or not at all; left as it is
+/// when not sent (a client of before).
+/// </summary>
 [RequiresTenantManager]
 [RequiresCapability(TenantCapability.Appointments)]
-public record UpdateOnlineBookingSettingsCommand(bool Enabled, int Capacity) : IRequest<Result<OnlineBookingSettingsDto>>;
+public record UpdateOnlineBookingSettingsCommand(bool Enabled, int Capacity, int? AnswerReminderMinutes = null)
+    : IRequest<Result<OnlineBookingSettingsDto>>;
 
 public class UpdateOnlineBookingSettingsCommandValidator : AbstractValidator<UpdateOnlineBookingSettingsCommand>
 {
     public UpdateOnlineBookingSettingsCommandValidator()
     {
         RuleFor(x => x.Capacity).InclusiveBetween(1, OnlineBookingRules.MaxCapacity).WithMessage(OnlineBookingRules.CapacityMessage);
+        RuleFor(x => x.AnswerReminderMinutes)
+            .Must(minutes => minutes is null || ResponseTimes.IsReminderChoice(minutes.Value))
+            .WithMessage(ResponseTimes.ReminderChoiceMessage);
     }
 }
 
@@ -89,9 +104,12 @@ public class OnlineBookingSettingsHandler :
             return Result.Failure<OnlineBookingSettingsDto>("Configura primero tu negocio.");
 
         var settings = tenant.Settings;
-        var previous = new { settings.OnlineBookingEnabled, settings.OnlineBookingCapacity };
+        var previous = new { settings.OnlineBookingEnabled, settings.OnlineBookingCapacity, settings.AnswerReminderMinutes };
         settings.UpdateOnlineBooking(request.Enabled, request.Capacity);
-        if (previous.OnlineBookingEnabled != settings.OnlineBookingEnabled || previous.OnlineBookingCapacity != settings.OnlineBookingCapacity)
+        if (request.AnswerReminderMinutes is { } minutes)
+            settings.SetAnswerReminder(minutes);
+        if (previous.OnlineBookingEnabled != settings.OnlineBookingEnabled || previous.OnlineBookingCapacity != settings.OnlineBookingCapacity
+            || previous.AnswerReminderMinutes != settings.AnswerReminderMinutes)
         {
             // Letting strangers take the agenda's times is a decision worth recording.
             _context.AuditLogs.Add(new AuditLog(
@@ -103,7 +121,7 @@ public class OnlineBookingSettingsHandler :
                 metadata: JsonSerializer.Serialize(new
                 {
                     Previous = previous,
-                    New = new { settings.OnlineBookingEnabled, settings.OnlineBookingCapacity }
+                    New = new { settings.OnlineBookingEnabled, settings.OnlineBookingCapacity, settings.AnswerReminderMinutes }
                 })));
             await _context.SaveChangesAsync(cancellationToken);
         }
@@ -134,7 +152,8 @@ public class OnlineBookingSettingsHandler :
             BooksOnline = enabled && missing.Count == 0,
             Missing = missing,
             Slug = tenant.Slug,
-            StaffCount = staff.Count
+            StaffCount = staff.Count,
+            AnswerReminderMinutes = settings?.AnswerReminderMinutes ?? ResponseTimes.DefaultReminderMinutes
         };
     }
 }

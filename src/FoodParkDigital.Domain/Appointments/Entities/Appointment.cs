@@ -391,13 +391,17 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// one whose limit came less than two hours after it arrived, or one already answered, cancelled or reminded:
     /// <see cref="AppointmentAnswerDueSoonEvent"/> then is not raised.
     /// </summary>
+    /// <param name="lead">
+    /// How long before its limit its business wants it (Fase 30B, ADR 0082): <see cref="ResponseTimes.ReminderLead"/> when
+    /// null, none when zero.
+    /// </param>
     /// <returns>Whether it is reminded now.</returns>
-    public bool RemindToAnswer(DateTimeOffset now)
+    public bool RemindToAnswer(DateTimeOffset now, TimeSpan? lead = null)
     {
         if (Channel != AppointmentChannel.Online || FromTeam || Status != AppointmentStatus.Requested || AnswerReminderSentAt is not null)
             return false;
         var askedFor = RequestedStartAt ?? StartAt;
-        if (ResponseTimes.RemindAt(CreatedAt, askedFor) is not { } remindAt
+        if (ResponseTimes.RemindAt(CreatedAt, askedFor, lead) is not { } remindAt
             || now < remindAt
             || now >= ResponseTimes.AnswerBy(CreatedAt, askedFor))
             return false;

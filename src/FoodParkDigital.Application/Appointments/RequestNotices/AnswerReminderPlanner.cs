@@ -7,8 +7,9 @@ namespace FoodParkDigital.Application.Appointments.RequestNotices;
 
 /// <summary>
 /// Reminds a business of the requests online still waiting an hour before their limit to be answered in time (Fase 29U, ADR
-/// 0075). It runs in the business's own scope (the worker finds which businesses have any); each request reminded raises
-/// its event, which the outbox turns into the emails, saved by the caller.
+/// 0075) or, since the Fase 30B (ADR 0082), as long before as the business picked, or never if it wants none. It runs in the
+/// business's own scope (the worker finds which businesses have any); each request reminded raises its event, which the
+/// outbox turns into the emails, saved by the caller.
 /// </summary>
 public sealed class AnswerReminderPlanner
 {
@@ -39,11 +40,20 @@ public sealed class AnswerReminderPlanner
     /// <returns>The requests reminded now, not saved yet.</returns>
     public async Task<int> RemindDueAsync(CancellationToken cancellationToken)
     {
+        // The business's own choice, in its scope; an hour when it has no settings, as before it could pick.
+        var minutes = await _context.TenantSettings
+            .AsNoTracking()
+            .Select(s => (int?)s.AnswerReminderMinutes)
+            .FirstOrDefaultAsync(cancellationToken) ?? ResponseTimes.DefaultReminderMinutes;
+        if (minutes == ResponseTimes.NoReminder)
+            return 0;
+
         var now = _clock.UtcNow;
+        var lead = TimeSpan.FromMinutes(minutes);
         var reminded = 0;
         foreach (var request in await Waiting(_context.Appointments, now).ToListAsync(cancellationToken))
         {
-            if (request.RemindToAnswer(now))
+            if (request.RemindToAnswer(now, lead))
                 reminded++;
         }
         return reminded;

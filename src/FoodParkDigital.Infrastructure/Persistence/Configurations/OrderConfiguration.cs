@@ -174,6 +174,12 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => new { o.TenantId, o.TemporaryCustomerId });
         // What a customer owes, and their card, gather their orders by phone (Fase 26A).
         builder.HasIndex(o => new { o.TenantId, o.CustomerPhone });
+        // Fase 30B (ADR 0082): the orders its customers place on the online menu, which the snapshot of Explorar reads for
+        // every listed business to say how soon each confirms them (Fase 29T) and has them ready (Fase 29Y): only those, by
+        // business and date, with what both reads compare. Without it, they also go through every counter sale.
+        builder.HasIndex(o => new { o.TenantId, o.CreatedAt }, "IX_Orders_OnlineMenu_TenantId_CreatedAt")
+            .HasFilter("[Channel] = 2 AND [CreatedByBusiness] = 0 AND [TableNumber] IS NULL AND [OpenTableId] IS NULL AND [CustomerPhone] IS NOT NULL")
+            .IncludeProperties(o => new { o.CustomerPhone, o.Status });
         // A device's key identifies one sale per business: retries return it instead of creating another.
         builder.HasIndex(o => new { o.TenantId, o.ClientRequestId })
             .IsUnique()

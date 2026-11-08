@@ -38,6 +38,10 @@ public record CreateEmployeeCommand : IRequest<Result<EmployeeDto>>
     public bool? RequestEmails { get; init; }
     /// <summary>Whether they get an email with each answer to a quote from its link; null leaves what they have.</summary>
     public bool? QuoteReplyEmails { get; init; }
+    /// <summary>
+    /// Whether they get an email with each online order its customer cancels (Fase 30B, ADR 0082); null leaves what they have.
+    /// </summary>
+    public bool? OrderCancellationEmails { get; init; }
 }
 
 public class CreateEmployeeCommandValidator : AbstractValidator<CreateEmployeeCommand>
@@ -151,7 +155,7 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
             tenantUser.SetPermissionCodes(TenantPermissionCatalog.GetDefaultCodes(request.AppRole, tenantRole));
         else
             tenantUser.SetExplicitPermissions(request.Permissions);
-        EmployeeNoticeEmails.Apply(tenantUser, request.RequestEmails, request.QuoteReplyEmails);
+        EmployeeNoticeEmails.Apply(tenantUser, new NoticeChoices(request.RequestEmails, request.QuoteReplyEmails, request.OrderCancellationEmails));
         _context.TenantUsers.Add(tenantUser);
         // The invitation email is saved with the membership and goes out from the outbox.
         var invitationPath = invite
