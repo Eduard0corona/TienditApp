@@ -2478,6 +2478,47 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - el correo decía «Ahora te llegan…» de un aviso prendido sin el permiso que pide, que no le llegaría ni podría cambiar en Mi perfil: ahora solo dice los que le pueden llegar, y sin ninguno no se manda (quitar esa revisión hace fallar la prueba nueva);
     - la prueba del outbox no revisaba que cada guardado saliera bien: ahora lo revisa.
   - **Escenas:** contra la línea base de `master` en `ea8afe2` (810 escenas): 806 iguales y 4 distintas. Las 3 de la consola de la plataforma (escritorio, oscuro y teléfono) suman al final «Solicitudes marcadas como falsas», con su tabla y los teléfonos por sus últimos cuatro dígitos. «La tienda: botón del pedido» salió distinta 34 píxeles, en una franja de 8 px. Sola, con el build de `master`, también es distinta de su línea base: depende de con qué escenas corre, no del cambio, como ya se vio en la 29X.
+- Fase 30B, el correo del pedido que cancela el cliente, cuánto antes recordar una solicitud y el índice de los pedidos en línea ([ADR 0082](../adr/0082-order-cancellation-email-reminder-lead-and-online-orders-index.md)):
+  - **Domain:**
+    - `AnswerReminderTests` (+3): el recordatorio llega tanto antes del límite como eligió el negocio, con la regla de las dos anticipaciones (tres horas: no antes de seis desde que llegó), y nunca con «No recordarme»; las opciones son 30, 60, 120 y 180 minutos o ninguna; una solicitud se recuerda a las dos horas si el negocio eligió dos, y nunca con ninguna.
+    - `OnlineBookingTests` (+1 con 6 casos): `SetAnswerReminder` acepta las opciones y 0, rechaza 45, 240 y -30 con su mensaje, y una hora mientras no se elige.
+  - **Application:**
+    - `OrderCancellationEmailTests` (5, nuevo):
+      - un correo por persona a quien lo eligió y puede confirmar pedidos, y a los dueños mientras no eligen; no a quien no confirma pedidos, a quien no lo eligió, a quien ya no está, sin correo confirmado ni de otra cocina; nada si lo canceló el negocio;
+      - dice quién canceló qué pedido y por cuánto, codificado, con el enlace a Pedidos, y nunca el teléfono ni lo que pidió;
+      - no sale por un pedido que canceló el negocio, un día y un minuto después (un día exacto sí), a quien lo apagó desde que se encoló ni en un negocio suspendido;
+      - cada quien elige el suyo y los dueños lo reciben mientras no eligen; quien no es del equipo no;
+      - la regla de quién puede confirmar pedidos (permiso de Pedidos o administrar el equipo, en un negocio que vende y no suspendido) y los permisos de los dos endpoints.
+    - `AnswerReminderNoticesTests` (+1): el planificador recuerda con la anticipación de su propio negocio (dos horas), y nada cuando eligió ninguna; otro negocio con ninguna no cambia el suyo.
+    - `OnlineBookingFlowTests` (+1): Configuración elige la anticipación o ninguna, la deja como estaba si no la manda (un cliente de antes), valida las opciones y registra en la bitácora cada cambio, también el del recordatorio solo.
+    - `EmployeeAccessRulesTests` (+1): quien administra el equipo elige los pedidos cancelados de alguien, se le avisa con el correo de la 30A, y los del dueño solo cambian desde su perfil.
+    - `NoticeEmailsChangedEmailTests` (+1): el correo de la 30A dice los pedidos cancelados, y solo a quien puede confirmar pedidos.
+  - **Infrastructure:**
+    - `OrderCancellationEmailsMigrationSqlServerTests` (3, nuevo, SQL Server): las personas que existen no eligieron y los negocios quedan en 60, con la restricción que rechaza otro valor; la versión anterior sigue guardando personas y negocios; la reversa quita solo las columnas y su restricción, y al volver a aplicarla nadie eligió.
+    - `OutboxTests`: el evento nuevo y el de la 30A con su campo nuevo se guardan y se leen igual.
+    - Las pruebas de las migraciones de la 29G, la 29O y la 29V usan el modelo de antes de la 30B (`BeforeOrderCancellationEmails`).
+  - **WebApi:** `CrossTenantRealtimeSqlServerTests` (+1, SQL Server): el cliente de cada cocina cancela desde su enlace y a cada una le llega solo el suyo, al dueño y a la cajera que lo eligió, nunca a quien no confirma pedidos, que tampoco lo puede elegir; el dueño lo apaga y la cajera y la otra cocina siguen con el suyo.
+  - **Cliente:**
+    - `NoticeEmailsCard.test.tsx` (+1): «Pedidos cancelados» para quien confirma pedidos.
+    - `EmployeeFormModal.test.tsx` (+2): se elige en un negocio que vende y no en uno solo de citas; nunca se manda el del dueño.
+    - `OnlineBookingCard.test.tsx` (+2): el selector del recordatorio con sus opciones y «No recordarme», y una API de antes sin esos campos no rompe la tarjeta.
+  - **Mutaciones del servidor:** encolar una cancelación del negocio, quitar el día, aceptar cualquier cancelación, mandarlo a todo el equipo mientras no elige, aceptar un negocio solo de citas, recordar con anticipación cero, ignorar la elección del negocio, no guardar la anticipación, no registrar el cambio solo del recordatorio, quitar la validación, el valor del DTO, cambiar los del dueño, no revisar que la elección siga vigente en el correo de la 30A, el DTO del equipo y no revisar el permiso en ese correo: las 15 hacen fallar su prueba.
+  - **El índice filtrado de los pedidos en línea, medido y no agregado:** con la foto completa de Explorar en SQL Server, sin otra carga, una cocina con 25,000 y 100,000 pedidos en 90 días (uno de cada diez en línea) y las estadísticas de cada consulta (`sys.dm_exec_query_stats`, con el caché limpio entre cada prueba):
+    - la lectura de los pedidos listos baja de 85 a unos 35 ms con 25,000 pedidos, y de 556 a 178 ms con 100,000;
+    - la del tiempo de confirmar sube de 387 ms a unos 2.1 s con 25,000, y de 1.8 s a 28 s con 100,000 (la foto entera llega a los 30 segundos de la petición): con el índice, SQL Server cambia el plan de sus dos subconsultas del historial.
+    - Las dos buscan los mismos pedidos, así que un índice no puede servir solo a una. La migración se quedó con las dos columnas; se regeneraron y se probaron otra vez `apply.sql`, `rollback.sql` y `verify.sql`.
+  - **.NET en total:** 4,870 pruebas en verde con SQL Server (Domain 1,436; Application 2,206; WebApi 510; Infrastructure 718). **Cliente en total:** 208 archivos y 1,599 pruebas.
+  - **Primera visita:** 182,241 B (`master` en `0e5abae`: 182,242 B, −1 B): lo nuevo va en Mi perfil, Equipo y Configuración, que se cargan aparte; solo varían los nombres con hash. El presupuesto (182,300 B) no cambia. El CSS global, 63,077 B de 63,200 B.
+  - **Revisión independiente**, sin bloqueantes, con estos arreglos:
+    - los endpoints nuevos no tenían prueba de su permiso ni de su módulo: una prueba HTTP de punta a punta y otra de la regla y de los atributos;
+    - «lo apagó» no veía antes que sí le llegaba;
+    - la tarjeta de Configuración se rompía si le respondía una API de antes mientras se publica;
+    - el ADR citaba una medición que no estaba, y la deuda técnica todavía pedía el índice;
+    - comentarios que decían «una hora» fija.
+  - **Escenas:** contra la línea base de `master` en `0e5abae` (810 escenas): 801 iguales y 9 distintas, cada una igual en dos corridas seguidas.
+    - Mi perfil (las 3 de Caja y configuración y la de los avisos) suma «Pedidos cancelados», prendido. En la primera comparación salía gris en la de los avisos y no salía en las otras: el servidor simulado de las escenas no tenía su ruta y la de un pedido por su id le contestaba 404, así que la fila se escondía. Se agregó `GET`/`PUT /orders/cancellation-emails` y la escena de los avisos lo revisa.
+    - Las 3 de la tarjeta de citas en línea suman «Recordatorio de solicitudes sin responder»; las 2 de «Quién atiende», debajo, quedan un píxel más abajo sin otro cambio.
+    - Las del formulario de Equipo no cambian: sus avisos quedan debajo de lo que capturan, y los prueba `EmployeeFormModal.test.tsx`.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
