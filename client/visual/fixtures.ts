@@ -102,6 +102,10 @@ export const test = base.extend<SceneOptions>({
     await use(page);
 
     expect(mocks.unmocked, 'llamadas a la API sin respuesta simulada (agrega la ruta en mocks/)').toEqual([]);
+    expect(
+      mocks.offContract,
+      'respuestas simuladas que no coinciden con openapi.json (corrige el dato en mocks/; mocks/contract-known.txt solo lista las de antes)',
+    ).toEqual([]);
     expect(errors, 'errores de JavaScript en la página').toEqual([]);
   },
 });

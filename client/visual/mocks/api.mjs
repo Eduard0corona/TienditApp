@@ -4,9 +4,10 @@
 // - /hubs/**    -> 404 (SignalR does not connect; the screens work without live updates)
 // - /uploads/** -> 404, and /visual-img/** -> the demo pictures in ./img (product photos, logo)
 // - any other host -> aborted, so a run never depends on the network
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, appendFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildData, NOW_ISO } from './data.mjs';
+import { checkAnswer, known, normalize } from './contract.mjs';
 import { phase2Routes } from './routes-p2.mjs';
 import { phase3Routes } from './routes-p3.mjs';
 import { phase4Routes } from './routes-p4.mjs';
@@ -351,7 +352,8 @@ function buildRoutes(data, token) {
       o.paidAmount = Math.round((o.paidAmount + amount) * 100) / 100;
       o.balance = Math.round((o.total - o.paidAmount - (o.writtenOffAmount ?? 0)) * 100) / 100;
       o.canCancel = false;
-      return ok(payment);
+      // The API answers with the order as it stands after the payment (OrderDto), not with the payment.
+      return ok(o);
     }],
     ['GET', /^\/auth\/my-tenant\/setup$/, () => ok(data.setup)],
     ['GET', /^\/auth\/my-tenant\/special-days$/, () => ok(data.specialDays)],
@@ -400,7 +402,8 @@ function buildRoutes(data, token) {
     }],
 
     // ------------------------------------------------------------- cash
-    ['GET', /^\/cash\/current-session$/, () => ok(data.cashSession)],
+    // No session open: the API answers 204 without a body (the action returns null), not a JSON null.
+    ['GET', /^\/cash\/current-session$/, () => (data.cashSession ? ok(data.cashSession) : { status: 204, body: '' })],
     ['GET', /^\/cash\/transactions$/, (m, q) => {
       let rows = data.cashTx;
       const type = num(q, 'transactionType');
@@ -412,7 +415,9 @@ function buildRoutes(data, token) {
     // ------------------------------------------------------------- inventory / branches
     ['GET', /^\/(inventory\/locations|branches)$/, (m, q) => {
       const isActive = bool(q, 'isActive');
-      return ok(isActive === undefined ? data.locations : data.locations.filter((l) => l.isActive === isActive));
+      const rows = isActive === undefined ? data.locations : data.locations.filter((l) => l.isActive === isActive);
+      // A location of the inventory is not a branch: how it serves and where it is on the map are the branch's.
+      return ok(m[1] === 'branches' ? rows : rows.map(({ serviceMode, latitude, longitude, ...location }) => location));
     }],
     ['GET', /^\/inventory\/supplies$/, (m, q) => {
       let rows = data.supplies;
@@ -537,7 +542,8 @@ function buildRoutes(data, token) {
  * - `profile`: changes to the signed-in user (role, permissions…) to see the app as someone else;
  * - `prepareData(data)`: changes to the data before the first request;
  * - `extraRoutes(data, helpers)`: routes of a scene file, tried before the shared ones.
- * Returns the data and the list of calls nothing answered: the fixture fails the scene when it is not empty.
+ * Returns the data, the list of calls nothing answered and, since the Fase 30D, the answers that do not match openapi.json
+ * (contract.mjs) and are not among the known ones: the fixture fails the scene when either is not empty.
  * @param {import('@playwright/test').BrowserContext} context
  */
 export async function installMocks(context, opts = {}) {
@@ -552,6 +558,8 @@ export async function installMocks(context, opts = {}) {
   ];
   /** @type {string[]} */
   const unmocked = [];
+  /** @type {string[]} */
+  const offContract = [];
 
   // Any other host is aborted: a run never depends on the network.
   await context.route((url) => url.origin !== origin, (route) => route.abort('blockedbyclient'));
@@ -585,6 +593,12 @@ export async function installMocks(context, opts = {}) {
     if (!result) {
       unmocked.push(`${method} ${apiPath}${url.search}`);
       result = { status: 501, json: { message: 'Sin respuesta simulada en client/visual/mocks.' } };
+    } else {
+      // The answer has the shape openapi.json gives it, or the scene fails (Fase 30D). A file only needs its route.
+      for (const problem of checkAnswer(method, url.pathname, result.status, result.body === undefined ? result.json : undefined)) {
+        if (process.env.VISUAL_CONTRACT_REPORT) appendFileSync(process.env.VISUAL_CONTRACT_REPORT, `${normalize(problem)}\n`);
+        if (!known.has(normalize(problem))) offContract.push(problem);
+      }
     }
     if (result.body !== undefined) {
       await route.fulfill({ status: result.status, contentType: result.contentType, body: result.body });
@@ -593,5 +607,5 @@ export async function installMocks(context, opts = {}) {
     await route.fulfill({ status: result.status, contentType: 'application/json; charset=utf-8', body: JSON.stringify(result.json) });
   });
 
-  return { data, token, unmocked };
+  return { data, token, unmocked, offContract };
 }

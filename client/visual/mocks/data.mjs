@@ -54,6 +54,10 @@ export function buildData() {
     pricesIncludeTax: true,
     defaultTaxRate: 16,
     autoCloseCounterSales: true,
+    // As the API answers a business that has not chosen them: the defaults the screens assumed when they were missing.
+    orderNotificationPolicy: 0,
+    onlineMenuMode: 0,
+    timeZone: 'America/Mexico_City',
     onboardingCompletedAt: '2026-02-12T17:00:00.000Z',
     createdAt: '2026-02-12T16:20:00.000Z',
     rfc: 'CLE210315AB7',
@@ -135,8 +139,12 @@ export function buildData() {
       preparationTimeMinutes: extra.prep,
       calories: extra.calories,
       allergens: extra.allergens,
-      stockQuantity: extra.stock,
-      lowStockThreshold: extra.lowStock,
+      tracksStock: extra.stock != null,
+      stockItemId: null,
+      onHand: extra.stock ?? null,
+      reorderPoint: extra.lowStock ?? null,
+      taxObject: extra.isTaxExempt ? 1 : 2,
+      optionGroups: [],
       maxQuantityPerOrder: extra.maxQty,
       availableFromTime: extra.from,
       availableToTime: extra.to,
@@ -251,6 +259,8 @@ export function buildData() {
       inventoryLocationId: L.roma.id,
       reference: pay.reference,
       notes: pay.notes,
+      tip: pay.tip ?? 0,
+      change: pay.change ?? 0,
     }));
     const paidAmount = r2(payments.reduce((s, p) => s + p.amount, 0));
     const orderType = spec.orderType ?? 0;
@@ -501,7 +511,7 @@ export function buildData() {
   const cashSession = {
     id: cashSessionId, openedAt: at(7, 0), openedBy: OWNER_EMAIL, openingAmount: 1500, status: 0,
     notes: 'Fondo turno matutino', inflows: cashIn, outflows: cashOut, nonCashInflows: nonCash,
-    expectedBalance: r2(1500 + cashIn - cashOut),
+    expectedBalance: r2(1500 + cashIn - cashOut), isMine: true, cashCount: [],
   };
   const sumBy = (method) => r2(cashTx.filter((t) => t.transactionType === 0 && t.paymentMethod === method).reduce((s, t) => s + t.amount, 0));
   const salesTx = cashTx.filter((t) => t.transactionType === 0);
@@ -518,6 +528,11 @@ export function buildData() {
     byUser: [...byUser.values()],
     byLocation: [{ inventoryLocationId: L.roma.id, locationName: L.roma.name, paymentsCount: salesTx.length, totalAmount: r2(salesTx.reduce((s, t) => s + t.amount, 0)) }],
     byBranch: [{ branchId: L.roma.id, branchName: L.roma.name, paymentsCount: salesTx.length, totalAmount: r2(salesTx.reduce((s, t) => s + t.amount, 0)) }],
+    // A day without sales on the delivery platforms, online, with the customers' balance or their deposits.
+    platformTotal: 0, platformPaymentsCount: 0, platformRefundsTotal: 0,
+    onlineTotal: 0, onlinePaymentsCount: 0, onlineRefundsTotal: 0,
+    customerBalanceTotal: 0, customerBalancePaymentsCount: 0, customerBalanceRefundsTotal: 0,
+    customerDepositsTotal: 0, customerDepositReturnsTotal: 0, cashCustomerDepositsTotal: 0, cashCustomerDepositReturnsTotal: 0,
   };
 
   // ---------------------------------------------------------------- inventory
@@ -582,12 +597,14 @@ export function buildData() {
   addStock(S['INS-014'], L.bod, 4, { lastMovementAt: at(12, 0, -20) });
 
   const movements = [];
+  // The type and the reason as the API numbers them (InventoryMovementType from 1, Entry; InventoryMovementReason from 1,
+  // Purchase): Exit, AdjustmentDecrease, TransferOut and ReturnToSupplier take stock away.
   const addMovement = (num, type, reason, date, lines, extra = {}) => {
     const id = uuid(`mov:${num}`);
     const mappedLines = lines.map(([supply, location, qty, unitCost, before], idx) => ({
       id: uuid(`mov:${num}:line:${idx}`), supplyItemId: supply.id, supplyItemName: supply.name, inventoryLocationId: location.id,
       inventoryLocationName: location.name, quantity: qty, unitCost, totalCost: unitCost != null ? r2(unitCost * qty) : undefined,
-      quantityBefore: before, quantityAfter: r2([1, 3, 5, 7].includes(type) ? before - qty : before + qty),
+      quantityBefore: before, quantityAfter: r2([2, 4, 6, 8].includes(type) ? before - qty : before + qty),
       lotNumber: extra.lot, expirationDate: extra.expiration,
     }));
     movements.push({
@@ -596,17 +613,17 @@ export function buildData() {
       totalAmount: r2(mappedLines.reduce((s, l) => s + (l.totalCost ?? 0), 0)), createdAt: date, lines: mappedLines,
     });
   };
-  addMovement('INV-20261004-0004', 1, 1, at(12, 55), [[S['INS-004'], L.roma, 2, 4.5, 24], [S['INS-005'], L.roma, 0.24, 165, 3.44]], { reference: 'ORDER:ORD-000345', notes: 'Consumo por receta (2 tortas de jamón)' });
-  addMovement('INV-20261004-0003', 1, 1, at(12, 20), [[S['INS-001'], L.roma, 0.144, 380, 8.644]], { reference: 'ORDER:ORD-000343', notes: 'Consumo por receta (8 cafés americanos)' });
-  addMovement('INV-20261004-0002', 3, 4, at(11, 40), [[S['INS-007'], L.roma, 1.5, 28, 1.5]], { notes: 'Merma: totopos humedecidos', reference: 'MERMA-1004' });
-  addMovement('INV-20261004-0001', 0, 0, at(8, 30), [[S['INS-002'], L.roma, 24, 23.5, 0], [S['INS-003'], L.roma, 6, 56, 3]], { counterparty: 'Lácteos San Juan', document: 'FAC-A-88213', reference: 'PO-20261003-0002', notes: 'Recepción parcial de lácteos' });
-  addMovement('INV-20261003-0002', 5, 9, at(18, 10, -1), [[S['INS-001'], L.roma, 4, 372.5, 12.6]], { notes: 'Transferencia a Sucursal Coyoacán', reference: 'TR-0031' });
-  addMovement('INV-20261003-0001', 0, 0, at(10, 15, -1), [[S['INS-004'], L.roma, 120, 4.2, 6]], { counterparty: 'Panificadora La Espiga', document: 'NV-5521', reference: 'PO-20261003-0001' });
-  addMovement('INV-20261002-0001', 2, 6, at(19, 0, -2), [[S['INS-011'], L.bod, 0.5, 42, 6.5]], { notes: 'Conteo físico semanal' });
+  addMovement('INV-20261004-0004', 2, 2, at(12, 55), [[S['INS-004'], L.roma, 2, 4.5, 24], [S['INS-005'], L.roma, 0.24, 165, 3.44]], { reference: 'ORDER:ORD-000345', notes: 'Consumo por receta (2 tortas de jamón)' });
+  addMovement('INV-20261004-0003', 2, 2, at(12, 20), [[S['INS-001'], L.roma, 0.144, 380, 8.644]], { reference: 'ORDER:ORD-000343', notes: 'Consumo por receta (8 cafés americanos)' });
+  addMovement('INV-20261004-0002', 4, 5, at(11, 40), [[S['INS-007'], L.roma, 1.5, 28, 1.5]], { notes: 'Merma: totopos humedecidos', reference: 'MERMA-1004' });
+  addMovement('INV-20261004-0001', 1, 1, at(8, 30), [[S['INS-002'], L.roma, 24, 23.5, 0], [S['INS-003'], L.roma, 6, 56, 3]], { counterparty: 'Lácteos San Juan', document: 'FAC-A-88213', reference: 'PO-20261003-0002', notes: 'Recepción parcial de lácteos' });
+  addMovement('INV-20261003-0002', 6, 11, at(18, 10, -1), [[S['INS-001'], L.roma, 4, 372.5, 12.6]], { notes: 'Transferencia a Sucursal Coyoacán', reference: 'TR-0031' });
+  addMovement('INV-20261003-0001', 1, 1, at(10, 15, -1), [[S['INS-004'], L.roma, 120, 4.2, 6]], { counterparty: 'Panificadora La Espiga', document: 'NV-5521', reference: 'PO-20261003-0001' });
+  addMovement('INV-20261002-0001', 3, 7, at(19, 0, -2), [[S['INS-011'], L.bod, 0.5, 42, 6.5]], { notes: 'Conteo físico semanal' });
 
   const kardex = [];
   movements.forEach((m) => m.lines.forEach((line) => {
-    const isOut = [1, 3, 5, 7].includes(m.movementType);
+    const isOut = [2, 4, 6, 8].includes(m.movementType);
     kardex.push({
       movementLineId: line.id, movementId: m.id, movementNumber: m.movementNumber, movementDate: m.movementDate,
       movementType: m.movementType, movementReason: m.movementReason, referenceNumber: m.referenceNumber, externalReference: m.externalReference,
