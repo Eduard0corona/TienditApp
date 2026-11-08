@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicDirectoryApi, type DirectoryProfile } from '../../api/publicDirectoryApi';
-import { BusinessCategory, DirectoryVisibility, OrderConfirmTime, QuoteTime, ResponseTime } from '../../api/generated/enums';
+import { BusinessCategory, DirectoryVisibility, OrderConfirmTime, QuoteTime, ReadyTime, ResponseTime } from '../../api/generated/enums';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OnlineMenuMode, type TenantProfileDto } from '../../types';
@@ -33,6 +33,7 @@ function profile(overrides: Partial<DirectoryProfile> = {}): DirectoryProfile {
     countsRequests: false,
     countsQuotes: false,
     countsOrders: false,
+    countsReady: false,
     ...overrides,
   };
 }
@@ -172,6 +173,32 @@ describe('DirectoryCard', () => {
     renderCard();
     expect(await screen.findByText(/Apareces en Explorar/)).toBeInTheDocument();
     expect(screen.queryByText(/confirmar|pedidos en línea de 3/)).not.toBeInTheDocument();
+  });
+
+  it('shows a kitchen that takes online orders how soon it has them ready, and why it says nothing (Fase 29Y)', async () => {
+    api.getProfile.mockResolvedValue(profile({ countsOrders: true, countsReady: true, readyTime: ReadyTime.WithinHalfAnHour }));
+    const { unmount } = renderCard();
+
+    expect(await screen.findByText('Suele tener tu pedido listo en menos de media hora')).toBeInTheDocument();
+    expect(screen.getByText(/hasta que lo marcas como «Listo»/)).toBeInTheDocument();
+    unmount();
+
+    api.getProfile.mockResolvedValue(profile({ countsOrders: true, countsReady: true, readyTime: ReadyTime.Slower }));
+    const slow = renderCard();
+    expect(await screen.findByText(/Sueles tardar una hora o más/)).toBeInTheDocument();
+    expect(screen.queryByText(/Suele tener tu pedido listo/)).not.toBeInTheDocument();
+    slow.unmount();
+
+    api.getProfile.mockResolvedValue(profile({ countsOrders: true, countsReady: true }));
+    const newer = renderCard();
+    expect(await screen.findByText(/Todavía no contamos pedidos en línea de 3 clientes marcados como listos/)).toBeInTheDocument();
+    newer.unmount();
+
+    // A store, or a kitchen whose orders could not be read: nothing of them, not even «not yet».
+    api.getProfile.mockResolvedValue(profile({ countsOrders: true, countsReady: false, readyTime: ReadyTime.WithinHalfAnHour }));
+    renderCard();
+    expect(await screen.findByText(/Todavía no contamos pedidos en línea de 3 clientes/)).toBeInTheDocument();
+    expect(screen.queryByText(/listo|Listo/)).not.toBeInTheDocument();
   });
 
   it('tells a business that goes to homes that its store shows its address, until its owner checks it (Fase 29A)', async () => {

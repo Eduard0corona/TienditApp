@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { OrderConfirmTime, QuoteTime, ResponseTime } from '../api/generated/enums';
+import { OrderConfirmTime, QuoteTime, ReadyTime, ResponseTime } from '../api/generated/enums';
 import { setBusinessTimeZone } from './dates';
-import { ownOrderConfirmTimeNote, ownQuoteTimeNote, ownResponseTimeNote } from './ownResponseTime';
-import { answerInTimeLabel, orderConfirmTimeLabel, quoteTimeLabel, responseTimeLabel } from './responseTime';
+import { ownOrderConfirmTimeNote, ownQuoteTimeNote, ownReadyTimeNote, ownResponseTimeNote } from './ownResponseTime';
+import { answerInTimeLabel, orderConfirmTimeLabel, quoteTimeLabel, readyTimeLabel, responseTimeLabel } from './responseTime';
 
 describe('responseTimeLabel (Fase 29J)', () => {
   it('says within what the business answers, up to a day', () => {
@@ -112,5 +112,23 @@ describe('orderConfirmTimeLabel and ownOrderConfirmTimeNote (Fase 29T)', () => {
     expect(ownOrderConfirmTimeNote(OrderConfirmTime.WithinFiveMinutes)).toMatch(/Tus clientes lo leen en tu tarjeta y en tu menú\.$/);
     expect(ownOrderConfirmTimeNote(OrderConfirmTime.Slower)).toMatch(/^Sueles tardar media hora o más/);
     expect(ownOrderConfirmTimeNote(null)).toMatch(/^Todavía no contamos pedidos en línea de 3 clientes/);
+  });
+});
+
+describe('readyTimeLabel and ownReadyTimeNote (Fase 29Y)', () => {
+  it('says within what a kitchen has its online orders ready, up to an hour', () => {
+    expect(readyTimeLabel(ReadyTime.WithinFifteenMinutes)).toBe('Suele tener tu pedido listo en menos de 15 minutos');
+    expect(readyTimeLabel(ReadyTime.WithinHalfAnHour)).toBe('Suele tener tu pedido listo en menos de media hora');
+    expect(readyTimeLabel(ReadyTime.WithinAnHour)).toBe('Suele tener tu pedido listo en menos de una hora');
+    expect(readyTimeLabel(ReadyTime.Slower)).toBeNull();
+    expect(readyTimeLabel(null)).toBeNull();
+    expect(readyTimeLabel(undefined)).toBeNull();
+  });
+
+  it('tells its owner what counts and where customers read it, that an hour or more is not said, or that it is not counted yet', () => {
+    expect(ownReadyTimeNote(ReadyTime.WithinHalfAnHour)).toMatch(/hasta que lo marcas como «Listo»/);
+    expect(ownReadyTimeNote(ReadyTime.WithinHalfAnHour)).toMatch(/Uno que entregas sin marcarlo listo no cuenta\. Tus clientes lo leen en tu tarjeta y en tu menú\.$/);
+    expect(ownReadyTimeNote(ReadyTime.Slower)).toMatch(/^Sueles tardar una hora o más/);
+    expect(ownReadyTimeNote(null)).toMatch(/^Todavía no contamos pedidos en línea de 3 clientes marcados como listos/);
   });
 });

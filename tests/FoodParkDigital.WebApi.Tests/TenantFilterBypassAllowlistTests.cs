@@ -89,8 +89,10 @@ public class TenantFilterBypassAllowlistTests
         // never what it says or who asked (Fase 29S); and how soon each one confirms its online orders, from when each arrived
         // and when its history says it first left «Por confirmar», within its own business, never who ordered or answered
         // (Fase 29T); and, of a visit a week past its end without its quote sent, whether it has any quote and whether its
-        // sale charged something else than the visit, within its own business, never what they say or cost (Fase 29W).
-        ["src/FoodParkDigital.Application/PublicDirectory/PublicDirectoryFeature.cs"] = 11,
+        // sale charged something else than the visit, within its own business, never what they say or cost (Fase 29W); and how
+        // soon each kitchen has its online orders ready, from when each arrived and when its history says it was first ready,
+        // within its own business, never who ordered or marked it (Fase 29Y).
+        ["src/FoodParkDigital.Application/PublicDirectory/PublicDirectoryFeature.cs"] = 13,
         // The reviews a customer account wrote, in every business, by its own user id (Fase 24H).
         ["src/FoodParkDigital.Application/Reviews/CustomerReviewsFeature.cs"] = 1,
         // The platform's moderation of reviews (a platform admin only): the reported or hidden ones of every business, and

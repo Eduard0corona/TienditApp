@@ -577,6 +577,14 @@ export const QuoteTime = {
 } as const;
 export type QuoteTime = (typeof QuoteTime)[keyof typeof QuoteTime];
 
+export const ReadyTime = {
+  WithinFifteenMinutes: 0,
+  WithinHalfAnHour: 1,
+  WithinAnHour: 2,
+  Slower: 3,
+} as const;
+export type ReadyTime = (typeof ReadyTime)[keyof typeof ReadyTime];
+
 export const ReceivablesSort = {
   Owed: 0,
   Oldest: 1,

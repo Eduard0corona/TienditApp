@@ -4,7 +4,7 @@ import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
 import { categoryInfo, deliveryToPostalCode, orderStatus, visitToPostalCode } from '../../utils/businessCategories';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import { formatDistance } from '../../utils/geo';
-import { orderConfirmTimeLabel, quoteTimeLabel, responseTimeLabel } from '../../utils/responseTime';
+import { orderConfirmTimeLabel, readyTimeLabel, quoteTimeLabel, responseTimeLabel } from '../../utils/responseTime';
 import { formatAverage, ratingDescription } from '../../utils/reviews';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 import './DirectoryBusinessCard.css';
@@ -46,6 +46,8 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
   // never speaks of them (its card speaks of visits, as orderStatus does).
   const takesOrders = business.acceptsOrders || (business.ordersPaused && !business.receivesVisits);
   const confirms = takesOrders ? orderConfirmTimeLabel(business.orderConfirmTime) : null;
+  // Fase 29Y: and a kitchen, how soon it has them ready.
+  const ready = takesOrders ? readyTimeLabel(business.readyTime) : null;
   const place = [
     categoryInfo(business.category)?.label,
     business.deliveryOnly ? 'Solo a domicilio' : business.city,
@@ -102,6 +104,11 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
             {confirms && (
               <span className="dc-badge dc-badge-menu">
                 <i className="ri-check-double-line" aria-hidden="true"></i>{confirms}
+              </span>
+            )}
+            {ready && (
+              <span className="dc-badge dc-badge-menu">
+                <i className="ri-restaurant-2-line" aria-hidden="true"></i>{ready}
               </span>
             )}
             {answers && (

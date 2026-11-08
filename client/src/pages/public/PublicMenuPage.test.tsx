@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
-import { HomeVisitChargePolicy, OrderConfirmTime, ResponseTime } from '../../api/generated/enums';
+import { HomeVisitChargePolicy, OrderConfirmTime, ReadyTime, ResponseTime } from '../../api/generated/enums';
 import { publicMenuApi, type PublicMenu } from '../../api/publicMenuApi';
 import { reviewsApi } from '../../api/reviewsApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
@@ -281,6 +281,17 @@ describe('PublicMenuPage', () => {
     renderPage('/m/cafe-luna?mesa=Mesa%204');
     expect(await screen.findByText('Pedido para Mesa 4')).toBeInTheDocument();
     expect(screen.queryByText(/Suele confirmar/)).not.toBeInTheDocument();
+  });
+
+  it('says how soon its kitchen has its online orders ready, as its card in Explorar does, but not at a table (Fase 29Y)', async () => {
+    api.getMenu.mockResolvedValue(menu({ readyTime: ReadyTime.WithinHalfAnHour }));
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Suele tener tu pedido listo en menos de media hora')).toBeInTheDocument();
+    unmount();
+
+    renderPage('/m/cafe-luna?mesa=Mesa%204');
+    expect(await screen.findByText('Pedido para Mesa 4')).toBeInTheDocument();
+    expect(screen.queryByText(/Suele tener tu pedido listo/)).not.toBeInTheDocument();
   });
 
   it('shows whether it is open now, its hours of the week and how to get there', async () => {

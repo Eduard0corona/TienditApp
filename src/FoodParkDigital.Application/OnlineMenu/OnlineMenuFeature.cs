@@ -189,6 +189,11 @@ public class PublicMenuDto
     /// orders, Explorar lists it and it confirms within half an hour. Null otherwise, and at a table.
     /// </summary>
     public OrderConfirmTime? OrderConfirmTime { get; set; }
+    /// <summary>
+    /// How soon it has its online orders ready (Fase 29Y, ADR 0079), as its card in Explorar says it: while it takes online
+    /// orders, Explorar lists it and it has them ready within an hour. Null otherwise, and at a table.
+    /// </summary>
+    public ReadyTime? ReadyTime { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
 }
 
@@ -486,6 +491,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             Rating = await ReviewRules.SummaryAsync(_context, cancellationToken),
             ResponseTime = takesRequests ? entry?.Business.ResponseTime : null,
             OrderConfirmTime = ordersOn ? entry?.Business.OrderConfirmTime : null,
+            ReadyTime = ordersOn ? entry?.Business.ReadyTime : null,
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto

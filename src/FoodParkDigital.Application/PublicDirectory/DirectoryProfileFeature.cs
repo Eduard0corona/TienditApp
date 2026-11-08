@@ -81,6 +81,17 @@ public class DirectoryProfileDto
     /// Null while Explorar does not count them (<see cref="CountsOrders"/>), or fewer than 3 orders count.
     /// </summary>
     public OrderConfirmTime? OrderConfirmTime { get; set; }
+    /// <summary>
+    /// Explorar counts how soon its kitchen has its online orders ready (Fase 29Y, ADR 0079): it takes online orders, now or
+    /// paused, it is a kitchen (only a kitchen marks an order «Listo») and the snapshot could read them, whether or not it
+    /// could read how soon it confirms them. Otherwise its owner reads nothing of it, not even «not counted yet».
+    /// </summary>
+    public bool CountsReady { get; set; }
+    /// <summary>
+    /// How soon it has its online orders ready, for its owner (Fase 29Y): the slower ones too, which its card does not say.
+    /// Null while Explorar does not count them (<see cref="CountsReady"/>), or fewer than 3 orders count.
+    /// </summary>
+    public ReadyTime? ReadyTime { get; set; }
 }
 
 /// <summary>How the signed-in user's business shows in Explorar (owners and admins).</summary>
@@ -307,8 +318,11 @@ internal static class DirectoryProfile
                 profile.CountsQuotes = entry.Business.ReceivesVisits && entry.QuoteTimeRead;
                 profile.QuoteTime = profile.CountsQuotes ? entry.QuoteTime : null;
             }
-            profile.CountsOrders = takesOrders && (entry.Business.AcceptsOrders || entry.Business.OrdersPaused) && entry.OrderConfirmTimeRead;
+            var ordersOnItsCard = takesOrders && (entry.Business.AcceptsOrders || entry.Business.OrdersPaused);
+            profile.CountsOrders = ordersOnItsCard && entry.OrderConfirmTimeRead;
             profile.OrderConfirmTime = profile.CountsOrders ? entry.OrderConfirmTime : null;
+            profile.CountsReady = ordersOnItsCard && tenant.BusinessType == BusinessType.Food && entry.ReadyTimeRead;
+            profile.ReadyTime = profile.CountsReady ? entry.ReadyTime : null;
         }
         return profile;
     }
