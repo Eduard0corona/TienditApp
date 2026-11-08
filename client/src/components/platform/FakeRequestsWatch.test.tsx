@@ -29,7 +29,9 @@ describe('FakeRequestsWatch (Fase 30A)', () => {
     expect(within(row).getAllByRole('cell').map((cell) => cell.textContent)).toEqual(
       ['Estética Lunaestetica-luna', '6', '1', '48', expect.stringMatching(/27/)],
     );
-    expect(within(region).getByLabelText('Teléfono que termina en 7 7 6 5')).toHaveTextContent('•••• 7765');
+    const phone = within(region).getByText('Termina en', { exact: false }).parentElement!;
+    expect(phone).toHaveTextContent('•••• Termina en 7765');
+    expect(within(phone).getByText('••••', { exact: false })).toHaveAttribute('aria-hidden', 'true');
     expect(within(region).getByText('Estética Luna, Spa Sol')).toBeInTheDocument();
     expect(within(region).queryByText(/muestra los 20 primeros/)).not.toBeInTheDocument();
   });

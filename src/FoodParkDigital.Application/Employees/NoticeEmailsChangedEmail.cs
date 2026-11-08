@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Notices;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.Tenants.Events;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +40,7 @@ internal static class NoticeEmailsChangedEmail
             $"<p><strong>{Html(who)}</strong> cambió los avisos que te llegan de {Html(business)}:</p>",
             $"<ul>{string.Concat(changes.Select(change => $"<li>{change}</li>"))}</ul>",
             $"<p>Puedes cambiarlos cuando quieras en {profile}.</p>",
-            $"<p style='color:#6c757d;font-size:12px'>Te llega porque alguien de {Html(business)} cambió tus avisos. Si estás de acuerdo, no tienes que hacer nada.</p>");
+            $"<p style='color:#6c757d;font-size:12px'>Te llega porque cambiaron tus avisos en {Html(business)}. Si estás de acuerdo, no tienes que hacer nada.</p>");
         return (subject, body);
     }
 
@@ -48,13 +49,16 @@ internal static class NoticeEmailsChangedEmail
 
 /// <summary>
 /// Sends the person the email of a change to their notices made by someone else (Fase 30A, ADR 0081), from the platform's
-/// provider: only while they are still an active member of the business with an active account and a confirmed email, as
-/// the other notices. It says who changed them by their name in the account; one that no longer exists is «Alguien de tu
-/// equipo». A failure of the provider throws, and the outbox retries it.
+/// provider: only while they are still an active member of a business that is not suspended, with an active account and a
+/// confirmed email, as the other notices, and only while what they get is still what the change said (a later change sends
+/// its own). It says who changed them by the name of their account when they are of the team; the platform's admin acting
+/// on the business is «El soporte de TienditApp», and an account that no longer exists, «Alguien de tu equipo». A failure
+/// of the provider throws, and the outbox retries it.
 /// </summary>
 public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<TenantUserNoticeEmailsChangedEvent>
 {
     public const string SomeoneOfTheTeam = "Alguien de tu equipo";
+    public const string PlatformSupport = "El soporte de TienditApp";
 
     private readonly IApplicationDbContext _context;
     private readonly IEmailService _email;
@@ -75,6 +79,14 @@ public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<Tenant
         if (context.TenantId is not { } tenantId || (domainEvent.RequestEmails is null && domainEvent.QuoteReplyEmails is null))
             return;
 
+        var business = await _context.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => new { t.Name, t.Status })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (business is null || business.Status == TenantStatus.Suspended)
+            return;
+
         var member = await _context.TenantUsers
             .AsNoTracking()
             .Where(m => m.Id == domainEvent.TenantUserId && m.TenantId == tenantId && m.Status == TenantUserStatus.Active)
@@ -82,25 +94,36 @@ public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<Tenant
                 _context.Users.Where(u => u.IsActive && u.EmailConfirmed && u.Email != null),
                 m => m.UserId,
                 u => u.Id,
-                (m, u) => new { u.Email })
+                (m, u) => new { Membership = m, u.Email })
             .FirstOrDefaultAsync(cancellationToken);
-        if (member is null)
+        // Changed again since (and that change sends its own): this one no longer says what they get.
+        if (member is null
+            || (domainEvent.RequestEmails is { } requests && member.Membership.GetsRequestEmails != requests)
+            || (domainEvent.QuoteReplyEmails is { } quoteReplies && member.Membership.GetsQuoteReplyEmails != quoteReplies))
             return;
 
-        var changedBy = await _context.Users
-            .AsNoTracking()
-            .Where(u => u.Id == domainEvent.ChangedByUserId)
-            .Select(u => new { u.FirstName, u.LastName })
-            .FirstOrDefaultAsync(cancellationToken);
-        var name = changedBy is null ? "" : $"{changedBy.FirstName} {changedBy.LastName}".Trim();
-        var business = await _context.Tenants
-            .AsNoTracking()
-            .Where(t => t.Id == tenantId)
-            .Select(t => t.Name)
-            .FirstAsync(cancellationToken);
-
         var (subject, body) = NoticeEmailsChangedEmail.Compose(
-            name.Length == 0 ? SomeoneOfTheTeam : name, business, domainEvent.RequestEmails, domainEvent.QuoteReplyEmails, _links.BaseUrl);
+            await WhoAsync(domainEvent.ChangedByUserId, tenantId, cancellationToken),
+            business.Name,
+            domainEvent.RequestEmails,
+            domainEvent.QuoteReplyEmails,
+            _links.BaseUrl);
         await _email.SendEmailAsync(member.Email!, subject, body);
+    }
+
+    /// <summary>Who changed them, as the person reads it: never the name of someone who is not of the business.</summary>
+    private async Task<string> WhoAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var account = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.FirstName, u.LastName, u.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (account is null)
+            return SomeoneOfTheTeam;
+        if (!await _context.TenantUsers.AsNoTracking().AnyAsync(m => m.TenantId == tenantId && m.UserId == userId, cancellationToken))
+            return account.Role == UserRole.SuperAdmin ? PlatformSupport : SomeoneOfTheTeam;
+        var name = $"{account.FirstName} {account.LastName}".Trim();
+        return name.Length == 0 ? SomeoneOfTheTeam : name;
     }
 }

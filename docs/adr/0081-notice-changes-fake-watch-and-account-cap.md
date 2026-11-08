@@ -20,16 +20,20 @@ El dueño del producto pidió avanzar estos puntos (el 8, el 11 y el 12), entre 
 1. **Avisar a quien le cambian sus avisos.**
    - Cuando alguien del equipo cambia, en Equipo, los avisos por correo de otra persona, a esa persona le llega un correo: «Mariana Ortiz cambió tus avisos por correo en Estética Luna», con lo que ahora le llega y lo que ya no, y el enlace a Mi perfil.
    - Solo dice lo que cambió. Guardar lo que la persona ya recibe no manda nada, y quien cambia los suyos no se avisa a sí mismo.
-   - Sale por el outbox con el cambio (`TenantUserNoticeEmailsChangedEvent`). Al mandarlo se comprueba que la persona siga activa en el negocio, con su cuenta activa y su correo confirmado, como los demás avisos.
-   - Quién lo cambió va con el nombre de su cuenta. Si esa cuenta ya no existe, dice «Alguien de tu equipo».
+   - Sale por el outbox con el cambio (`TenantUserNoticeEmailsChangedEvent`). Al mandarlo se comprueba, como en los demás avisos, que el negocio no esté suspendido y que la persona siga activa, con su cuenta activa y su correo confirmado. También, que siga recibiendo lo que el cambio dice: si lo cambiaron otra vez, ese cambio manda el suyo.
+   - **Quién lo cambió:**
+     - alguien del equipo va con el nombre de su cuenta;
+     - el administrador de la plataforma que entra al negocio es «El soporte de TienditApp», nunca su nombre;
+     - una cuenta que ya no existe es «Alguien de tu equipo».
    - Al invitar a alguien no se manda: la invitación es su primer correo.
 2. **La plataforma vigila las solicitudes falsas.**
    - La consola de la plataforma (solo su administrador) muestra «Solicitudes marcadas como falsas», de los últimos 90 días:
-     - **Negocios que más marcan:** cuántas siguen marcadas, a cuántas les quitó la marca y cuántas solicitudes en línea de clientes recibió, sin las de su equipo. Así se ve quién marca mucho para lo que recibe.
+     - **Negocios que más marcan:** cuántas siguen marcadas, a cuántas les quitó la marca y cuántas solicitudes en línea de clientes recibió, sin las de su equipo. Las recibidas son las que llegaron en esos días y las marcadas en ellos que llegaron antes, así que nunca son menos que las marcadas. Así se ve quién marca mucho para lo que recibe.
      - **Teléfonos que marcaron varios negocios:** los que siguen marcados por dos negocios o más, con los negocios y la última vez.
    - Cada lista muestra los 20 primeros y lo dice cuando llega a 20.
    - **El teléfono va con sus últimos cuatro dígitos.** La plataforma compara teléfonos, no los lee. Ni la API ni la pantalla mandan el número completo.
-   - Es una lectura entre negocios, explícita y solo para el administrador de la plataforma (`RequiresPlatformAdmin`). No cambia nada, así que no deja registro.
+   - Es una lectura entre negocios, explícita y solo para el administrador de la plataforma (`RequiresPlatformAdmin`).
+   - **No deja registro de auditoría:** las guías piden auditar el acceso entre negocios, pero esta lectura no cambia nada ni entra a un negocio, y solo devuelve conteos, nombres de negocios y cuatro dígitos por teléfono. Es la misma excepción que ya tiene la lista de reseñas de la plataforma ([ADR 0030](0030-business-reviews.md)). Una acción sobre un negocio sí se auditaría.
    - No hace nada por sí sola: es para que alguien revise.
 3. **El tope cuenta todos los teléfonos de la cuenta.**
    - Con su sesión de cliente, las solicitudes que esperan y las canceladas del último día cuentan por su teléfono y también por su cuenta, con cualquier otro teléfono. El mensaje es el mismo de siempre.

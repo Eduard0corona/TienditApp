@@ -29,7 +29,10 @@ public sealed class FakeRequestsBusinessDto
     public int Marked { get; set; }
     /// <summary>Marked, and then taken back («No era falsa»).</summary>
     public int TakenBack { get; set; }
-    /// <summary>Every request online of its customers in those days, the marked ones too: never those of its team.</summary>
+    /// <summary>
+    /// Every request online of its customers that arrived in those days, and the ones marked in them that arrived before:
+    /// never those of its team. So it is never fewer than <see cref="Marked"/> and <see cref="TakenBack"/> together.
+    /// </summary>
     public int Requests { get; set; }
     public DateTimeOffset LastMarkedAt { get; set; }
 }
@@ -87,7 +90,8 @@ public sealed class GetFakeRequestsWatchQueryHandler : IRequestHandler<GetFakeRe
         var requests = await _context.Appointments
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(a => a.Channel == AppointmentChannel.Online && !a.FromTeam && a.CreatedAt >= since && ids.Contains(a.TenantId))
+            .Where(a => a.Channel == AppointmentChannel.Online && !a.FromTeam && (a.CreatedAt >= since || a.MarkedFakeAt >= since)
+                && ids.Contains(a.TenantId))
             .GroupBy(a => a.TenantId)
             .Select(g => new { TenantId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(r => r.TenantId, r => r.Count, cancellationToken);

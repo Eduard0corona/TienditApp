@@ -32,6 +32,11 @@ public class FakeRequestsWatchTests
         // Don Pepe marks the first of Luna's phones, written with the 1 WhatsApp adds, and the one Luna took back.
         await RequestAsync(fixture, pepe, "+5215522107765", marked: Now.AddDays(-5));
         await RequestAsync(fixture, pepe, "+525533334444", marked: Now.AddDays(-4));
+        // A request that arrived before the 90 days, marked in them: marked and received, so marked never outnumber received.
+        await RequestAsync(fixture, luna, "+525577778888", marked: Now.AddDays(-6), created: Now.AddDays(-95));
+        // Don Pepe marks one phone three times: still one business, never «several».
+        for (var n = 0; n < 3; n++)
+            await RequestAsync(fixture, pepe, "+525566667777", marked: Now.AddDays(-10 - n));
         // Sol marked Luna's second phone more than 90 days ago: neither it nor that mark counts.
         await RequestAsync(fixture, sol, "+525511112222", marked: Now.AddDays(-91));
 
@@ -39,7 +44,7 @@ public class FakeRequestsWatchTests
             .Handle(new GetFakeRequestsWatchQuery(), CancellationToken.None);
 
         Assert.Equal(
-            [("Estética Luna", 2, 1, 6, Now.AddDays(-1)), ("Barbería Don Pepe", 2, 0, 2, Now.AddDays(-4))],
+            [("Barbería Don Pepe", 5, 0, 5, Now.AddDays(-4)), ("Estética Luna", 3, 1, 7, Now.AddDays(-1))],
             watch.Businesses.Select(b => (b.Name, b.Marked, b.TakenBack, b.Requests, b.LastMarkedAt)));
         var phone = Assert.Single(watch.Phones);
         Assert.Equal(("7765", Now.AddDays(-2)), (phone.Ending, phone.LastMarkedAt));
@@ -65,7 +70,8 @@ public class FakeRequestsWatchTests
     /// at <paramref name="marked"/> if given.
     /// </summary>
     private static async Task RequestAsync(
-        SalesTestFixture fixture, Tenant tenant, string phone, DateTimeOffset? marked = null, bool takenBack = false, bool fromTeam = false)
+        SalesTestFixture fixture, Tenant tenant, string phone, DateTimeOffset? marked = null, bool takenBack = false, bool fromTeam = false,
+        DateTimeOffset? created = null)
     {
         var startAt = Now.AddDays(2);
         var request = Appointment.RequestOnline(
@@ -78,7 +84,7 @@ public class FakeRequestsWatchTests
                 request.UnmarkFake(at.AddHours(1));
         }
         fixture.Context.Appointments.Add(request);
-        fixture.Context.Entry(request).Property(a => a.CreatedAt).CurrentValue = (marked ?? Now).AddDays(-1);
+        fixture.Context.Entry(request).Property(a => a.CreatedAt).CurrentValue = created ?? (marked ?? Now).AddDays(-1);
         await fixture.Context.SaveChangesAsync();
     }
 }

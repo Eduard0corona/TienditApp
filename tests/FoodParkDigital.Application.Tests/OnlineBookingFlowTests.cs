@@ -349,6 +349,30 @@ public class OnlineBookingFlowTests
     }
 
     [Fact]
+    public async Task Account_ShouldCountOnlyItsRequestsInThisBusiness_NeverThoseInAnother()
+    {
+        // Fase 30A (ADR 0081): three waiting in another business hold nothing back here.
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        var account = await CustomerAsync(fixture, "Valeria");
+        var elsewhere = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, slug: "otro");
+        for (var n = 0; n < 3; n++)
+        {
+            var startAt = SalesTestFixture.Now.AddDays(3 + n);
+            fixture.Context.Appointments.Add(Appointment.RequestOnline(
+                elsewhere.Id, "Valeria Ruiz", $"+52551111000{n}", Guid.NewGuid(), "Uñas", startAt, startAt.AddHours(1), null,
+                customerUserId: account, clientRequestId: null, trackingToken: new string('a', FoodParkDigital.Domain.Orders.Entities.Order.TrackingTokenLength - 1) + n));
+        }
+        await fixture.Context.SaveChangesAsync();
+        fixture.CurrentUser.UserId = account.ToString();
+
+        var here = await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), phone: "5533334444");
+
+        Assert.True(here.IsSuccess, here.Error);
+    }
+
+    [Fact]
     public async Task Accept_ShouldScheduleTheRequest_AndDecline_ShouldFreeItsTime_EachTellingTheCustomer()
     {
         await using var fixture = SalesTestFixture.Create();

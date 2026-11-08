@@ -20,6 +20,7 @@ export default function FakeRequestsWatch() {
           De los últimos 90 días. Compara cuántas marca cada negocio con sus solicitudes en línea, y qué teléfonos marcaron dos
           negocios o más. Los teléfonos van con sus últimos cuatro dígitos.
         </p>
+        {watch.isPending && <p className="text-muted small mb-0" role="status">Cargando…</p>}
         {watch.isError && (
           <div className="alert alert-danger" role="alert">{getApiErrorMessage(watch.error, 'No se pudieron cargar las solicitudes falsas.')}</div>
         )}
@@ -65,10 +66,13 @@ export default function FakeRequestsWatch() {
                 <p className="text-muted small mb-0">Ningún teléfono lo marcaron dos negocios o más.</p>
               ) : (
                 <ul className="list-unstyled mb-0">
-                  {data.phones.map((phone) => (
-                    <li key={`${phone.ending}-${phone.lastMarkedAt}`} className="border-bottom py-2">
-                      <span className="fw-semibold" aria-label={`Teléfono que termina en ${phone.ending.split('').join(' ')}`}>
-                        •••• {phone.ending}
+                  {/* Two phones may end alike: each is its own row, in the server's order. */}
+                  {data.phones.map((phone, index) => (
+                    <li key={index} className="border-bottom py-2">
+                      <span className="fw-semibold">
+                        <span aria-hidden="true">•••• </span>
+                        <span className="visually-hidden">Termina en </span>
+                        {phone.ending}
                       </span>
                       <span className="small text-muted"> · {phone.businessNames.length} negocios · último {formatDate(phone.lastMarkedAt)}</span>
                       <span className="d-block small">{phone.businessNames.join(', ')}</span>
