@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ChannelBadge from '../../components/common/ChannelBadge';
 import PageTitle from '../../components/common/PageTitle';
+import ChimeSettingsButton from '../../components/common/ChimeSettingsButton';
 import { useFocusMode } from '../../components/layout/focusMode';
 import { kitchenApi } from '../../api/kitchenApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -211,6 +212,7 @@ export default function KitchenBoard() {
             <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
             {chime.enabled ? 'Sonido activado' : 'Activar sonido'}
           </button>
+          <ChimeSettingsButton />
           <button type="button" className="btn btn-sm btn-light" onClick={() => void loadOrders()}>
             <i className="ri-refresh-line me-1" aria-hidden="true"></i>Actualizar
           </button>

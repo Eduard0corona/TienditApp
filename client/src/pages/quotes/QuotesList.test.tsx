@@ -50,6 +50,22 @@ describe('QuotesList', () => {
     ]) as never);
   });
 
+  it('turns on in this browser the sound of the answers to quotes, and says when it needs a touch (Fase 29Z)', async () => {
+    window.localStorage.removeItem('tienditapp:quotes-sound');
+    const user = userEvent.setup();
+    renderList();
+
+    const sound = await screen.findByRole('button', { name: 'Sonido para respuestas' });
+    expect(sound).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Tono y volumen de los sonidos' })).toBeInTheDocument();
+    await user.click(sound);
+
+    expect(sound).toHaveAttribute('aria-pressed', 'true');
+    expect(window.localStorage.getItem('tienditapp:quotes-sound')).toBe('on');
+    // This test browser has no sound to start, so the touch it asks for never arrives.
+    expect(screen.getByRole('status')).toHaveTextContent('Toca la pantalla o presiona una tecla para que suenen las respuestas.');
+    window.localStorage.removeItem('tienditapp:quotes-sound');
+  });
   it('lists the open quotes with where each stands, and filters them', async () => {
     renderList();
 

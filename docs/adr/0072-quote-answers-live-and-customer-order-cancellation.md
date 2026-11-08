@@ -34,7 +34,7 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
    - Avisar por correo una cancelación de un pedido: el negocio que recibe pedidos en línea los atiende con la app abierta.
    - Que el cliente cancele un pedido ya aceptado, pagado o de otro canal, o pida que le devuelvan un pago en línea.
    - Avisar en pantalla un anticipo pagado.
-   - Un sonido para las respuestas a cotizaciones.
+   - Un sonido para las respuestas a cotizaciones: llegó en la Fase 29Z ([ADR 0080](0080-quote-sound-and-device-tone.md)).
 
 ## Consecuencias
 

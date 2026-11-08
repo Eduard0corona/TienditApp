@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { APPOINTMENTS_SOUND_KEY, useOnAppointmentRequestsChanged } from '../../hooks/useAppointmentRequests';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
 import PageTitle from '../../components/common/PageTitle';
+import ChimeSettingsButton from '../../components/common/ChimeSettingsButton';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import VisitProblem from '../../components/appointments/VisitProblem';
 import { appointmentsApi } from '../../api/appointmentsApi';
@@ -692,6 +693,7 @@ export default function AppointmentsList() {
                   <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
                   Sonido para solicitudes en línea
                 </button>
+                <ChimeSettingsButton />
                 <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
                   <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cita
                 </button>

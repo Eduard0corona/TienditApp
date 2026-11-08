@@ -40,22 +40,175 @@ function audioPlays(): boolean {
   return pageAudio?.state === 'running';
 }
 
-/** Starts the page's sound inside a touch or a key, the only moment the browser lets it start. */
-function unlockPageAudio() {
+/**
+ * Starts the page's sound inside a touch or a key, the only moment the browser lets it start.
+ * @returns Whether it plays once the browser answered (Fase 29Z: the preview rings only then).
+ */
+function unlockPageAudio(): Promise<boolean> {
   const AudioContextClass = window.AudioContext ?? (window as AudioWindow).webkitAudioContext;
-  if (!AudioContextClass) return;
+  if (!AudioContextClass) return Promise.resolve(false);
   if (!pageAudio) {
     pageAudio = new AudioContextClass();
     // The browser may stop it again (a phone that locks): every chime then asks for a touch again.
     pageAudio.addEventListener?.('statechange', () => window.dispatchEvent(new Event(AUDIO_STATE)));
   }
-  void pageAudio.resume()
-    .then(() => window.dispatchEvent(new Event(AUDIO_STATE)))
-    .catch(() => undefined);
+  return pageAudio.resume()
+    .then(() => {
+      window.dispatchEvent(new Event(AUDIO_STATE));
+      return audioPlays();
+    })
+    .catch(() => false);
 }
 
-/** A sound that something arrived (two notes up) or left (two notes down: a cancellation, Fase 29P). */
+/** A sound that something arrived (its notes up) or left (the same notes down: a cancellation, Fase 29P). */
 export type ChimeKind = 'arrival' | 'leaving';
+
+/**
+ * The tones a device picks for every sound of the page (Fase 29Z): the same for orders, requests, quotes and the kitchen,
+ * each still turned on or off by itself. «Dos notas» is the one every sound had before.
+ */
+export type ChimeTone = 'notes' | 'bell' | 'doorbell' | 'soft';
+
+interface ToneShape {
+  wave: OscillatorType;
+  /** Its notes as something arrives; it leaves with them the other way round. */
+  notes: number[];
+  /** Seconds from one note to the next, and how long each lasts. */
+  step: number;
+  length: number;
+}
+
+const TONES: Record<ChimeTone, ToneShape> = {
+  notes: { wave: 'sine', notes: [880, 1175], step: 0.18, length: 0.3 },
+  bell: { wave: 'triangle', notes: [1047, 1568], step: 0.25, length: 0.9 },
+  doorbell: { wave: 'triangle', notes: [659, 831, 988], step: 0.16, length: 0.28 },
+  soft: { wave: 'sine', notes: [523, 659], step: 0.28, length: 0.45 },
+};
+
+/** The tones as the device's choice lists them. */
+export const CHIME_TONES: ReadonlyArray<{ value: ChimeTone; label: string }> = [
+  { value: 'notes', label: 'Dos notas' },
+  { value: 'bell', label: 'Campana' },
+  { value: 'doorbell', label: 'Timbre' },
+  { value: 'soft', label: 'Suave' },
+];
+
+/** The volume a device picks, from 10 to 100 in tens: 50, the one every sound had before (Fase 29Z). */
+export const CHIME_VOLUMES = { min: 10, max: 100, step: 10, initial: 50 } as const;
+
+const TONE_KEY = 'tienditapp:chime-tone';
+const VOLUME_KEY = 'tienditapp:chime-volume';
+
+/** The window event that tells every page piece that the device picked another tone or volume. */
+const SETTINGS_CHANGED = 'tienditapp:chime-settings-changed';
+
+export interface ChimeSettings {
+  tone: ChimeTone;
+  volume: number;
+}
+
+function readStored(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What this page picked when its browser would not keep it (private mode, blocked storage): it lasts until the page closes,
+ * as a chime turned on does.
+ */
+const pageOnly: Partial<ChimeSettings> = {};
+
+/** What this device picked; what it never picked, or a value this version does not know, is as before. */
+export function readChimeSettings(): ChimeSettings {
+  const tone = pageOnly.tone ?? readStored(TONE_KEY);
+  const volume = pageOnly.volume ?? Number(readStored(VOLUME_KEY));
+  return {
+    // Only a tone of its own: «toString» is a key of every object, not a tone.
+    tone: tone !== null && Object.hasOwn(TONES, tone) ? (tone as ChimeTone) : 'notes',
+    volume: Number.isInteger(volume) && volume >= CHIME_VOLUMES.min && volume <= CHIME_VOLUMES.max && volume % CHIME_VOLUMES.step === 0
+      ? volume
+      : CHIME_VOLUMES.initial,
+  };
+}
+
+/** Saves the device's tone or volume, and every sound of the page (and of its other tabs) rings with it from then on. */
+export function saveChimeSettings(change: Partial<ChimeSettings>) {
+  const keep = <K extends keyof ChimeSettings>(name: K, key: string, value: ChimeSettings[K] | undefined) => {
+    if (value === undefined) return;
+    try {
+      window.localStorage.setItem(key, String(value));
+      delete pageOnly[name];
+    } catch {
+      // Private mode or blocked storage: this page keeps it until it closes.
+      pageOnly[name] = value;
+    }
+  };
+  keep('tone', TONE_KEY, change.tone);
+  keep('volume', VOLUME_KEY, change.volume);
+  window.dispatchEvent(new Event(SETTINGS_CHANGED));
+}
+
+/** The device's tone and volume, following a change made in another piece of the page or another tab. */
+export function useChimeSettings(): ChimeSettings {
+  const [settings, setSettings] = useState(readChimeSettings);
+  useEffect(() => {
+    const follow = () => setSettings(readChimeSettings());
+    const otherTab = (event: StorageEvent) => {
+      if (event.key === TONE_KEY || event.key === VOLUME_KEY) follow();
+    };
+    window.addEventListener(SETTINGS_CHANGED, follow);
+    window.addEventListener('storage', otherTab);
+    return () => {
+      window.removeEventListener(SETTINGS_CHANGED, follow);
+      window.removeEventListener('storage', otherTab);
+    };
+  }, []);
+  return settings;
+}
+
+/** Rings the device's tone at its volume. The loudest point of a note is 0.7 at 100, and 0.35 at 50, as before. */
+function ring(context: AudioContext, kind: ChimeKind) {
+  const { tone, volume } = readChimeSettings();
+  const shape = TONES[tone];
+  const peak = (0.7 * volume) / CHIME_VOLUMES.max;
+  const notes = kind === 'arrival' ? shape.notes : [...shape.notes].reverse();
+  const start = context.currentTime;
+  notes.forEach((frequency, index) => {
+    const at = start + index * shape.step;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = shape.wave;
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.exponentialRampToValueAtTime(peak, at + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + shape.length);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(at);
+    oscillator.stop(at + shape.length + 0.02);
+  });
+}
+
+/**
+ * Rings the device's tone once, to hear it while picking it: inside the click that asks for it, so it also starts the page's
+ * sound, whatever sound is turned on.
+ */
+export function previewChime() {
+  const now = Date.now();
+  // Moving through the tones with the arrows rings each once, not several on top of each other.
+  if (now - lastPreview < PREVIEW_GAP_MS) return;
+  lastPreview = now;
+  // Only once the sound plays: notes queued on a stopped sound would ring whenever it starts again, maybe much later.
+  void unlockPageAudio().then((plays) => {
+    if (plays && pageAudio) ring(pageAudio, 'arrival');
+  });
+}
+
+/** The shortest time between two previews. */
+const PREVIEW_GAP_MS = 300;
+let lastPreview = Number.NEGATIVE_INFINITY;
 
 /**
  * A short two-note chime for new orders, per browser (a kitchen screen wants it, the owner's phone may not).
@@ -117,20 +270,7 @@ export function useArrivalChime(storageKey: string) {
   const play = useCallback((kind: ChimeKind = 'arrival') => {
     const context = pageAudio;
     if (!enabled || !context || context.state !== 'running') return;
-    const start = context.currentTime;
-    (kind === 'arrival' ? [880, 1175] : [1175, 880]).forEach((frequency, index) => {
-      const at = start + index * 0.18;
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.exponentialRampToValueAtTime(0.35, at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.3);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(at);
-      oscillator.stop(at + 0.32);
-    });
+    ring(context, kind);
   }, [enabled]);
 
   return { enabled, toggle, play, needsTouch: enabled && !unlocked };

@@ -3,10 +3,13 @@ import { Modal } from 'react-bootstrap';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
+import ChimeSettingsButton from '../../components/common/ChimeSettingsButton';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { getApiErrorMessage } from '../../api/errors';
 import { quotesApi } from '../../api/quotesApi';
+import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { useAuth } from '../../hooks/useAuth';
+import { QUOTES_SOUND_KEY } from '../../hooks/useQuoteReplies';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { QuoteListFilter } from '../../types';
@@ -128,6 +131,9 @@ export default function QuotesList() {
   const templateId = template ?? settings?.whatsAppTemplateId ?? '';
   const savedTemplate = settings?.whatsAppTemplates.find((t) => t.id === settings.whatsAppTemplateId);
 
+  // Fase 29Z: this device's sound with each answer; the top bar plays it on any screen.
+  const chime = useArrivalChime(QUOTES_SOUND_KEY);
+
   const openNew = () => {
     setForm(EMPTY_FORM);
     setFormError('');
@@ -141,6 +147,14 @@ export default function QuotesList() {
       {quotesQuery.error && (
         <div className="alert alert-danger" role="alert">{getApiErrorMessage(quotesQuery.error, 'No se pudieron cargar las cotizaciones.')}</div>
       )}
+
+      {/* Always there, so a screen reader announces the note when it appears: the browser plays nothing until it is touched
+          after it opens. */}
+      <div role="status">
+        {chime.needsTouch && (
+          <p className="text-muted small mb-2">Toca la pantalla o presiona una tecla para que suenen las respuestas.</p>
+        )}
+      </div>
 
       <div className="card">
         <div className="card-body">
@@ -175,9 +189,22 @@ export default function QuotesList() {
               </DataTableFilter>
             )}
             toolbarEnd={(
-              <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
-                <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cotización
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-light btn-sm"
+                  onClick={chime.toggle}
+                  aria-pressed={chime.enabled}
+                  title="Suena en este navegador cuando un cliente acepta o rechaza una cotización desde su enlace"
+                >
+                  <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
+                  Sonido para respuestas
+                </button>
+                <ChimeSettingsButton />
+                <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
+                  <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cotización
+                </button>
+              </>
             )}
             serverSide={{
               totalCount: page?.totalCount ?? 0,
