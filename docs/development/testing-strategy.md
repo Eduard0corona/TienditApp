@@ -2391,6 +2391,37 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - «en Explorar» no valía para un negocio que no aparece ahí: ahora dice «en tu tiempo para confirmar»;
     - el aviso respeta a quien no lo escucha, una lista vacía sin fechas lo dice, y pruebas para `confirmBy` en memoria y para la barra superior.
   - **Escenas:** contra la línea base de `master` en `3e4ea03` (810 escenas): **las 810 iguales**. Las escenas de Pedidos no tienen pedidos en línea por confirmar con `confirmBy`, y la campana de las escenas no tiene urgentes.
+- Fase 29Y, cuánto tarda una cocina en tener listo el pedido en línea ([ADR 0079](../adr/0079-order-ready-time.md)):
+  - **Domain:** `OrderReadyTimeTests` (3, nuevo): el tramo más corto que reúne al menos la mitad de los pedidos, con el más lento al final, y nada con menos de 3; Explorar lo dice dentro de una hora; los límites (15, 30 y 60 minutos) y la ventana de 90 días.
+  - **Application:**
+    - `OrderReadyTimeInExploreTests` (6, nuevo):
+      - la tarjeta dice en cuánto estuvo lista la mitad de sus pedidos desde que llegaron (10, 20 y 50 minutos: menos de media hora), nada con dos, y lo dice también una cocina con sus pedidos en pausa;
+      - cada cliente cuenta una vez, por el último de sus pedidos que se marcó listo: tres clientes con dos pedidos lentos y uno rápido dicen «menos de 15 minutos», y un pedido posterior entregado sin marcarlo listo, o todavía en la cocina, no toma su lugar. Una cocina con tres pedidos de mesa, tres del equipo, tres de mostrador y tres de hace 91 días no dice nada;
+      - 15 minutos exactos ya no son «menos de 15», 30 exactos ya no son «menos de media hora» y una hora exacta es de los más lentos (la tarjeta no lo dice);
+      - el dueño de una cocina lee el tramo, también el lento, o que todavía no se cuenta; el de un menú que no toma pedidos no lo lee, y el de una tienda lee su tiempo de confirmar pero nunca este; el menú dice lo que su tarjeta, salvo en una mesa;
+      - si la foto no puede leer los pedidos listos, nadie lo dice y al dueño no se le dice que todavía no se cuenta, pero sigue su tiempo de confirmar; y si no puede leer el de confirmar, el dueño y la tarjeta siguen diciendo este.
+    - `OrderConfirmTimeInExploreTests`: `KitchenAsync` puede dejar la caja cerrada (los pedidos en pausa).
+  - **WebApi:**
+    - `TenantFilterBypassAllowlistTests`: `PublicDirectoryFeature.cs` pasa de 11 a 13 lecturas entre negocios (los pedidos de las cocinas listadas y su fila de «Listo», unidos dentro del mismo negocio).
+    - `ClientEnumContractTests` (+1): la copia del cliente de `ReadyTime` es igual al enum del dominio.
+    - `CrossTenantDirectoryReadyTimeSqlServerTests` (1, nuevo, SQL Server): los mismos clientes piden en dos cocinas y cada una cuenta los suyos; la rápida dice «menos de 15 minutos» en su tarjeta y su menú, la lenta nada y su dueño lee que tarda una hora o más; un pedido entregado sin marcarlo listo no cuenta.
+  - **Cliente:**
+    - `responseTime.test.ts` (+2): el texto de cada tramo hasta una hora, y la nota del dueño (qué cuenta, dónde lo leen sus clientes, que una hora o más no se dice, o que todavía no se cuenta).
+    - `DirectoryBusinessCard.test.tsx` (+1): el tiempo de tenerlo listo en una cocina que toma pedidos, también en pausa; nunca en un menú sin pedidos ni con una hora o más.
+    - `PublicMenuPage.test.tsx` (+1): el menú lo dice como su tarjeta, pero no en una mesa.
+    - `DirectoryCard.test.tsx` (+1): «Cómo te ven» dice el tramo, que tarda una hora o más, o que todavía no se cuenta, y nada de esto si Explorar no lo cuenta (una tienda, o una lectura fallida).
+    - Cinco mutaciones del cliente (sin la condición de `countsReady` en la vista previa o en la nota, sin la de la mesa en el menú, sin la de los pedidos en la tarjeta, decir también una hora o más) hacen fallar su prueba.
+  - **Mutaciones del servidor:** atar `countsReady` a la lectura del tiempo de confirmar, ignorar una lectura fallida, contar cada pedido en vez de cada cliente, quitar la ventana de 90 días y cerrar el límite de media hora hacen fallar `OrderReadyTimeInExploreTests`. Filtrar a las cocinas no tiene prueba que falle sin él: lo garantizan los datos (solo la máquina de estados de comida tiene «Listo») y es para el costo.
+  - **.NET en total:** 4,837 pruebas en verde con SQL Server (Domain 1,427; Application 2,186; WebApi 509; Infrastructure 715). **Cliente en total:** 206 archivos y 1,580 pruebas.
+  - **Primera visita:** 182,198 B (`master` en `288c26e`: 182,156 B, +42 B): el enum `ReadyTime` va en la entrada con los demás enums generados, y su etiqueta en `utils/responseTime`, que se carga con las tarjetas de Explorar; la nota del dueño va con Configuración. El presupuesto (182,200 B) no cambia. El CSS global, 63,077 B de 63,200 B.
+  - **Costo de la foto:** medido aparte, con la consulta que genera EF y una sola cocina en SQL Server: unos 85 ms con 25,000 pedidos en 90 días (2,500 en línea) y entre 450 y 550 ms con 100,000 (10,000 en línea). Con una subconsulta en cada tramo (EF repetía la del primer «Listo» siete veces) tardaba unos 140 y entre 700 y 1,000 ms, y con un APPLY por pedido, de 12 a 30 segundos. La foto completa medida con y sin la 29Y varió demasiado en esta máquina (la de la 29X, de 0.9 a 1.9 s con 100,000 pedidos) para dar un número.
+  - **Revisión independiente**, sin bloqueantes, con estos arreglos:
+    - el dueño dejaba de leer este tiempo si fallaba la lectura del de confirmar: cada uno depende de su propia lectura;
+    - la prueba de la lectura fallida rompía las dos lecturas y no podía fallar: ahora rompe solo la de los pedidos listos, y otra rompe solo la de confirmar;
+    - los datos de «una vez por cliente» y de los que no cuentan daban lo mismo sin la regla: ahora cada cliente tiene dos pedidos lentos antes, y los que no cuentan van solos en otra cocina, tres de cada uno;
+    - el ADR y la documentación hablaban de «la primera vez» que se marcó listo, y la lectura ya solo lee las cocinas listadas;
+    - y pruebas para los 30 minutos exactos y una cocina en pausa.
+  - **Escenas:** contra la línea base de `master` en `288c26e` (810 escenas): **las 810 iguales**. Las tarjetas, el menú y «Cómo te ven» de las escenas no traen `readyTime`.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
