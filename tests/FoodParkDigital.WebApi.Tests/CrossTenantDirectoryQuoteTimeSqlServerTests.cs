@@ -121,11 +121,27 @@ public sealed class CrossTenantDirectoryQuoteTimeSqlServerTests
         using var stranger = _api.AnonymousClient();
         var ends = new Dictionary<Guid, (Guid TenantId, int HoursAgo)>();
         async Task VisitLeftAsync(SignedUp trade, string slug, string postalCode, string phone, int hoursAgo,
-            bool accept = true, bool quote = false, bool sent = false, bool discard = false)
+            bool accept = true, bool quote = false, bool sent = false, bool discard = false, bool workCharged = false)
         {
             var visit = await VisitAsync(stranger, slug, postalCode, phone);
             if (accept)
                 await AcceptAsync(trade.Client, visit);
+            if (workCharged)
+            {
+                // Charged with work at the visit: the trade picked no service as its visit, so anything sold is more than it.
+                var product = await CrossTenantManagementSqlServerTests.ProductAsync(trade.Client, "Cambio de empaque");
+                await TwoBusinessesApi.ReadAsync(await trade.Client.PostAsJsonAsync("/api/v1/orders", new
+                {
+                    orderType = 0,
+                    channel = 0,
+                    createdByBusiness = true,
+                    openTab = false,
+                    customerName = "Valeria Ruiz",
+                    items = new[] { new { productId = product, quantity = 1, optionIds = Array.Empty<Guid>() } },
+                    payments = Array.Empty<object>(),
+                    appointmentId = visit
+                }));
+            }
             if (sent)
                 await QuoteAsync(trade.Client, visit);
             else if (quote)
@@ -138,7 +154,8 @@ public sealed class CrossTenantDirectoryQuoteTimeSqlServerTests
         }
 
         // Two of four within a day: a quote started and never sent, and a visit that left nothing, count; one whose quote was
-        // discarded, one six days past its end, and a request nobody accepted do not. Any of them more, and half would not be.
+        // discarded, one whose work was charged at the visit, one six days past its end, and a request nobody accepted do not.
+        // Any of them more, and half would not be.
         await VisitLeftAsync(exact, exactSlug, "72013", "5570000001", hoursAgo: 1, sent: true);
         await VisitLeftAsync(exact, exactSlug, "72013", "5570000002", hoursAgo: 1, sent: true);
         await VisitLeftAsync(exact, exactSlug, "72013", "5570000003", hoursAgo: 8 * 24, quote: true);
@@ -146,6 +163,7 @@ public sealed class CrossTenantDirectoryQuoteTimeSqlServerTests
         await VisitLeftAsync(exact, exactSlug, "72013", "5570000005", hoursAgo: 8 * 24, quote: true, discard: true);
         await VisitLeftAsync(exact, exactSlug, "72013", "5570000006", hoursAgo: 6 * 24);
         await VisitLeftAsync(exact, exactSlug, "72013", "5570000007", hoursAgo: 8 * 24, accept: false);
+        await VisitLeftAsync(exact, exactSlug, "72013", "5570000008", hoursAgo: 8 * 24, workCharged: true);
         // Two of five within a day: a quote started and never sent, and two visits that left nothing. Without either kind, two
         // of four would be.
         await VisitLeftAsync(each, eachSlug, "72014", "5570000001", hoursAgo: 1, sent: true);

@@ -92,8 +92,9 @@ describe('quoteTimeLabel and ownQuoteTimeNote (Fase 29S)', () => {
 
   it('tells its owner that a visit a week past its end without its quote counts among the slowest (Fase 29W)', () => {
     expect(ownQuoteTimeNote(QuoteTime.WithinThreeDays)).toContain(
-      'Una visita sin cotización una semana después cuenta entre las más lentas, salvo que la cobres sin cotizar o descartes su cotización.');
-    expect(ownQuoteTimeNote(null)).toMatch(/o cuando pasa una semana después de la visita sin mandarla\.$/);
+      'Una visita que lleva una semana de terminada sin su cotización mandada cuenta entre las más lentas, salvo que descartes su cotización o que cobres el trabajo en la visita sin empezar una.');
+    expect(ownQuoteTimeNote(QuoteTime.Slower)).toMatch(/Cuentan así también las visitas que llevan una semana de terminadas sin su cotización mandada\.$/);
+    expect(ownQuoteTimeNote(null)).toMatch(/o cuando pasa una semana desde que termina la visita sin que la mandes\.$/);
   });
 });
 

@@ -37,9 +37,12 @@ public class ExploreOrderTests
         Assert.Equal(4, ExploreOrder.Of(ResponseTime.WithinAnHour, QuoteTime.Slower, null));
         // Its quotes alone, when its answers say nothing yet.
         Assert.Equal(1, ExploreOrder.Of(null, QuoteTime.WithinThreeDays, null));
-        // One that takes requests and orders goes by the quicker: they are two ways of buying from it.
+        // One that takes requests and orders goes by the quicker: they are two ways of buying from it. A time it does not have
+        // yet does not count, though: by the one it has.
         Assert.Equal(0, ExploreOrder.Of(ResponseTime.Slower, null, OrderConfirmTime.WithinFiveMinutes));
         Assert.Equal(1, ExploreOrder.Of(ResponseTime.WithinThreeHours, null, OrderConfirmTime.Slower));
+        Assert.Equal(4, ExploreOrder.Of(ResponseTime.Slower, null, null));
+        Assert.Equal(3, ExploreOrder.Of(ResponseTime.WithinADay, QuoteTime.WithinADay, null));
     }
 
     [Fact]
