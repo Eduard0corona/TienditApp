@@ -40,7 +40,7 @@ public class TenantUserQuoteReplyEmailsMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id);
         var members = await context.TenantUsers.AsNoTracking().OrderBy(m => m.Role).ToListAsync();
         Assert.Equal(
             [(TenantUserRole.Owner, (bool?)null, true), (TenantUserRole.Admin, null, false)],
@@ -52,7 +52,7 @@ public class TenantUserQuoteReplyEmailsMigrationSqlServerTests
         tracked[0].ChooseQuoteReplyEmails(false);
         tracked[1].ChooseQuoteReplyEmails(true);
         await context.SaveChangesAsync();
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id);
         Assert.Equal(
             [(bool?)false, true],
             await check.TenantUsers.AsNoTracking().OrderBy(m => m.Role).Select(m => m.QuoteReplyEmails).ToListAsync());
@@ -73,7 +73,7 @@ public class TenantUserQuoteReplyEmailsMigrationSqlServerTests
             await before.SaveChangesAsync();
         }
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id);
         var member = await context.TenantUsers.AsNoTracking().SingleAsync();
         Assert.Equal(((bool?)null, true), (member.QuoteReplyEmails, member.GetsQuoteReplyEmails));
     }
@@ -85,7 +85,7 @@ public class TenantUserQuoteReplyEmailsMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var tenant = Business();
         var owner = Account("dueña");
-        await using (var seed = database.CreateContext(tenant.Id))
+        await using (var seed = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id))
         {
             var member = new TenantUser(tenant.Id, owner.Id, TenantUserRole.Owner);
             member.ChooseQuoteReplyEmails(false);
@@ -108,7 +108,7 @@ public class TenantUserQuoteReplyEmailsMigrationSqlServerTests
         // Rolling back again does nothing; forward again, what was chosen for the quotes is gone and the owner gets them again.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id);
         var again = await forward.TenantUsers.AsNoTracking().SingleAsync();
         Assert.Equal(((bool?)null, true), (again.QuoteReplyEmails, again.GetsQuoteReplyEmails));
     }
