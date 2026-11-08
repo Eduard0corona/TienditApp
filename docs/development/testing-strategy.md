@@ -2448,13 +2448,14 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas:** contra la línea base de `master` en `5bcae66` (810 escenas): 725 iguales y 85 distintas, todas por el botón «Tono y volumen de los sonidos» junto al interruptor de sonido: 21 de la Agenda, 53 de Pedidos (también las de un detalle o una factura abiertos sobre la lista), 7 de Cocina y 4 de Cotizaciones, que suman su interruptor. Cada diferencia cae en la franja de esa barra, de unos 48 px de alto; en el teléfono, Cotizaciones baja «Nueva cotización» a otra línea (41 px más de alto). Ninguna otra pantalla cambia.
 - Fase 30A, avisar a quien le cambian sus avisos, vigilar las solicitudes falsas y el tope por cuenta ([ADR 0081](../adr/0081-notice-changes-fake-watch-and-account-cap.md)):
   - **Application:**
-    - `NoticeEmailsChangedEmailTests` (5, nuevo):
+    - `NoticeEmailsChangedEmailTests` (6, nuevo):
       - la persona lee quién cambió sus avisos, en qué negocio y qué le llega ahora y qué ya no, con lo que escribió la gente codificado en el cuerpo y el enlace a Mi perfil;
       - solo se dice lo que cambió, y una cuenta que ya no existe es «Alguien de tu equipo»;
       - el administrador de la plataforma es «El soporte de TienditApp», nunca su nombre;
       - no sale a quien ya no está en el equipo, sin correo confirmado, de otro negocio ni en un negocio suspendido;
-      - un cambio deshecho después no dice lo que la persona ya no recibe.
-    - `EmployeeAccessRulesTests` (+1): el cambio de otro manda un mensaje al outbox con lo que cambió; nada si no cambia nada ni por un cambio propio.
+      - un cambio deshecho después no dice lo que la persona ya no recibe;
+      - solo dice los avisos que le pueden llegar: a quien trabaja las cotizaciones sin el permiso de la Agenda, solo las respuestas; a quien no tiene ninguno de los dos, nada.
+    - `EmployeeAccessRulesTests` (+1): el cambio de otro manda un mensaje al outbox con lo que cambió; nada si no cambia nada ni por un cambio propio, y cada guardado sale bien.
     - `FakeRequestsWatchTests` (2, nuevo):
       - la consola ve los negocios que más marcan, con las que les quitaron la marca y sus solicitudes de clientes (sin las del equipo, y con las marcadas que llegaron antes de los 90 días), y los teléfonos que dos negocios o más tienen marcados, por sus últimos cuatro dígitos (el mismo teléfono con el 1 de WhatsApp es uno; tres marcas de un negocio no son «varios»; una marca de hace más de 90 días no cuenta);
       - solo la pide el administrador de la plataforma (`RequiresPlatformAdmin`).
@@ -2465,7 +2466,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `CrossTenantRealtimeSqlServerTests`: cuando el dueño elige los avisos de la recepcionista, a ella le llega primero el correo de quién los cambió y después el de la solicitud.
   - **Cliente:** `FakeRequestsWatch.test.tsx` (2, nuevo): la tabla de los negocios y los teléfonos por «Termina en» con los puntos ocultos al lector; dice cuando nadie marcó y cuando una lista llega a su tope.
   - **Mutaciones:** sin `Distinct` en los negocios de un teléfono, avisar un cambio propio, sin codificar el nombre, nombrar al administrador, sin revisar que el cambio siga vigente, mandarlo en un negocio suspendido, sin el tope por cuenta, el tope por cuenta que cruza negocios y sin las marcadas que llegaron antes de la ventana: las 9 hacen fallar su prueba.
-  - **.NET en total:** 4,846 pruebas en verde con SQL Server (Domain 1,427; Application 2,195; WebApi 509; Infrastructure 715). **Cliente en total:** 208 archivos y 1,594 pruebas.
+  - **.NET en total:** 4,848 pruebas en verde con SQL Server (Domain 1,427; Application 2,197; WebApi 509; Infrastructure 715). **Cliente en total:** 208 archivos y 1,594 pruebas.
   - **Primera visita:** 182,242 B (`master` en `ea8afe2`: 182,223 B, +19 B): `platformApi`, que va en la entrada con la campana y el aviso de pago vencido, suma la lectura de las solicitudes marcadas; la sección de la consola se carga con ella. El presupuesto (182,300 B) no cambia. El CSS global, 63,077 B de 63,200 B.
   - **Revisión independiente**, sin bloqueantes, con estos arreglos:
     - el administrador de la plataforma que cambia los avisos de alguien es «El soporte de TienditApp», nunca su nombre;
@@ -2473,6 +2474,9 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - «Solicitudes» de la consola suma las marcadas que llegaron antes de los 90 días, así que nunca son menos que las marcadas;
     - los cuatro dígitos se leen como «Termina en…», con los puntos ocultos al lector, y la consola dice cuando carga;
     - y el ADR dice por qué esta lectura no deja registro.
+  - **claude-review** (2 MINOR):
+    - el correo decía «Ahora te llegan…» de un aviso prendido sin el permiso que pide, que no le llegaría ni podría cambiar en Mi perfil: ahora solo dice los que le pueden llegar, y sin ninguno no se manda (quitar esa revisión hace fallar la prueba nueva);
+    - la prueba del outbox no revisaba que cada guardado saliera bien: ahora lo revisa.
   - **Escenas:** contra la línea base de `master` en `ea8afe2` (810 escenas): 806 iguales y 4 distintas. Las 3 de la consola de la plataforma (escritorio, oscuro y teléfono) suman al final «Solicitudes marcadas como falsas», con su tabla y los teléfonos por sus últimos cuatro dígitos. «La tienda: botón del pedido» salió distinta 34 píxeles, en una franja de 8 px. Sola, con el build de `master`, también es distinta de su línea base: depende de con qué escenas corre, no del cambio, como ya se vio en la 29X.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.

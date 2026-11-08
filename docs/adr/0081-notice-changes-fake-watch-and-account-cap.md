@@ -20,6 +20,7 @@ El dueño del producto pidió avanzar estos puntos (el 8, el 11 y el 12), entre 
 1. **Avisar a quien le cambian sus avisos.**
    - Cuando alguien del equipo cambia, en Equipo, los avisos por correo de otra persona, a esa persona le llega un correo: «Mariana Ortiz cambió tus avisos por correo en Estética Luna», con lo que ahora le llega y lo que ya no, y el enlace a Mi perfil.
    - Solo dice lo que cambió. Guardar lo que la persona ya recibe no manda nada, y quien cambia los suyos no se avisa a sí mismo.
+   - Solo habla de los avisos que le pueden llegar: los de la Agenda, si puede responder las solicitudes; las respuestas a cotizaciones, si trabaja las cotizaciones. Uno que se prendió sin el permiso que pide no le llegaría ni lo podría cambiar en Mi perfil. Si no queda ninguno, no se manda.
    - Sale por el outbox con el cambio (`TenantUserNoticeEmailsChangedEvent`). Al mandarlo se comprueba, como en los demás avisos, que el negocio no esté suspendido y que la persona siga activa, con su cuenta activa y su correo confirmado. También, que siga recibiendo lo que el cambio dice: si lo cambiaron otra vez, ese cambio manda el suyo.
    - **Quién lo cambió:**
      - alguien del equipo va con el nombre de su cuenta;

@@ -186,12 +186,15 @@ public class EmployeeAccessRulesTests
         var receptionist = await fixture.AddMemberAsync(TenantA, UserRole.Staff, TenantUserRole.Staff);
 
         // Both turned on by the owner: one message with both.
-        await fixture.UpdateAsync(owner, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", true, true);
+        var bothOn = await fixture.UpdateAsync(owner, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", true, true);
         // Only what changes: the agenda's stays on, the quotes' go off.
-        await fixture.UpdateAsync(admin, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", true, false);
-        // Nothing changes, or the admin changes their own: nobody is told.
-        await fixture.UpdateAsync(owner, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", true, false);
-        await fixture.UpdateAsync(admin, admin, UserRole.TenantAdmin, TenantUserRole.Admin, "Persona", requestEmails: true);
+        var quotesOff = await fixture.UpdateAsync(admin, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", true, false);
+        // Nothing changes, or the admin changes their own: nobody is told, though both save.
+        var asTheyAre = await fixture.UpdateAsync(owner, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", true, false);
+        var theirOwn = await fixture.UpdateAsync(admin, admin, UserRole.TenantAdmin, TenantUserRole.Admin, "Persona", requestEmails: true);
+
+        Assert.All([bothOn, quotesOff, asTheyAre, theirOwn], result => Assert.True(result.IsSuccess, result.Error));
+        Assert.True((await fixture.MembershipAsync(admin)).RequestEmails);
 
         Assert.Equal(
             [

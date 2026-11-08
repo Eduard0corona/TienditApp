@@ -96,6 +96,22 @@ public class NoticeEmailsChangedEmailTests
     }
 
     [Fact]
+    public async Task OnlyTheNoticesThatMayReachThePerson_ShouldBeSaid_AndNoneWhenNoneMay()
+    {
+        // As the API sends them: the agenda's to whoever may answer the requests, the answers to quotes to whoever works them.
+        await using var fixture = SalesTestFixture.Create();
+        var salon = await SalonAsync(fixture, "Estética Luna");
+        var owner = await MemberAsync(fixture, salon, "Mariana", TenantUserRole.Owner);
+        var cashier = await MemberAsync(fixture, salon, "Rosa", TenantUserRole.Staff, choose: true, chooseQuotes: true, permissions: [TenantPermission.ManageOrders]);
+        var clerk = await MemberAsync(fixture, salon, "Pepe", TenantUserRole.Staff, choose: true, permissions: [TenantPermission.ManageCatalog]);
+
+        var (_, _, body) = Assert.Single(await SendAsync(fixture, salon, cashier, owner, requestEmails: true, quoteReplyEmails: true));
+        Assert.Contains("<li>Ahora te llegan las respuestas de los clientes a las cotizaciones.</li>", body);
+        Assert.DoesNotContain("Agenda", body);
+        Assert.Empty(await SendAsync(fixture, salon, clerk, owner, requestEmails: true));
+    }
+
+    [Fact]
     public async Task AChangeUndoneSince_ShouldNotTellWhatThePersonNoLongerGets()
     {
         // Turned on and off again: the first message, sent late, would say «Ahora te llegan»; the second says the truth.
@@ -131,7 +147,7 @@ public class NoticeEmailsChangedEmailTests
             .SingleAsync(m => m.UserId == memberUserId && m.TenantId == (membershipOf ?? tenant).Id);
         fixture.TenantService.SetTenant(tenant.Id);
         var emails = new Emails();
-        await new NoticeEmailsChangedEmailHandler(fixture.Context, emails, new Links(AppUrl))
+        await new NoticeEmailsChangedEmailHandler(fixture.Context, new MembersAccess(fixture.Context), emails, new Links(AppUrl))
             .HandleAsync(
                 new TenantUserNoticeEmailsChangedEvent(membership.Id, changedBy, requestEmails, quoteReplyEmails),
                 Context(tenant),

@@ -1,6 +1,8 @@
+using FoodParkDigital.Application.Appointments.RequestNotices;
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Notices;
+using FoodParkDigital.Application.Quotes.ReplyNotices;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.Tenants.Events;
@@ -51,7 +53,9 @@ internal static class NoticeEmailsChangedEmail
 /// Sends the person the email of a change to their notices made by someone else (Fase 30A, ADR 0081), from the platform's
 /// provider: only while they are still an active member of a business that is not suspended, with an active account and a
 /// confirmed email, as the other notices, and only while what they get is still what the change said (a later change sends
-/// its own). It says who changed them by the name of their account when they are of the team; the platform's admin acting
+/// its own). It speaks only of the notices that may reach them now, as the API would send them (the agenda's to whoever may
+/// answer the requests, the answers to quotes to whoever works the quotes): one they may not get is not theirs to change in
+/// Mi perfil either, and with none left nothing is sent. It says who changed them by the name of their account when they are of the team; the platform's admin acting
 /// on the business is «El soporte de TienditApp», and an account that no longer exists, «Alguien de tu equipo». A failure
 /// of the provider throws, and the outbox retries it.
 /// </summary>
@@ -61,12 +65,14 @@ public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<Tenant
     public const string PlatformSupport = "El soporte de TienditApp";
 
     private readonly IApplicationDbContext _context;
+    private readonly ITenantAccessService _access;
     private readonly IEmailService _email;
     private readonly IAppLinks _links;
 
-    public NoticeEmailsChangedEmailHandler(IApplicationDbContext context, IEmailService email, IAppLinks links)
+    public NoticeEmailsChangedEmailHandler(IApplicationDbContext context, ITenantAccessService access, IEmailService email, IAppLinks links)
     {
         _context = context;
+        _access = access;
         _email = email;
         _links = links;
     }
@@ -94,7 +100,7 @@ public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<Tenant
                 _context.Users.Where(u => u.IsActive && u.EmailConfirmed && u.Email != null),
                 m => m.UserId,
                 u => u.Id,
-                (m, u) => new { Membership = m, u.Email })
+                (m, u) => new { Membership = m, u.Email, UserId = u.Id })
             .FirstOrDefaultAsync(cancellationToken);
         // Changed again since (and that change sends its own): this one no longer says what they get.
         if (member is null
@@ -102,11 +108,18 @@ public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<Tenant
             || (domainEvent.QuoteReplyEmails is { } quoteReplies && member.Membership.GetsQuoteReplyEmails != quoteReplies))
             return;
 
+        // Only what may reach them now: a notice turned on without the permission it needs would not arrive.
+        var access = await _access.GetAccessSnapshotAsync(member.UserId, tenantId, cancellationToken);
+        var requestEmails = RequestEmailRecipients.MayAnswer(access) ? domainEvent.RequestEmails : null;
+        var quoteReplyEmails = QuoteReplyEmailRecipients.MayWorkQuotes(access) ? domainEvent.QuoteReplyEmails : null;
+        if (requestEmails is null && quoteReplyEmails is null)
+            return;
+
         var (subject, body) = NoticeEmailsChangedEmail.Compose(
             await WhoAsync(domainEvent.ChangedByUserId, tenantId, cancellationToken),
             business.Name,
-            domainEvent.RequestEmails,
-            domainEvent.QuoteReplyEmails,
+            requestEmails,
+            quoteReplyEmails,
             _links.BaseUrl);
         await _email.SendEmailAsync(member.Email!, subject, body);
     }
