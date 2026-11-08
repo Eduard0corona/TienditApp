@@ -8,6 +8,8 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.Tenants.Events;
+using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -175,6 +177,31 @@ public class EmployeeAccessRulesTests
     }
 
     [Fact]
+    public async Task APerson_ShouldBeToldWhoChangedTheirNotices_AndWhat_ButNotForTheirOwnChange()
+    {
+        // Fase 30A (ADR 0081).
+        await using var fixture = await Fixture.CreateAsync();
+        var owner = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Owner);
+        var admin = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Admin);
+        var receptionist = await fixture.AddMemberAsync(TenantA, UserRole.Staff, TenantUserRole.Staff);
+
+        // Both turned on by the owner: one message with both.
+        await fixture.UpdateAsync(owner, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", true, true);
+        // Only what changes: the agenda's stays on, the quotes' go off.
+        await fixture.UpdateAsync(admin, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", true, false);
+        // Nothing changes, or the admin changes their own: nobody is told.
+        await fixture.UpdateAsync(owner, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", true, false);
+        await fixture.UpdateAsync(admin, admin, UserRole.TenantAdmin, TenantUserRole.Admin, "Persona", requestEmails: true);
+
+        Assert.Equal(
+            [
+                (new TenantUserNoticeEmailsChangedEvent(receptionist.TenantUserId, owner.UserId, true, true) { EventId = Guid.Empty, OccurredOn = default }, (Guid?)TenantA),
+                (new TenantUserNoticeEmailsChangedEvent(receptionist.TenantUserId, admin.UserId, null, false) { EventId = Guid.Empty, OccurredOn = default }, (Guid?)TenantA)
+            ],
+            fixture.Outbox.Added.Select(m => (m.Event with { EventId = Guid.Empty, OccurredOn = default }, m.TenantId)));
+    }
+
+    [Fact]
     public async Task TheOwnersNotices_ShouldOnlyChangeFromTheirProfile_NeverFromTheTeam()
     {
         await using var fixture = await Fixture.CreateAsync();
@@ -237,6 +264,9 @@ public class EmployeeAccessRulesTests
         private readonly TestTenantService _tenantService = new();
         private readonly ApplicationDbContext _context;
 
+        /// <summary>What the changes of someone else's notices told each person (Fase 30A).</summary>
+        public NoticeEmailsSupport.Outbox<TenantUserNoticeEmailsChangedEvent> Outbox { get; } = new();
+
         private Fixture()
         {
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -292,7 +322,7 @@ public class EmployeeAccessRulesTests
         {
             _tenantService.SetTenant(employee.TenantId);
             var handler = new UpdateEmployeeCommandHandler(
-                _context, _tenantService, new TestCurrentUserService(actor), new TestUserManager(_context));
+                _context, _tenantService, new TestCurrentUserService(actor), new TestUserManager(_context), Outbox);
             return handler.Handle(new UpdateEmployeeCommand
             {
                 TenantUserId = employee.TenantUserId,

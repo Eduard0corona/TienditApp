@@ -320,6 +320,35 @@ public class OnlineBookingFlowTests
     }
 
     [Fact]
+    public async Task Account_ShouldNotStartTheCountAgain_ByAskingWithAnotherPhone()
+    {
+        // Fase 30A (ADR 0081): signed in, its requests and cancellations count with every phone of its account.
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture, capacity: 5);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        var account = await CustomerAsync(fixture, "Valeria");
+        fixture.CurrentUser.UserId = account.ToString();
+        foreach (var time in new[] { "09:00", "10:00" })
+        {
+            Assert.True((await RequestAsync(fixture, haircut.Id, Local(Monday, time))).IsSuccess);
+            await CancelLastAsync(fixture);
+        }
+        // Two cancelled with one phone and one waiting with another: a fourth with a third phone is refused.
+        Assert.True((await RequestAsync(fixture, haircut.Id, Local(Monday, "11:00"), phone: "5511112222")).IsSuccess);
+        var fourth = await RequestAsync(fixture, haircut.Id, Local(Monday, "12:00"), phone: "5533334444");
+
+        // Without its session, that third phone counts by itself, as before; and so does another account's.
+        fixture.CurrentUser.UserId = null;
+        var signedOut = await RequestAsync(fixture, haircut.Id, Local(Monday, "12:00"), phone: "5533334444");
+        fixture.CurrentUser.UserId = (await CustomerAsync(fixture, "Mariana")).ToString();
+        var another = await RequestAsync(fixture, haircut.Id, Local(Monday, "13:00"), phone: "5555556666");
+
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage, fourth.Error);
+        Assert.True(signedOut.IsSuccess, signedOut.Error);
+        Assert.True(another.IsSuccess, another.Error);
+    }
+
+    [Fact]
     public async Task Accept_ShouldScheduleTheRequest_AndDecline_ShouldFreeItsTime_EachTellingTheCustomer()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -400,9 +429,9 @@ public class OnlineBookingFlowTests
         Assert.Equal(
             RequestPublicAppointmentCommandHandler.MarkedFakeMessage,
             await PublicAppointmentReceipts.RefusalForPhoneAsync(
-                fixture.Context, "+525522107765", marked.AddDays(90).AddMinutes(-1), CancellationToken.None));
+                fixture.Context, "+525522107765", null, marked.AddDays(90).AddMinutes(-1), CancellationToken.None));
         Assert.Null(await PublicAppointmentReceipts.RefusalForPhoneAsync(
-            fixture.Context, "+525522107765", marked.AddDays(90).AddMinutes(1), CancellationToken.None));
+            fixture.Context, "+525522107765", null, marked.AddDays(90).AddMinutes(1), CancellationToken.None));
     }
 
     [Fact]

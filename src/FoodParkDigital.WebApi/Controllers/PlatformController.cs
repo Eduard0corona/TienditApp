@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Domain.Billing.Enums;
 using FoodParkDigital.Domain.Reviews.Enums;
@@ -107,6 +108,14 @@ public class PlatformController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
+
+    /// <summary>
+    /// The requests marked as fake (Fase 30A): the businesses that mark the most, and the phones several businesses marked, by
+    /// their last four digits.
+    /// </summary>
+    [HttpGet("fake-requests")]
+    public async Task<ActionResult<FakeRequestsWatchDto>> GetFakeRequests(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetFakeRequestsWatchQuery(), cancellationToken));
 
     /// <summary>The reviews to look at (Fase 24H): those their business reported, or those the platform hid.</summary>
     [HttpGet("reviews")]

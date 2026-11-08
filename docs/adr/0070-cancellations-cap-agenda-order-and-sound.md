@@ -36,7 +36,7 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
    - Una solicitud suena con dos notas hacia arriba, como un pedido; una cancelación, con las mismas hacia abajo.
    - Como el de los pedidos, se guarda en el navegador, que lo deja sonar después del primer toque o tecla. Al prenderlo en la Agenda, la barra superior lo prende con el mismo toque, y las otras pestañas lo siguen. Mientras falta ese toque, la Agenda lo pide.
 4. **Fuera de esta fase:**
-   - Contar en el tope las canceladas de otros teléfonos de la misma persona.
+   - Contar en el tope las canceladas de otros teléfonos de la misma persona: llegó en la Fase 30A ([ADR 0081](0081-notice-changes-fake-watch-and-account-cap.md)) para quien pide con su cuenta.
    - Elegir el sonido o su volumen: llegó en la Fase 29Z ([ADR 0080](0080-quote-sound-and-device-tone.md)), para todos los sonidos del dispositivo.
    - Lo demás de las ADR [0066](0066-answer-requests-in-time.md), [0068](0068-tell-the-business-of-each-request.md) y [0069](0069-tell-the-business-what-customers-answer.md), «Fuera de esta fase».
 

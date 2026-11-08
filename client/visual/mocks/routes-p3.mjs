@@ -92,6 +92,8 @@ export function phase3Routes(data, { ok, notFound }) {
     ['GET', /^\/reports\/sales-by-branch$/, (m, q) => ok(salesByBranch(data, q))],
     ['GET', /^\/platform\/overview$/, () => ok(platform().overview)],
     ['GET', /^\/platform\/plans$/, () => ok(platform().plans)],
+    // Fase 30A: the requests marked as fake, as the platform watches them.
+    ['GET', /^\/platform\/fake-requests$/, () => ok(platform().fakeRequests)],
     ['GET', /^\/platform\/tenants$/, () => ok({ items: platform().tenants, pageNumber: 1, totalPages: 1, totalCount: platform().tenants.length, hasPreviousPage: false, hasNextPage: false })],
     ['GET', /^\/platform\/tenants\/[^/]+\/subscription$/, () => ok(platform().detail)],
     ['GET', /^\/auth\/my-tenant\/subscription$/, () => ok(platform().mine)],
@@ -234,6 +236,16 @@ function platform() {
       { id: 'pay-1', amount: 1647, currency: 'MXN', months: 3, method: 1, reference: null, paidAt: '2026-06-02T17:00:00Z', periodStart: '2026-06-15T15:00:00Z', periodEnd: '2026-09-02T15:00:00Z', recordedBy: 'soporte' },
     ],
   };
-  platformData = { plans, tenants, overview, detail, mine };
+  const fakeRequests = {
+    top: 20,
+    businesses: [
+      { tenantId: '0b9a2f3c-1d4e-4f50-8a6b-7c8d9e0f1a21', name: 'Estética Luna', slug: 'estetica-luna', marked: 6, takenBack: 1, requests: 48, lastMarkedAt: '2026-10-27T18:40:00Z' },
+      { tenantId: '0b9a2f3c-1d4e-4f50-8a6b-7c8d9e0f1a22', name: 'Plomería Hernández', slug: 'plomeria-hernandez', marked: 2, takenBack: 0, requests: 31, lastMarkedAt: '2026-10-21T15:05:00Z' },
+    ],
+    phones: [
+      { ending: '7765', businessNames: ['Estética Luna', 'Spa Sol'], lastMarkedAt: '2026-10-27T18:40:00Z' },
+    ],
+  };
+  platformData = { plans, tenants, overview, detail, mine, fakeRequests };
   return platformData;
 }

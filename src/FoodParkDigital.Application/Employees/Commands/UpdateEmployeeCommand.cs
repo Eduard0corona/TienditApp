@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -6,6 +7,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.Tenants.Events;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -58,17 +60,20 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IOutbox _outbox;
 
     public UpdateEmployeeCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        IOutbox outbox)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
         _userManager = userManager;
+        _outbox = outbox;
     }
 
     public async Task<Result<EmployeeDto>> Handle(UpdateEmployeeCommand request, CancellationToken cancellationToken)
@@ -151,7 +156,13 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
             tenantUser.SetPermissionCodes(TenantPermissionCatalog.GetDefaultCodes(appRole, tenantRole));
         else
             tenantUser.SetExplicitPermissions(request.Permissions);
-        EmployeeNoticeEmails.Apply(tenantUser, request.RequestEmails, request.QuoteReplyEmails);
+        var (requestsChanged, quoteRepliesChanged) = EmployeeNoticeEmails.Apply(tenantUser, request.RequestEmails, request.QuoteReplyEmails);
+        // Fase 30A (ADR 0081): someone else changed what the person gets by email; it is told who and what, saved with the change.
+        if ((requestsChanged is not null || quoteRepliesChanged is not null)
+            && Guid.TryParse(_currentUserService.UserId, out var changedBy) && changedBy != tenantUser.UserId)
+            _outbox.Add(
+                new TenantUserNoticeEmailsChangedEvent(tenantUser.Id, changedBy, requestsChanged, quoteRepliesChanged),
+                _tenantService.TenantId);
 
         await _context.SaveChangesAsync(cancellationToken);
 
