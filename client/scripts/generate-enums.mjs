@@ -50,13 +50,19 @@ for (const [name] of enums) {
 }
 
 // The modules first, then whatever is left of an enum the API no longer exchanges: a run cut halfway leaves every module
-// the index names.
+// the index names. Files are compared without case, as Windows and macOS do: there, writing FOO.ts over Foo.ts keeps the
+// name Foo.ts, so a module renamed only in case is removed before writing it again.
 const folder = new URL('../src/api/generated/enums/', import.meta.url);
 await mkdir(folder, { recursive: true });
-await Promise.all(enums.map(([name, block]) => writeFile(new URL(`${name}.ts`, folder), `${header}\n\n${block}\n`)));
-const written = new Set(enums.map(([name]) => `${name}.ts`));
+const written = new Map(enums.map(([name]) => [`${name}.ts`.toLowerCase(), `${name}.ts`]));
+const remove = (file) => rm(new URL(file, folder), { recursive: true, force: true, maxRetries: 3 });
 for (const file of await readdir(folder)) {
-  if (!written.has(file)) await rm(new URL(file, folder), { recursive: true, force: true, maxRetries: 3 });
+  const module = written.get(file.toLowerCase());
+  if (module && module !== file) await remove(file);
+}
+await Promise.all(enums.map(([name, block]) => writeFile(new URL(`${name}.ts`, folder), `${header}\n\n${block}\n`)));
+for (const file of await readdir(folder)) {
+  if (!written.has(file.toLowerCase())) await remove(file);
 }
 
 const index = enums.map(([name]) => `export { ${name} } from './enums/${name}';`);
