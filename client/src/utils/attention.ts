@@ -24,7 +24,14 @@ export function describeAttention(item: AttentionItem): AttentionNotice | null {
   const { key, count, urgentCount } = item;
   switch (key) {
     case 'onlineOrdersToConfirm':
-      return { key, text: `${plural(count, 'pedido en línea', 'pedidos en línea')} por confirmar`, path: '/orders', icon: 'ri-global-line', tone: 'warning' };
+      // Fase 29X: urgent are those of the online menu waiting 15 minutes or more, halfway to the slowest in Explorar.
+      return {
+        key,
+        text: `${plural(count, 'pedido en línea', 'pedidos en línea')} por confirmar${urgentCount > 0 ? ` (${urgentCount} ${urgentCount === 1 ? 'lleva' : 'llevan'} 15 minutos o más)` : ''}`,
+        path: '/orders?estado=por-confirmar',
+        icon: 'ri-global-line',
+        tone: urgentCount > 0 ? 'danger' : 'warning',
+      };
     case 'lowStock':
       return {
         key,

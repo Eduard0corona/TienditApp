@@ -57,6 +57,8 @@ import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 import { describeOnlineDispute, describeOnlineRefund, isDisputeRefund } from '../../utils/onlineRefunds';
 import { getApiErrorMessage } from '../../api/errors';
 import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
+import { confirmInTimeLabel } from '../../utils/orderConfirmInTime';
+import { ORDERS_SOUND_KEY } from '../../hooks/useOnlineOrdersWaiting';
 import { quoteFolio } from '../../utils/quotes';
 import WorkAppointmentList from '../../components/appointments/WorkAppointmentList';
 
@@ -148,6 +150,20 @@ function getStatusLabel(status: OrderStatus): string {
 // Several realtime events usually arrive together; one reload covers all of them.
 const EVENT_RELOAD_DELAY_MS = 400;
 
+/**
+ * By when an order of the online menu still waiting is confirmed in time (Fase 29X); it reads the clock every minute, so it
+ * says the half hour passed with Pedidos open.
+ */
+function ConfirmInTime({ confirmBy }: { confirmBy: string }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const { text, late } = confirmInTimeLabel(confirmBy, now);
+  return <small className={`d-block ${late ? 'text-danger' : 'text-muted'}`}>{text}</small>;
+}
+
 export default function OrdersList() {
   const detailTitleId = useId();
   const paymentTitleId = useId();
@@ -157,6 +173,8 @@ export default function OrdersList() {
   const [searchParams] = useSearchParams();
   // A search from the global search (Ctrl K) or a link looks in every date, not only today.
   const initialSearch = searchParams.get('search')?.trim() ?? '';
+  // The bell's online orders to confirm (Fase 29X) open the ones still waiting, of any day.
+  const toConfirm = searchParams.get('estado') === 'por-confirmar';
   const [data, setData] = useState<PaginatedList<OrderDto>>({
     items: [],
     pageNumber: 1,
@@ -168,10 +186,10 @@ export default function OrdersList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedOrderType, setSelectedOrderType] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState(toConfirm ? String(OrderStatusConst.Pending) : '');
   const [selectedChannel, setSelectedChannel] = useState('');
-  const [fromDate, setFromDate] = useState(initialSearch ? '' : today);
-  const [toDate, setToDate] = useState(initialSearch ? '' : today);
+  const [fromDate, setFromDate] = useState(initialSearch || toConfirm ? '' : today);
+  const [toDate, setToDate] = useState(initialSearch || toConfirm ? '' : today);
   const [search, setSearch] = useState(initialSearch);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -198,7 +216,7 @@ export default function OrdersList() {
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onOrderUpdated, onConnected } = useOrderSignalR();
   const latestRequestRef = useRef(0);
   // Orders placed by customers (online menu) wait in Pending for the business: they ring on this device.
-  const chime = useArrivalChime('tienditapp:orders-sound');
+  const chime = useArrivalChime(ORDERS_SOUND_KEY);
   const playChimeRef = useRef(chime.play);
   useEffect(() => {
     playChimeRef.current = chime.play;
@@ -729,7 +747,10 @@ export default function OrdersList() {
                     <td className="text-center">
                       <StatusChip status={order.status} />
                     </td>
-                    <td className="text-center">{toLocalDateTime(order.createdAt)}</td>
+                    <td className="text-center">
+                      {toLocalDateTime(order.createdAt)}
+                      {order.confirmBy && <ConfirmInTime confirmBy={order.confirmBy} />}
+                    </td>
                     <td className="text-end fw-semibold">
                       <div className="ta-money">{formatMoney(order.total)}</div>
                       <small className={`d-block ${order.balance > 0 ? 'text-danger' : 'text-success'}`}>

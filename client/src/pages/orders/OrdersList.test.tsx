@@ -80,7 +80,7 @@ const order = (overrides: Partial<OrderDto>): OrderDto => ({
   ...overrides,
 } as unknown as OrderDto);
 
-function renderOrders(capabilities: number, orders: OrderDto[] = [order({})]) {
+function renderOrders(capabilities: number, orders: OrderDto[] = [order({})], entry = '/orders') {
   vi.mocked(useTenant).mockReturnValue({ tenant: { name: 'La Esquina' }, capabilities } as unknown as ReturnType<typeof useTenant>);
   vi.mocked(ordersApi.getAll).mockResolvedValue({
     data: { items: orders, pageNumber: 1, totalPages: 1, totalCount: orders.length, hasPreviousPage: false, hasNextPage: false },
@@ -88,7 +88,7 @@ function renderOrders(capabilities: number, orders: OrderDto[] = [order({})]) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/orders']}>
+      <MemoryRouter initialEntries={[entry]}>
         <OrdersList />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -118,6 +118,31 @@ describe('OrdersList', () => {
     await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
     await waitFor(() => expect(lastParams()).not.toHaveProperty('channel'));
     expect(screen.getByRole('combobox', { name: 'Canal' })).toHaveValue('');
+  });
+
+  it('opens the online orders still to confirm, of any day, from the bell (Fase 29X)', async () => {
+    renderOrders(TenantCapability.Food, [order({})], '/orders?estado=por-confirmar');
+    await screen.findByText('ORD-000001');
+
+    await waitFor(() => expect(lastParams()).toMatchObject({ status: 0, pageNumber: 1 }));
+    expect(lastParams()).not.toHaveProperty('fromDate');
+    expect(lastParams()).not.toHaveProperty('toDate');
+    expect(screen.getByRole('combobox', { name: 'Estado' })).toHaveValue('0');
+  });
+
+  it('says by when an online order still waiting is confirmed in time, and when the half hour passed (Fase 29X)', async () => {
+    const soon = new Date(Date.now() + 10 * 60_000).toISOString();
+    const past = new Date(Date.now() - 60_000).toISOString();
+    renderOrders(TenantCapability.Food, [
+      order({ id: 'a', orderNumber: 'ORD-000001', channel: OrderChannel.Online, createdByBusiness: false, confirmBy: soon }),
+      order({ id: 'b', orderNumber: 'ORD-000002', channel: OrderChannel.Online, createdByBusiness: false, confirmBy: past }),
+      order({ id: 'c', orderNumber: 'ORD-000003', channel: OrderChannel.Online, createdByBusiness: false, confirmBy: null }),
+    ]);
+
+    const row = async (number: string) => (await screen.findByText(number)).closest('tr') as HTMLElement;
+    expect(within(await row('ORD-000001')).getByText(/^Confírmalo antes de las? .+ para que no cuente entre los más lentos$/)).toHaveClass('text-muted');
+    expect(within(await row('ORD-000002')).getByText('Ya pasó la media hora: cuenta entre los más lentos en Explorar')).toHaveClass('text-danger');
+    expect(within(await row('ORD-000003')).queryByText(/Confírmalo|media hora/)).not.toBeInTheDocument();
   });
 
   it('says where an order came from instead of who created it', async () => {

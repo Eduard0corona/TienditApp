@@ -19492,6 +19492,8 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
+            confirmBy?: string | null;
+            /** Format: date-time */
             updatedAt?: string | null;
             items: components["schemas"]["OrderItemDto"][];
             statusHistory: components["schemas"]["OrderStatusHistoryDto"][];

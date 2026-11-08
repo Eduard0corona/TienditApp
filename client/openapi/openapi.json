@@ -31058,6 +31058,11 @@
             "type": "string",
             "format": "date-time"
           },
+          "confirmBy": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time",
