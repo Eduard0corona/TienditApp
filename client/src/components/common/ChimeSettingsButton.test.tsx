@@ -43,15 +43,22 @@ describe('ChimeSettingsButton (Fase 29Z)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
-  it('shows what the device already picked, also in another of its buttons', async () => {
+  it('shows what the device already picked, and what one of its buttons picks the other shows', async () => {
     window.localStorage.setItem('tienditapp:chime-tone', 'bell');
     window.localStorage.setItem('tienditapp:chime-volume', '30');
     const user = userEvent.setup();
     render(<><ChimeSettingsButton /><ChimeSettingsButton /></>);
+    const [first, second] = screen.getAllByRole('button', { name: 'Tono y volumen de los sonidos' });
+    expect(first).toHaveAttribute('aria-haspopup', 'dialog');
 
-    await user.click(screen.getAllByRole('button', { name: 'Tono y volumen de los sonidos' })[0]);
-
+    await user.click(first);
     expect(await screen.findByRole('radio', { name: 'Campana' })).toBeChecked();
     expect(screen.getByRole('slider', { name: 'Volumen' })).toHaveValue('30');
+    await user.click(screen.getByRole('radio', { name: 'Suave' }));
+    await user.click(screen.getByRole('button', { name: 'Listo' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await user.click(second);
+    expect(await screen.findByRole('radio', { name: 'Suave' })).toBeChecked();
   });
 });

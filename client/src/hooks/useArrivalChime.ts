@@ -40,18 +40,24 @@ function audioPlays(): boolean {
   return pageAudio?.state === 'running';
 }
 
-/** Starts the page's sound inside a touch or a key, the only moment the browser lets it start. */
-function unlockPageAudio() {
+/**
+ * Starts the page's sound inside a touch or a key, the only moment the browser lets it start.
+ * @returns Whether it plays once the browser answered (Fase 29Z: the preview rings only then).
+ */
+function unlockPageAudio(): Promise<boolean> {
   const AudioContextClass = window.AudioContext ?? (window as AudioWindow).webkitAudioContext;
-  if (!AudioContextClass) return;
+  if (!AudioContextClass) return Promise.resolve(false);
   if (!pageAudio) {
     pageAudio = new AudioContextClass();
     // The browser may stop it again (a phone that locks): every chime then asks for a touch again.
     pageAudio.addEventListener?.('statechange', () => window.dispatchEvent(new Event(AUDIO_STATE)));
   }
-  void pageAudio.resume()
-    .then(() => window.dispatchEvent(new Event(AUDIO_STATE)))
-    .catch(() => undefined);
+  return pageAudio.resume()
+    .then(() => {
+      window.dispatchEvent(new Event(AUDIO_STATE));
+      return audioPlays();
+    })
+    .catch(() => false);
 }
 
 /** A sound that something arrived (its notes up) or left (the same notes down: a cancellation, Fase 29P). */
@@ -109,12 +115,19 @@ function readStored(key: string): string | null {
   }
 }
 
+/**
+ * What this page picked when its browser would not keep it (private mode, blocked storage): it lasts until the page closes,
+ * as a chime turned on does.
+ */
+const pageOnly: Partial<ChimeSettings> = {};
+
 /** What this device picked; what it never picked, or a value this version does not know, is as before. */
 export function readChimeSettings(): ChimeSettings {
-  const tone = readStored(TONE_KEY);
-  const volume = Number(readStored(VOLUME_KEY));
+  const tone = pageOnly.tone ?? readStored(TONE_KEY);
+  const volume = pageOnly.volume ?? Number(readStored(VOLUME_KEY));
   return {
-    tone: tone !== null && tone in TONES ? (tone as ChimeTone) : 'notes',
+    // Only a tone of its own: «toString» is a key of every object, not a tone.
+    tone: tone !== null && Object.hasOwn(TONES, tone) ? (tone as ChimeTone) : 'notes',
     volume: Number.isInteger(volume) && volume >= CHIME_VOLUMES.min && volume <= CHIME_VOLUMES.max && volume % CHIME_VOLUMES.step === 0
       ? volume
       : CHIME_VOLUMES.initial,
@@ -123,12 +136,18 @@ export function readChimeSettings(): ChimeSettings {
 
 /** Saves the device's tone or volume, and every sound of the page (and of its other tabs) rings with it from then on. */
 export function saveChimeSettings(change: Partial<ChimeSettings>) {
-  try {
-    if (change.tone !== undefined) window.localStorage.setItem(TONE_KEY, change.tone);
-    if (change.volume !== undefined) window.localStorage.setItem(VOLUME_KEY, String(change.volume));
-  } catch {
-    // Private mode or blocked storage: the sound keeps the one it had.
-  }
+  const keep = <K extends keyof ChimeSettings>(name: K, key: string, value: ChimeSettings[K] | undefined) => {
+    if (value === undefined) return;
+    try {
+      window.localStorage.setItem(key, String(value));
+      delete pageOnly[name];
+    } catch {
+      // Private mode or blocked storage: this page keeps it until it closes.
+      pageOnly[name] = value;
+    }
+  };
+  keep('tone', TONE_KEY, change.tone);
+  keep('volume', VOLUME_KEY, change.volume);
   window.dispatchEvent(new Event(SETTINGS_CHANGED));
 }
 
@@ -177,9 +196,19 @@ function ring(context: AudioContext, kind: ChimeKind) {
  * sound, whatever sound is turned on.
  */
 export function previewChime() {
-  unlockPageAudio();
-  if (pageAudio) ring(pageAudio, 'arrival');
+  const now = Date.now();
+  // Moving through the tones with the arrows rings each once, not several on top of each other.
+  if (now - lastPreview < PREVIEW_GAP_MS) return;
+  lastPreview = now;
+  // Only once the sound plays: notes queued on a stopped sound would ring whenever it starts again, maybe much later.
+  void unlockPageAudio().then((plays) => {
+    if (plays && pageAudio) ring(pageAudio, 'arrival');
+  });
 }
+
+/** The shortest time between two previews. */
+const PREVIEW_GAP_MS = 300;
+let lastPreview = Number.NEGATIVE_INFINITY;
 
 /**
  * A short two-note chime for new orders, per browser (a kitchen screen wants it, the owner's phone may not).

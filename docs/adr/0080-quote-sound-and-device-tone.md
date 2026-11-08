@@ -27,7 +27,8 @@ El dueño del producto pidió avanzar estos puntos (el 6 y el 7), entre otros, s
    - **Volumen:** de 10 a 100, de diez en diez. 50 es el de siempre.
    - Mientras el dispositivo no elige nada, todo suena como antes.
    - **Dónde:** un botón «Tono y volumen de los sonidos» junto a cada interruptor de sonido (Pedidos, Cocina, Agenda y Cotizaciones) abre un diálogo con los tonos, el volumen y «Probar». Elegir un tono lo hace sonar.
-   - Se guarda en el navegador. Las otras pestañas lo siguen, y un valor que esta versión no conoce suena como antes.
+   - Se guarda en el navegador. Las otras pestañas lo siguen, y un valor que esta versión no conoce suena como antes. Si el navegador no deja guardarlo (modo privado), dura mientras la página siga abierta, como un sonido prendido.
+   - «Probar» y elegir un tono suenan solo cuando el navegador ya dejó sonar, y no más de una vez cada 300 ms: recorrer los tonos con las flechas no encima un sonido sobre otro.
 3. **Fuera de esta fase:**
    - un tono o volumen distinto para cada sonido;
    - subir un sonido propio;
@@ -42,6 +43,7 @@ El dueño del producto pidió avanzar estos puntos (el 6 y el 7), entre otros, s
 - **Lo que limita:**
   - **Es del navegador:** otra persona en el mismo dispositivo oye lo mismo, y un navegador nuevo empieza con el de siempre.
   - **Depende de la barra superior**, como los demás: en el modo enfocado de Vender o de Cocina no suenan las respuestas ni las solicitudes. La Cocina sí suena con sus comandas.
+  - **El interruptor sale aunque no vaya a sonar:** en un negocio suspendido, o para el administrador de la plataforma, la barra superior no se conecta. Pasa igual con el de la Agenda.
   - **El volumen es relativo** al del dispositivo: 100 no sube el del sistema.
   - **Los tonos se generan en el navegador** (Web Audio), sin archivos: no hay sonidos grabados.
 - **Decisión por omisión** (sin preferencia expresa del dueño):

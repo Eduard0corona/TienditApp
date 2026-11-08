@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The page's sound lives as long as the module: each test loads it again, as a page that just opened.
@@ -9,6 +9,10 @@ let chimeModule: typeof import('./useArrivalChime');
 const played: number[] = [];
 const waves: string[] = [];
 const peaks: number[] = [];
+/** The times of the ramps of the note being built, until it starts. */
+const ramps: number[] = [];
+/** When each note starts and stops, and when its sound reaches its loudest and fades: the timing the ear hears. */
+const timings: { start: number; stop: number; loudest: number; quiet: number }[] = [];
 
 class FakeAudioContext {
   state: AudioContextState = 'suspended';
@@ -29,11 +33,14 @@ class FakeAudioContext {
       type: 'sine',
       frequency: { value: 0 },
       connect: (node: unknown) => node,
-      start: () => {
+      start: (at: number) => {
         played.push(oscillator.frequency.value);
         waves.push(oscillator.type);
+        timings.push({ start: at, stop: NaN, loudest: ramps.shift() ?? NaN, quiet: ramps.shift() ?? NaN });
       },
-      stop: () => undefined,
+      stop: (at: number) => {
+        timings[timings.length - 1].stop = at;
+      },
     };
     return oscillator;
   }
@@ -44,8 +51,9 @@ class FakeAudioContext {
       gain: {
         setValueAtTime: () => undefined,
         // The first ramp goes up to the loudest point; the second, down to silence.
-        exponentialRampToValueAtTime: (value: number) => {
+        exponentialRampToValueAtTime: (value: number, at: number) => {
           if (rising) peaks.push(value);
+          ramps.push(at);
           rising = false;
         },
       },
@@ -60,6 +68,8 @@ describe('useArrivalChime', () => {
     played.length = 0;
     waves.length = 0;
     peaks.length = 0;
+    timings.length = 0;
+    ramps.length = 0;
     window.localStorage.clear();
     vi.stubGlobal('AudioContext', FakeAudioContext);
     vi.resetModules();
@@ -68,6 +78,7 @@ describe('useArrivalChime', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     window.localStorage.clear();
   });
@@ -179,12 +190,16 @@ describe('useArrivalChime', () => {
       orders.result.current.toggle();
     });
     act(() => orders.result.current.play());
-    // Never picked: two sine notes up at 0.35, as every sound before.
+    // Never picked: two sine notes up at 0.35, as every sound before, 0.18 s apart, loudest at 0.02 s, quiet at 0.3 s.
     expect([played, waves, peaks]).toEqual([[880, 1175], ['sine', 'sine'], [0.35, 0.35]]);
+    expect(timings.map((t) => [t.start, t.loudest, t.quiet, t.stop].map((s) => Math.round(s * 100) / 100))).toEqual(
+      [[0, 0.02, 0.3, 0.32], [0.18, 0.2, 0.48, 0.5]],
+    );
 
     played.length = 0;
     waves.length = 0;
     peaks.length = 0;
+    timings.length = 0;
     act(() => chimeModule.saveChimeSettings({ tone: 'doorbell', volume: 100 }));
     const agenda = renderHook(() => useArrivalChime('tienditapp:appointments-sound'));
     await act(async () => {
@@ -207,6 +222,9 @@ describe('useArrivalChime', () => {
     expect(chimeModule.readChimeSettings()).toEqual({ tone: 'notes', volume: 50 });
     window.localStorage.setItem('tienditapp:chime-volume', '110');
     expect(chimeModule.readChimeSettings().volume).toBe(50);
+    // A key every object has is no tone either.
+    window.localStorage.setItem('tienditapp:chime-tone', 'toString');
+    expect(chimeModule.readChimeSettings().tone).toBe('notes');
 
     const { result } = renderHook(() => chimeModule.useChimeSettings());
     act(() => {
@@ -231,8 +249,36 @@ describe('useArrivalChime', () => {
       chimeModule.previewChime();
     });
 
-    expect(played).toEqual([523, 659]);
+    // Once the sound plays, not before.
+    await waitFor(() => expect(played).toEqual([523, 659]));
     expect(peaks.every((peak) => Math.abs(peak - 0.07) < 1e-9)).toBe(true);
     expect(agenda.result.current.needsTouch).toBe(false);
+    // Picked again at once (the arrows through the tones): no second chime on top of the first.
+    await act(async () => {
+      chimeModule.previewChime();
+    });
+    expect(played).toEqual([523, 659]);
+  });
+
+  it('rings nothing while the browser does not let the sound start (Fase 29Z)', async () => {
+    vi.spyOn(FakeAudioContext.prototype, 'resume').mockReturnValue(Promise.reject(new Error('interrupted')));
+
+    await act(async () => {
+      chimeModule.previewChime();
+    });
+
+    expect(played).toEqual([]);
+  });
+
+  it('keeps the tone and volume for the page when its browser will not store them (Fase 29Z)', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError');
+    });
+    const { result } = renderHook(() => chimeModule.useChimeSettings());
+
+    act(() => chimeModule.saveChimeSettings({ tone: 'bell', volume: 70 }));
+
+    expect(result.current).toEqual({ tone: 'bell', volume: 70 });
+    expect(chimeModule.readChimeSettings()).toEqual({ tone: 'bell', volume: 70 });
   });
 });

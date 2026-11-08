@@ -25,6 +25,7 @@ export default function ChimeSettingsButton() {
         type="button"
         className="btn btn-sm btn-light"
         onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
         aria-label="Tono y volumen de los sonidos"
         title="Tono y volumen de los sonidos"
       >

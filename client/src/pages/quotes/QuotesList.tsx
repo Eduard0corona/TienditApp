@@ -148,12 +148,13 @@ export default function QuotesList() {
         <div className="alert alert-danger" role="alert">{getApiErrorMessage(quotesQuery.error, 'No se pudieron cargar las cotizaciones.')}</div>
       )}
 
-      {chime.needsTouch && (
-        // The browser plays nothing until it is touched after it opens.
-        <p className="text-muted small mb-2" role="status">
-          Toca la pantalla o presiona una tecla para que suenen las respuestas.
-        </p>
-      )}
+      {/* Always there, so a screen reader announces the note when it appears: the browser plays nothing until it is touched
+          after it opens. */}
+      <div role="status">
+        {chime.needsTouch && (
+          <p className="text-muted small mb-2">Toca la pantalla o presiona una tecla para que suenen las respuestas.</p>
+        )}
+      </div>
 
       <div className="card">
         <div className="card-body">
