@@ -28,7 +28,11 @@ vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 const dialogs = vi.hoisted(() => ({ prompt: vi.fn(), confirm: vi.fn() }));
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => dialogs }));
 vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
-vi.mock('../../hooks/useArrivalChime', () => ({ useArrivalChime: () => ({ enabled: false, toggle: vi.fn(), play: realtime.play }) }));
+vi.mock('../../hooks/useArrivalChime', async (importOriginal) => ({
+  // The tone and volume of the device (Fase 29Z) stay as they are; the chime of the orders is this test's.
+  ...(await importOriginal<typeof import('../../hooks/useArrivalChime')>()),
+  useArrivalChime: () => ({ enabled: false, toggle: vi.fn(), play: realtime.play }),
+}));
 vi.mock('../../hooks/useOrderSignalR', () => {
   const subscribe = () => () => undefined;
   const onOrderCreated = (callback: (payload: OrderCreatedPayload) => void) => {
