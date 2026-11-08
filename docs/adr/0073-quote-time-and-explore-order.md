@@ -24,8 +24,7 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
    - La foto queda ordenada por grupo (toma pedidos, agenda en línea o recibe visitas; abierto; cerrado), luego por tiempo de respuesta (el que responde antes primero; el que no tiene suficientes solicitudes, o no toma ninguna, en medio) y luego por nombre.
    - La lista completa, cada categoría y los productos y servicios de una búsqueda siguen ese orden. «Cerca de mí» sigue por distancia.
 3. **Fuera de esta fase:**
-   - Contar como lenta una visita que nunca se cotizó.
-   - Ordenar por el tiempo de cotizar.
+   - Contar como lenta una visita que nunca se cotizó, y ordenar por el tiempo de cotizar: llegaron en la Fase 29W ([ADR 0077](0077-explore-order-with-every-time.md)).
    - Los pedidos en línea de los restaurantes: llegó en la Fase 29T ([ADR 0074](0074-order-confirm-time.md)).
 
 ## Consecuencias
@@ -35,12 +34,12 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
   - El oficio tiene una razón para cotizar pronto.
   - Explorar pone primero a los que responden antes en cualquier lista, no solo en una categoría.
 - **Lo que limita:**
-  - **Solo cuenta lo que se cotizó:** un oficio que visita y nunca manda la cotización no se ve lento; tampoco lo dice, porque no llega a 3 visitas cotizadas.
+  - **Solo cuenta lo que se cotizó:** un oficio que visita y nunca manda la cotización no se ve lento; tampoco lo dice, porque no llega a 3 visitas cotizadas. Desde la Fase 29W, una visita aceptada que lleva una semana sin cotización cuenta entre las más lentas ([ADR 0077](0077-explore-order-with-every-time.md)).
   - **Empieza con lo que hay:** cuenta las cotizaciones ya mandadas de los últimos 90 días, así que aparece desde el despliegue en los oficios con 3 o más.
   - **Se puede inflar** con visitas falsas desde varios teléfonos, como el tiempo de respuesta ([ADR 0064](0064-response-time-in-explore.md)), o mandando una primera versión de relleno antes de la visita y el precio real en una corrección: cuenta la primera que se mandó. Es una señal para el cliente, no una garantía.
   - **La espera usa el fin de la visita como está ahora:** si el equipo la movió, se mide desde su nueva hora.
   - **Sin índice por fecha de envío:** cada foto (cada 30 segundos) lee las cotizaciones de primera versión de las visitas en línea de los negocios listados; con el tiempo conviene un índice filtrado por `SentAt`, que pide migración.
-  - **En la lista completa,** un restaurante (que no toma solicitudes) queda entre los que responden pronto y los que tardan, dentro de su grupo, igual que en una categoría.
+  - **En la lista completa,** un restaurante (que no toma solicitudes) queda entre los que responden pronto y los que tardan, dentro de su grupo, igual que en una categoría. Desde la Fase 29W va por su tiempo de confirmar ([ADR 0077](0077-explore-order-with-every-time.md)).
   - **Contrato:** la tarjeta de Explorar, la solicitud de visita y «Cómo te ven» suman `quoteTime`; los clientes anteriores lo ignoran.
 - **Decisión por omisión** (sin preferencia expresa del dueño):
   - qué cuenta y desde cuándo se mide la espera;

@@ -35,7 +35,7 @@ El dueño del producto pidió avanzar este punto (el 8), entre otros, sin espera
    - Cada tiempo depende de su propia lectura. Si la foto no puede leer las solicitudes, el menú y el dueño siguen diciendo el de los pedidos, y al revés. Antes, una lectura fallida de las solicitudes callaba todo lo que la foto dice fuera de Explorar.
    - La regla de la mitad es la misma para responder, cotizar y confirmar (`TypicalWait`).
 5. **Fuera de esta fase:**
-   - Ordenar Explorar por el tiempo de confirmar. Un restaurante sigue en medio de su grupo, como antes ([ADR 0073](0073-quote-time-and-explore-order.md)).
+   - Ordenar Explorar por el tiempo de confirmar. Un restaurante sigue en medio de su grupo, como antes ([ADR 0073](0073-quote-time-and-explore-order.md)). Llegó en la Fase 29W ([ADR 0077](0077-explore-order-with-every-time.md)).
    - Avisarle al negocio cuando un pedido lleva tiempo sin confirmar.
    - Medir cuánto tarda en preparar o entregar el pedido.
 
