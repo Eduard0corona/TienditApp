@@ -67,4 +67,14 @@ public class OrderConfirmTimeTests
         Assert.Throws<ArgumentException>(() => OrderConfirmTimes.Typical([1, 2, 3]));
         Assert.Throws<ArgumentOutOfRangeException>(() => OrderConfirmTimes.Typical([3, -1, 0, 0]));
     }
+
+    [Fact]
+    public void AnOrderWaiting_ShouldWarnAtFifteenMinutes_AndCountAmongTheSlowestAtHalfAnHour()
+    {
+        var arrived = new DateTimeOffset(2026, 11, 8, 13, 0, 0, TimeSpan.FromHours(-6));
+
+        Assert.Equal(15, OrderConfirmTimes.WarnAfterMinutes);
+        Assert.Equal(30, OrderConfirmTimes.SlowAfterMinutes);
+        Assert.Equal(arrived.AddMinutes(30), OrderConfirmTimes.ConfirmBy(arrived));
+    }
 }

@@ -61,6 +61,11 @@ public class OrderDto
     public bool CanCancel { get; set; }
     public List<OrderStatus> AllowedTransitions { get; set; } = new();
     public DateTimeOffset CreatedAt { get; set; }
+    /// <summary>
+    /// For an order of the online menu still «Por confirmar» (not of a table nor taken by the team), until when its answer
+    /// keeps it out of the slowest that Explorar counts (Fase 29X, ADR 0078); null for any other.
+    /// </summary>
+    public DateTimeOffset? ConfirmBy { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
     public List<OrderItemDto> Items { get; set; } = new();
     public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();
