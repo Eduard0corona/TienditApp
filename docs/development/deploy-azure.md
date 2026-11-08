@@ -1104,14 +1104,14 @@ La Fase 29V trae una migración, [`database/production/20261107190735_AddAppoint
 - **Volver a la versión anterior:** funciona sin tocar la base; deja de ofrecer la marca, y los teléfonos marcados vuelven a poder pedir. Las solicitudes marcadas se quedan canceladas y sin respuesta: tampoco cuentan en Explorar.
 - **Dejar también la base como estaba:** el `rollback.sql` quita las columnas; se pierde qué solicitudes se marcaron como falsas y a cuáles se les quitó la marca, sin cambiar ninguna cita ni su estado.
 
-## El correo del pedido cancelado, cuánto antes recordar y el índice de los pedidos en línea (Fase 30B)
+## El correo del pedido cancelado y cuánto antes recordar (Fase 30B)
 
 La Fase 30B trae una migración, [`database/production/20261108150147_AddOrderCancellationEmailsAndAnswerReminder`](../../database/production/20261108150147_AddOrderCancellationEmailsAndAnswerReminder). Su `apply.sql` va antes del merge ([ADR 0082](../adr/0082-order-cancellation-email-reminder-lead-and-online-orders-index.md)).
 
 - **La migración:**
   - agrega a `TenantUsers` la columna `OrderCancellationEmails` (`bit NULL`, sin valor por omisión): si la persona eligió recibir un correo con cada pedido en línea que su cliente cancela. Nadie lo ha elegido: los dueños lo reciben y los demás no, hasta que elijan;
   - agrega a `TenantSettings` la columna `AnswerReminderMinutes` (`int NOT NULL`, 60 por omisión) con la restricción `CK_TenantSettings_AnswerReminderMinutes` (0, 30, 60, 120 o 180): cuánto antes del límite se recuerda una solicitud. Todos los negocios quedan con la hora de la 29U;
-  - crea el índice filtrado `IX_Orders_OnlineMenu_TenantId_CreatedAt` (los pedidos del menú en línea de clientes, por negocio y fecha, con el teléfono y el estado), que lee la foto de Explorar. Se crea sin `ONLINE = ON`: mientras se crea, la tabla `Orders` espera. Con los pedidos de hoy son segundos; aplícalo fuera de la hora de más pedidos.
+  - no crea ni quita índices: agregar una columna con un valor por omisión constante no reescribe la tabla, así que se aplica en segundos.
 - **Mientras se publica:** la versión de `master` (la 30A) no conoce las columnas y sigue funcionando: recuerda una hora antes y no manda el correo. Los negocios y personas que guarda quedan con la hora y sin elegir.
 - **Los avisos de la versión nueva** (`OrderCancellationEmailEvent`) van por el outbox. Si en los segundos en que corren las dos versiones, o después de volver a la anterior, el worker de la 30A toma uno, no conoce el evento y lo aparta (`Unknown event type` en el log, y `background-queues` Degraded un día). Para mandarlos, ya con esta versión publicada, regresa a pendientes los mensajes apartados; cada correo vuelve a revisar que el pedido siga cancelado por su cliente hace un día o menos:
 
@@ -1125,7 +1125,7 @@ La Fase 30B trae una migración, [`database/production/20261108150147_AddOrderCa
 - **Sin `apply.sql`:** la versión nueva lee las dos columnas con cada persona y cada negocio, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
 - **Sin configuración nueva:** los endpoints `GET` y `PUT /api/v1/orders/cancellation-emails` piden el permiso de Pedidos en un negocio que vende (comida, tienda o servicios), como la pantalla de Pedidos. Los correos usan el proveedor de la plataforma y `AppUrl` para la liga a Pedidos (sin `AppUrl`, salen sin liga).
 - **Volver a la versión anterior:** funciona sin tocar la base; deja de mandar el correo y vuelve a recordar una hora antes. Lo que cada quien eligió se queda guardado.
-- **Dejar también la base como estaba:** el `rollback.sql` quita las dos columnas, su restricción y el índice; se pierde quién eligió los pedidos cancelados y cuánto antes recuerda cada negocio, sin cambiar ninguna persona, negocio ni pedido.
+- **Dejar también la base como estaba:** el `rollback.sql` quita las dos columnas y su restricción; se pierde quién eligió los pedidos cancelados y cuánto antes recuerda cada negocio, sin cambiar ninguna persona, negocio ni pedido.
 
 ## Slot de staging con swap y aprobación
 

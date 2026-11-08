@@ -14,15 +14,12 @@
 --     restricción [CK_TenantSettings_AnswerReminderMinutes] (0, 30, 60, 120 o 180): cuántos
 --     minutos antes del límite se recuerda una solicitud sin responder; 0 es ninguno. Todos los
 --     negocios quedan en 60, la hora de la Fase 29U.
---   - [IX_Orders_OnlineMenu_TenantId_CreatedAt]: índice filtrado nuevo de los pedidos del menú
---     en línea (por negocio y fecha) que lee la foto de Explorar. Se construye en la tabla
---     [Orders] dentro de la transacción y la bloquea mientras tanto; con las ventas de hoy tarda
---     poco. No quita índices.
+--   No crea ni quita índices.
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
 -- vacía): revisa antes el verify.sql de database/production/20261107190735_AddAppointmentMarkedFakeAt.
 --
 -- Compatible con la versión desplegada (master con la Fase 29V y las fases sin migración que
--- siguen): no conoce las columnas ni el índice; los TenantUsers que guarda quedan en NULL y los
+-- siguen): no conoce las columnas; los TenantUsers que guarda quedan en NULL y los
 -- TenantSettings en 60. /health/schema sigue sano. Volver a ella (redespliegue, o swap si el slot
 -- de staging está activo) funciona sin rollback.sql.
 --
@@ -10057,14 +10054,6 @@ IF NOT EXISTS (
 )
 BEGIN
     EXEC(N'ALTER TABLE [TenantSettings] ADD CONSTRAINT [CK_TenantSettings_AnswerReminderMinutes] CHECK ([AnswerReminderMinutes] IN (0, 30, 60, 120, 180))');
-END;
-
-IF NOT EXISTS (
-    SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261108150147_AddOrderCancellationEmailsAndAnswerReminder'
-)
-BEGIN
-    EXEC(N'CREATE INDEX [IX_Orders_OnlineMenu_TenantId_CreatedAt] ON [Orders] ([TenantId], [CreatedAt]) INCLUDE ([CustomerPhone], [Status]) WHERE [Channel] = 2 AND [CreatedByBusiness] = 0 AND [TableNumber] IS NULL AND [OpenTableId] IS NULL AND [CustomerPhone] IS NOT NULL');
 END;
 
 IF NOT EXISTS (

@@ -38,18 +38,3 @@ IF COL_LENGTH(N'dbo.TenantSettings', N'AnswerReminderMinutes') IS NOT NULL
     FROM [TenantSettings]
     GROUP BY [AnswerReminderMinutes]
     ORDER BY [AnswerReminderMinutes]');
-
--- 4. Después: el índice filtrado de los pedidos del menú en línea, con sus columnas y su filtro, y
---    cuántos pedidos cubre (los que la foto de Explorar lee). Antes y después de rollback.sql no
---    devuelve el índice.
-SELECT i.[name] AS [Indice], i.[filter_definition] AS [Filtro],
-    STRING_AGG(CASE WHEN ic.[is_included_column] = 0 THEN COL_NAME(ic.[object_id], ic.[column_id]) END, ', ') AS [Llave],
-    STRING_AGG(CASE WHEN ic.[is_included_column] = 1 THEN COL_NAME(ic.[object_id], ic.[column_id]) END, ', ') AS [Incluye]
-FROM sys.indexes i
-JOIN sys.index_columns ic ON ic.[object_id] = i.[object_id] AND ic.[index_id] = i.[index_id]
-WHERE i.[object_id] = OBJECT_ID(N'dbo.Orders') AND i.[name] = N'IX_Orders_OnlineMenu_TenantId_CreatedAt'
-GROUP BY i.[name], i.[filter_definition];
-
-SELECT COUNT(*) AS [PedidosDelMenuEnLinea]
-FROM [Orders]
-WHERE [Channel] = 2 AND [CreatedByBusiness] = 0 AND [TableNumber] IS NULL AND [OpenTableId] IS NULL AND [CustomerPhone] IS NOT NULL;

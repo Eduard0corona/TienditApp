@@ -5,8 +5,8 @@
 -- 20261108150147_AddOrderCancellationEmailsAndAnswerReminder 20261107190735_AddAppointmentMarkedFakeAt --idempotent`
 -- (EF Core 10.0.12). Debajo del bloque SET, el contenido es el que genera EF, sin cambios.
 --
--- Borra el índice [IX_Orders_OnlineMenu_TenantId_CreatedAt], la restricción y la columna
--- [TenantSettings].[AnswerReminderMinutes] y la columna [TenantUsers].[OrderCancellationEmails]: se
+-- Borra la restricción y la columna [TenantSettings].[AnswerReminderMinutes] y la columna
+-- [TenantUsers].[OrderCancellationEmails]: se
 -- pierde cuánto antes eligió cada negocio su recordatorio (vuelve a ser una hora) y quién eligió
 -- recibir los pedidos cancelados (la consulta 3 de verify.sql los cuenta). No cambia ningún pedido,
 -- cita ni membresía. Córrelo después de regresar el código a master con la Fase 30A, que no conoce
@@ -31,14 +31,6 @@ IF EXISTS (
 )
 BEGIN
     ALTER TABLE [TenantSettings] DROP CONSTRAINT [CK_TenantSettings_AnswerReminderMinutes];
-END;
-
-IF EXISTS (
-    SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261108150147_AddOrderCancellationEmailsAndAnswerReminder'
-)
-BEGIN
-    DROP INDEX [IX_Orders_OnlineMenu_TenantId_CreatedAt] ON [Orders];
 END;
 
 IF EXISTS (

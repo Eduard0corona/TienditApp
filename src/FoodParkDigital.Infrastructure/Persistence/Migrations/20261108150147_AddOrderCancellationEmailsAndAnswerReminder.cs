@@ -27,13 +27,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                 name: "CK_TenantSettings_AnswerReminderMinutes",
                 table: "TenantSettings",
                 sql: "[AnswerReminderMinutes] IN (0, 30, 60, 120, 180)");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Orders_OnlineMenu_TenantId_CreatedAt",
-                table: "Orders",
-                columns: new[] { "TenantId", "CreatedAt" },
-                filter: "[Channel] = 2 AND [CreatedByBusiness] = 0 AND [TableNumber] IS NULL AND [OpenTableId] IS NULL AND [CustomerPhone] IS NOT NULL")
-                .Annotation("SqlServer:Include", new[] { "CustomerPhone", "Status" });
         }
 
         /// <inheritdoc />
@@ -42,10 +35,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
             migrationBuilder.DropCheckConstraint(
                 name: "CK_TenantSettings_AnswerReminderMinutes",
                 table: "TenantSettings");
-
-            migrationBuilder.DropIndex(
-                name: "IX_Orders_OnlineMenu_TenantId_CreatedAt",
-                table: "Orders");
 
             migrationBuilder.DropColumn(
                 name: "OrderCancellationEmails",

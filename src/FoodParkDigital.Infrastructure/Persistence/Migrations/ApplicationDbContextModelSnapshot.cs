@@ -4674,11 +4674,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "OrderType", "Status");
 
-                    b.HasIndex(new[] { "TenantId", "CreatedAt" }, "IX_Orders_OnlineMenu_TenantId_CreatedAt")
-                        .HasFilter("[Channel] = 2 AND [CreatedByBusiness] = 0 AND [TableNumber] IS NULL AND [OpenTableId] IS NULL AND [CustomerPhone] IS NOT NULL");
-
-                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex(new[] { "TenantId", "CreatedAt" }, "IX_Orders_OnlineMenu_TenantId_CreatedAt"), new[] { "CustomerPhone", "Status" });
-
                     b.ToTable("Orders", null, t =>
                         {
                             t.HasCheckConstraint("CK_Orders_CustomerLink", "([CustomerUserId] IS NULL OR [TemporaryCustomerId] IS NULL) AND ([CreatedByBusiness] = 1 OR [CustomerUserId] IS NOT NULL OR [TemporaryCustomerId] IS NOT NULL)");

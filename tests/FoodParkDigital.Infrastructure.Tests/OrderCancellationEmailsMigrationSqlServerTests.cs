@@ -13,16 +13,16 @@ namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
 /// AddOrderCancellationEmailsAndAnswerReminder (Fase 30B, ADR 0082): whether a member gets an email with each online order its
-/// customer cancels, how long before its limit a business is reminded of a request, and the filtered index of the online
-/// orders. The members that exist have not chosen, the businesses that exist keep the hour of the Fase 29U, the version before
-/// it keeps saving both, and rolling back drops only the columns, their check and the index, never a member or a business.
+/// customer cancels, and how long before its limit a business is reminded of a request. The members that exist have not
+/// chosen, the businesses that exist keep the hour of the Fase 29U, the version before it keeps saving both, and rolling back
+/// drops only the columns and their check, never a member or a business. It adds no index: the filtered one of the online
+/// orders was measured and left out.
 /// </summary>
 public class OrderCancellationEmailsMigrationSqlServerTests
 {
     // The migration right before AddOrderCancellationEmailsAndAnswerReminder, where its rollback.sql takes the database.
     private const string BeforeMigration = "20261107190735_AddAppointmentMarkedFakeAt";
     private const string Migration = "20261108150147_AddOrderCancellationEmailsAndAnswerReminder";
-    private const string Index = "IX_Orders_OnlineMenu_TenantId_CreatedAt";
 
     [SqlServerFact]
     public async Task TheMembersAndBusinessesThatExist_ShouldNotHaveChosen_AndKeepTheHour_AndOnlyAChoiceIsKept()
@@ -39,9 +39,6 @@ public class OrderCancellationEmailsMigrationSqlServerTests
         Assert.Equal(60, (await context.TenantSettings.AsNoTracking().SingleAsync()).AnswerReminderMinutes);
         Assert.Equal("bit|1|", await ColumnAsync(context, "TenantUsers", "OrderCancellationEmails"));
         Assert.Equal("int|0|((60))", await ColumnAsync(context, "TenantSettings", "AnswerReminderMinutes"));
-        Assert.Equal(
-            "([Channel]=(2) AND [CreatedByBusiness]=(0) AND [TableNumber] IS NULL AND [OpenTableId] IS NULL AND [CustomerPhone] IS NOT NULL)|TenantId, CreatedAt|CustomerPhone, Status",
-            await IndexAsync(context));
 
         // Chosen and picked from now on: kept.
         (await context.TenantUsers.SingleAsync(m => m.Id == member.Id)).ChooseOrderCancellationEmails(true);
@@ -72,7 +69,7 @@ public class OrderCancellationEmailsMigrationSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task RollingBack_ShouldDropOnlyTheColumnsAndTheIndex_AndForwardAgainNobodyHasChosen()
+    public async Task RollingBack_ShouldDropOnlyTheColumns_AndForwardAgainNobodyHasChosen()
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
@@ -90,7 +87,6 @@ public class OrderCancellationEmailsMigrationSqlServerTests
             Assert.Equal(BeforeMigration, await LatestMigrationAsync(context));
             Assert.Null(await context.Database.SqlQuery<int?>($"SELECT COL_LENGTH(N'dbo.TenantUsers', N'OrderCancellationEmails') AS [Value]").SingleAsync());
             Assert.Null(await context.Database.SqlQuery<int?>($"SELECT COL_LENGTH(N'dbo.TenantSettings', N'AnswerReminderMinutes') AS [Value]").SingleAsync());
-            Assert.Equal(0, await context.Database.SqlQuery<int>($"SELECT COUNT(*) AS [Value] FROM sys.indexes WHERE [name] = {Index}").SingleAsync());
             // The member and the business stay as they were.
             var stored = await context.TenantUsers.AsNoTracking().SingleAsync(m => m.Id == member.Id);
             Assert.Equal((TenantUserRole.Staff, TenantUserStatus.Active, (bool?)true), (stored.Role, stored.Status, stored.RequestEmails));
@@ -143,20 +139,6 @@ public class OrderCancellationEmailsMigrationSqlServerTests
             SELECT CONCAT(TYPE_NAME(c.[user_type_id]), N'|', c.[is_nullable], N'|', OBJECT_DEFINITION(c.[default_object_id])) AS [Value]
             FROM sys.columns c
             WHERE c.[object_id] = OBJECT_ID(N'dbo.' + {table}) AND c.[name] = {column}
-            """).SingleAsync();
-
-    /// <summary>The index's filter, its key and its included columns.</summary>
-    private static Task<string> IndexAsync(ApplicationDbContext context)
-        => context.Database.SqlQuery<string>($"""
-            SELECT CONCAT(i.[filter_definition], N'|',
-                STRING_AGG(CASE WHEN ic.[is_included_column] = 0 THEN COL_NAME(ic.[object_id], ic.[column_id]) END, N', ')
-                    WITHIN GROUP (ORDER BY ic.[index_column_id]), N'|',
-                STRING_AGG(CASE WHEN ic.[is_included_column] = 1 THEN COL_NAME(ic.[object_id], ic.[column_id]) END, N', ')
-                    WITHIN GROUP (ORDER BY ic.[index_column_id])) AS [Value]
-            FROM sys.indexes i
-            JOIN sys.index_columns ic ON ic.[object_id] = i.[object_id] AND ic.[index_id] = i.[index_id]
-            WHERE i.[object_id] = OBJECT_ID(N'dbo.Orders') AND i.[name] = {Index}
-            GROUP BY i.[filter_definition]
             """).SingleAsync();
 
     private static async Task MigrateAsync(SqlServerTestDatabase database, string target)
