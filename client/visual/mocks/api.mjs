@@ -6,7 +6,7 @@
 // - any other host -> aborted, so a run never depends on the network
 import { readFileSync, existsSync, appendFileSync } from 'node:fs';
 import path from 'node:path';
-import { buildData, NOW_ISO } from './data.mjs';
+import { buildData, NOW_ISO, uuid } from './data.mjs';
 import { checkAnswer, known, normalize } from './contract.mjs';
 import { phase2Routes } from './routes-p2.mjs';
 import { phase3Routes } from './routes-p3.mjs';
@@ -345,7 +345,7 @@ function buildRoutes(data, token) {
     ['POST', /^\/orders\/([^/]+)\/payments$/, (m, q, body) => {
       const o = data.orders.find((x) => x.id === m[1]);
       if (!o) return notFound('Orden');
-      const payment = mockPayment(`pay-${o.payments.length + 1}-${o.id}`, body);
+      const payment = mockPayment(uuid(`pay:${o.id}:${o.payments.length + 1}`), body);
       const amount = payment.amount;
       o.payments.push(payment);
       o.tipTotal = Math.round(((o.tipTotal ?? 0) + payment.tip) * 100) / 100;
@@ -594,8 +594,10 @@ export async function installMocks(context, opts = {}) {
       unmocked.push(`${method} ${apiPath}${url.search}`);
       result = { status: 501, json: { message: 'Sin respuesta simulada en client/visual/mocks.' } };
     } else {
-      // The answer has the shape openapi.json gives it, or the scene fails (Fase 30D). A file only needs its route.
-      for (const problem of checkAnswer(method, url.pathname, result.status, result.body === undefined ? result.json : undefined)) {
+      // The answer has the shape openapi.json gives it, or the scene fails (Fase 30D). A file only needs its route. What is
+      // compared is what the page receives: JSON writes NaN as null and leaves out a field that is undefined.
+      const sent = result.body === undefined && result.json !== undefined ? JSON.parse(JSON.stringify(result.json)) : undefined;
+      for (const problem of checkAnswer(method, url.pathname, result.status, sent)) {
         if (process.env.VISUAL_CONTRACT_REPORT) appendFileSync(process.env.VISUAL_CONTRACT_REPORT, `${normalize(problem)}\n`);
         if (!known.has(normalize(problem))) offContract.push(problem);
       }

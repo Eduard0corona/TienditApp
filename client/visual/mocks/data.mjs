@@ -143,7 +143,8 @@ export function buildData() {
       stockItemId: null,
       onHand: extra.stock ?? null,
       reorderPoint: extra.lowStock ?? null,
-      taxObject: extra.isTaxExempt ? 1 : 2,
+      // 02, subject to tax: an IVA-exempt product is too (CfdiTaxObject), declared with TipoFactor "Exento".
+      taxObject: 2,
       optionGroups: [],
       maxQuantityPerOrder: extra.maxQty,
       availableFromTime: extra.from,
@@ -518,11 +519,12 @@ export function buildData() {
   const byUser = new Map();
   salesTx.forEach((t) => { const u = byUser.get(t.createdBy) ?? { userName: t.createdBy, paymentsCount: 0, totalAmount: 0 }; u.paymentsCount += 1; u.totalAmount = r2(u.totalAmount + t.amount); byUser.set(t.createdBy, u); });
   const dailyCut = {
-    date: at(0, 0),
+    date: at(0, 0).slice(0, 10), // a DateOnly: the API sends the day alone
     salesPaymentsTotal: r2(salesTx.reduce((s, t) => s + t.amount, 0)),
     salesPaymentsCount: salesTx.length,
     cashTotal: sumBy(0), cardTotal: sumBy(1), transferTotal: sumBy(2), walletTotal: sumBy(3), otherTotal: sumBy(4),
-    manualIncomeTotal: 500, manualExpenseTotal: 2275,
+    manualIncomeTotal: 500, manualExpenseTotal: 2275, cashManualIncomeTotal: 500, cashManualExpenseTotal: 2275,
+    tipsTotal: 0, cashTipsTotal: 0,
     netCashFlow: r2(salesTx.reduce((s, t) => s + t.amount, 0) + 500 - 2275),
     netCashOnlyFlow: r2(sumBy(0) + 500 - 2275),
     byUser: [...byUser.values()],
@@ -619,7 +621,8 @@ export function buildData() {
   addMovement('INV-20261004-0001', 1, 1, at(8, 30), [[S['INS-002'], L.roma, 24, 23.5, 0], [S['INS-003'], L.roma, 6, 56, 3]], { counterparty: 'Lácteos San Juan', document: 'FAC-A-88213', reference: 'PO-20261003-0002', notes: 'Recepción parcial de lácteos' });
   addMovement('INV-20261003-0002', 6, 11, at(18, 10, -1), [[S['INS-001'], L.roma, 4, 372.5, 12.6]], { notes: 'Transferencia a Sucursal Coyoacán', reference: 'TR-0031' });
   addMovement('INV-20261003-0001', 1, 1, at(10, 15, -1), [[S['INS-004'], L.roma, 120, 4.2, 6]], { counterparty: 'Panificadora La Espiga', document: 'NV-5521', reference: 'PO-20261003-0001' });
-  addMovement('INV-20261002-0001', 3, 7, at(19, 0, -2), [[S['INS-011'], L.bod, 0.5, 42, 6.5]], { notes: 'Conteo físico semanal' });
+  // The half kilo of sugar the weekly count found missing (conteos.mocks.ts): a count posts a shortfall as AdjustmentDecrease.
+  addMovement('INV-20261002-0001', 4, 7, at(19, 0, -2), [[S['INS-011'], L.bod, 0.5, 42, 7]], { notes: 'Conteo físico semanal' });
 
   const kardex = [];
   movements.forEach((m) => m.lines.forEach((line) => {
