@@ -297,6 +297,23 @@ public class HomeVisitBookingFlowTests
     }
 
     [Fact]
+    public async Task Request_ShouldBeRefused_ToAPhoneWhoseRequestTheTradeMarkedFake()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await TradeAsync(fixture);
+        Assert.True((await RequestAsync(fixture, Local(Monday, "09:00"))).IsSuccess);
+        var visit = await fixture.Context.Appointments.SingleAsync();
+        await new AppointmentRequestCommandHandler(fixture.Context, fixture.Clock, Notices(fixture))
+            .Handle(new MarkAppointmentRequestFakeCommand(visit.Id), CancellationToken.None);
+
+        var again = await RequestAsync(fixture, Local(Monday, "11:00"));
+        var another = await RequestAsync(fixture, Local(Monday, "11:00"), phone: "5511112222");
+
+        Assert.Equal(RequestPublicAppointmentCommandHandler.MarkedFakeMessage, again.Error);
+        Assert.True(another.IsSuccess, another.Error);
+    }
+
+    [Fact]
     public async Task Request_ShouldRefuse_AVisitChargedOtherwiseThanThePageSaid()
     {
         await using var fixture = SalesTestFixture.Create();

@@ -391,6 +391,7 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
     public const string TimeTakenMessage = "Esa hora ya no está libre. Elige otra.";
     public const string TooFarMessage = "Esa fecha todavía no se puede agendar.";
     public const string TooManyPendingMessage = "Ya pediste varias citas desde este teléfono. Espera a que el negocio confirme las que tienes, o vuelve a intentarlo más tarde.";
+    public const string MarkedFakeMessage = "Este negocio no está recibiendo solicitudes de este teléfono. Comunícate con él directamente.";
     public const string AlreadySentMessage = "Esa solicitud ya se envió.";
     public const string AlreadyCancelledMessage = "Esa solicitud ya se envió y la cita se canceló.";
     public const string StaffGoneMessage = "Esa persona ya no agenda ese servicio en línea. Elige otra.";
@@ -565,12 +566,20 @@ internal static class PublicAppointmentReceipts
     /// counting the appointments its customer cancelled in the last <see cref="OnlineBookingRules.CancelledCountFor"/>. Each
     /// request and each cancellation tells the business by email: asking and cancelling over and over is capped like asking.
     /// The phone is compared as a number (<see cref="MessagingPhone.ToKey"/>), as the requests keep it when they arrive, and
-    /// one message says it for both, so a stranger who types a phone does not learn whether its customer cancelled.
+    /// one message says it for both, so a stranger who types a phone does not learn whether its customer cancelled. Since the
+    /// Fase 29V (ADR 0076), a phone whose request the business declined as fake may not request again for
+    /// <see cref="ResponseTimes.WindowDays"/> days from then, the days Explorar counts, unless the mark was taken back.
     /// </summary>
     public static async Task<string?> RefusalForPhoneAsync(
         IApplicationDbContext context, string phone, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var key = MessagingPhone.ToKey(phone);
+        var fakeSince = ResponseTimes.Since(now);
+        if (await context.Appointments.AnyAsync(
+                a => a.Channel == AppointmentChannel.Online && a.RequestPhone == key && a.MarkedFakeAt >= fakeSince && a.UnmarkedFakeAt == null,
+                cancellationToken))
+            return RequestPublicAppointmentCommandHandler.MarkedFakeMessage;
+
         var since = now - OnlineBookingRules.CancelledCountFor;
         // A request its customer cancelled is no longer waiting: it counts once.
         var counted = await context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online

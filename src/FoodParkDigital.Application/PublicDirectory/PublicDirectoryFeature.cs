@@ -806,7 +806,8 @@ public sealed class PublicDirectorySnapshot
                 Limit = a.AskedFor < a.ADayLater ? a.AskedFor : a.ADayLater
             })
             // Answered before its limit, or past it once TienditApp kept answers: answered late, still waiting, or cancelled by
-            // its customer after it.
+            // its customer after it. One its business declined as fake keeps no answer (Fase 29V, ADR 0076): it is none of
+            // these, so it does not count, nor takes the place of the last one of its customer.
             .Where(a => a.RespondedAt < a.Limit
                 || (a.Limit <= utcNow && a.Limit >= keptSince
                     && (a.RespondedAt >= a.Limit

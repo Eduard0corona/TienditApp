@@ -30,7 +30,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
 import { photoCount } from '../../utils/problemPhotos';
-import { answerInTimeLabel, FROM_TEAM_LABEL } from '../../utils/responseTime';
+import { answerInTimeLabel, FROM_TEAM_LABEL, MARKED_FAKE_LABEL } from '../../utils/responseTime';
 import {
   businessDateTimeToIso,
   businessDayStart,
@@ -483,6 +483,50 @@ export default function AppointmentsList() {
     }
   };
 
+  // A request of a customer nobody meant to book (Fase 29V): declined without telling anyone, it does not count in Explorar.
+  const markFake = async (item: AppointmentDto) => {
+    const accepted = await confirm({
+      title: 'Marcar la solicitud como falsa',
+      message: `La cita de ${item.customerName} (${item.serviceName}, ${formatSlot(item)}) se cancela y el horario queda libre, `
+        + 'sin avisarle a nadie: el teléfono puede no ser de quien la mandó. No cuenta en tu tiempo de respuesta en Explorar, '
+        + 'y ese teléfono no puede pedirte otra cita ni visita en 90 días. Si te equivocas, puedes quitar la marca.',
+      confirmLabel: 'Es falsa',
+      cancelLabel: 'Volver',
+      danger: true,
+    });
+    if (!accepted) return;
+    setError('');
+    try {
+      await appointmentsApi.markFake(item.id);
+      toast.success('Solicitud marcada como falsa: no cuenta en Explorar.');
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
+      await Promise.all([loadData(), loadRequests()]);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo marcar la solicitud como falsa.'));
+    }
+  };
+
+  // A customer's after all: declined now, and told so; it cannot be marked again.
+  const unmarkFake = async (item: AppointmentDto) => {
+    const accepted = await confirm({
+      title: 'Quitar la marca de falsa',
+      message: `La solicitud de ${item.customerName} (${item.serviceName}, ${formatSlot(item)}) sigue cancelada, ahora como rechazada: `
+        + 'el cliente recibe el aviso, cuenta en tu tiempo de respuesta desde hoy y ese teléfono puede volver a pedirte. '
+        + 'No podrás marcarla como falsa otra vez.',
+      confirmLabel: 'No era falsa',
+      cancelLabel: 'Volver',
+    });
+    if (!accepted) return;
+    setError('');
+    try {
+      await appointmentsApi.unmarkFake(item.id);
+      toast.success('Ya no está marcada como falsa: el cliente recibe el aviso, y ese teléfono puede volver a pedirte.');
+      await loadData();
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo quitar la marca.'));
+    }
+  };
+
   const showRequests = () => {
     setView('upcoming');
     setStatusFilter(REQUESTED_FILTER);
@@ -712,6 +756,7 @@ export default function AppointmentsList() {
                 <td className="text-center">
                   <span className={`badge ${statusBadge(item.status)}`}>{statusLabel(item.status)}</span>
                   {item.cancelledByCustomer && <div className="text-muted small">La canceló el cliente</div>}
+                  {item.markedFake && <div className="text-muted small">{MARKED_FAKE_LABEL}</div>}
                   {/* By when it is answered in time, as Explorar counts it (Fase 29L); one of the team does not count (29M). */}
                   {item.status === AppointmentStatusConst.Requested && item.answerBy && (
                     <AnswerInTime answerBy={item.answerBy} />
@@ -740,6 +785,17 @@ export default function AppointmentsList() {
                       >
                         Rechazar
                       </button>
+                      {/* One of its own team does not count anyway (Fase 29M): only a customer's is marked as fake. */}
+                      {!item.fromTeam && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-light"
+                          onClick={() => void markFake(item)}
+                          aria-label={`Es falsa la solicitud de ${item.customerName}`}
+                        >
+                          Es falsa
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn btn-sm btn-light"
@@ -750,6 +806,15 @@ export default function AppointmentsList() {
                         Editar
                       </button>
                     </div>
+                  ) : item.markedFake ? (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-light"
+                      onClick={() => void unmarkFake(item)}
+                      aria-label={`No era falsa la solicitud de ${item.customerName}`}
+                    >
+                      No era falsa
+                    </button>
                   ) : isClosed(item.status) ? (
                     withQuote(item, canSell && canBeCharged(item) ? (
                       <button

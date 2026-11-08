@@ -17,6 +17,7 @@ using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Security;
 using FoodParkDigital.WebApi.Services;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Identity;
@@ -106,6 +107,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             host.UseSetting("SmsSettings:AccountSid", "");
             host.ConfigureTestServices(services =>
             {
+                services.AddSingleton<IStartupFilter, ClientAddressStartupFilter>();
                 services.AddSingleton<IEmailService>(_emails);
                 services.AddSingleton<IOnlinePaymentGateway>(OnlinePayments);
                 services.AddSingleton<IInvoicingGateway>(Invoicing);
@@ -151,7 +153,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     /// </summary>
     public async Task<SignedUp> SignUpAsync(string name, int businessType = ServicesBusiness)
     {
-        var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var client = NewClient();
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var email = $"dueno-{name}-{suffix}@demo.com";
         var response = await client.PostAsJsonAsync("/api/v1/auth/register/business", new
@@ -192,7 +194,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     /// </summary>
     public async Task<(Guid UserId, HttpClient Client, string Email)> SignUpCustomerAsync(string name)
     {
-        var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var client = NewClient();
         var email = $"cliente-{name}-{Guid.NewGuid().ToString("N")[..8]}@demo.com";
         Assert.True((await client.PostAsJsonAsync("/api/v1/auth/register/customer", new
         {
@@ -230,7 +232,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             Assert.True(updated.Succeeded, string.Join("; ", updated.Errors.Select(e => e.Description)));
         }
 
-        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var client = NewClient();
         var signedIn = await ReadAsync(await client.PostAsJsonAsync("/api/v1/auth/login", new { email = account.Email, password = Password }));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", signedIn.GetProperty("accessToken").GetString());
         return client;
@@ -246,7 +248,37 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     public ICfdiPdfLogos CfdiPdfLogos => _factory!.Services.GetRequiredService<ICfdiPdfLogos>();
 
     /// <summary>A client without a session: a customer on the public menu.</summary>
-    public HttpClient AnonymousClient() => _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+    public HttpClient AnonymousClient() => NewClient();
+
+    private const string ClientAddressHeader = "X-Test-Client-Address";
+    private int _clients;
+
+    /// <summary>
+    /// A client on a connection of its own, as each person is: the limits by IP (signing up, asking for appointments or
+    /// orders) count each client apart, so the tests of the collection do not use up one shared limit.
+    /// </summary>
+    private HttpClient NewClient()
+    {
+        var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var n = Interlocked.Increment(ref _clients);
+        client.DefaultRequestHeaders.Add(ClientAddressHeader, $"10.{n / 65536 % 256}.{n / 256 % 256}.{n % 256}");
+        return client;
+    }
+
+    /// <summary>Gives each request the address of its client (<see cref="NewClient"/>), before the API reads it.</summary>
+    private sealed class ClientAddressStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use((context, nextMiddleware) =>
+            {
+                if (context.Request.Headers.TryGetValue(ClientAddressHeader, out var value) && IPAddress.TryParse(value, out var address))
+                    context.Connection.RemoteIpAddress = address;
+                return nextMiddleware();
+            });
+            next(app);
+        };
+    }
 
     /// <summary>Signs the session out, like the app does: with its refresh cookie.</summary>
     public async Task<HttpResponseMessage> SignOutAsync(SignedUp account)
@@ -487,7 +519,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     /// <summary>Signs up a business with <paramref name="email"/>, anonymously, and answers what the API answered.</summary>
     public async Task<(HttpStatusCode Status, string Body)> RegisterBusinessRequestAsync(string email)
     {
-        using var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        using var client = NewClient();
         var response = await client.PostAsJsonAsync("/api/v1/auth/register/business", new
         {
             email,

@@ -42,7 +42,7 @@ Tomé las decisiones de la Fase 29M con la autorización permanente del dueño d
    - con un tramo: «Lo calculamos con tus solicitudes en línea de los últimos 90 días, la última de cada cliente y sin las de tu equipo. …»;
    - sin suficientes: «Todavía no contamos solicitudes en línea de 3 clientes para saber en cuánto sueles responder: …».
 5. **Fuera de esta fase:**
-   - **Que el negocio marque una solicitud como falsa.** Se usaría para borrar las que dejó pasar.
+   - **Que el negocio marque una solicitud como falsa.** Se usaría para borrar las que dejó pasar. Llegó en la Fase 29V ([ADR 0076](0076-mark-a-request-as-fake.md)): no cuenta en Explorar, no se le avisa a nadie y ese teléfono no puede volver a pedirle en 90 días.
    - **Pedir que el cliente confirme su teléfono** antes de pedir: es otro paso para todos los clientes.
    - **Clasificar las solicitudes de antes de la fase.** No se sabe quién las mandó.
    - Lo demás de la [ADR 0066](0066-answer-requests-in-time.md), «Fuera de esta fase».

@@ -23,6 +23,23 @@ public record AcceptAppointmentRequestCommand(Guid AppointmentId) : IRequest<Res
 [RequiresCapability(TenantCapability.Appointments)]
 public record DeclineAppointmentRequestCommand(Guid AppointmentId) : IRequest<Result<AppointmentDto>>;
 
+/// <summary>
+/// The business declines a request online of a customer as fake (Fase 29V, ADR 0076): it is cancelled and its time is free,
+/// without telling anyone (its phone may not be of whoever sent it). It does not count in Explorar, and its phone may not
+/// request again in the business for 90 days.
+/// </summary>
+[RequiresPermission(TenantPermission.ManageAppointments)]
+[RequiresCapability(TenantCapability.Appointments)]
+public record MarkAppointmentRequestFakeCommand(Guid AppointmentId) : IRequest<Result<AppointmentDto>>;
+
+/// <summary>
+/// The business takes back the mark of a request it declined as fake (Fase 29V): it was a customer's after all. It stays
+/// declined, now, and counts again; its customer hears it was declined, as when declined, and its phone may request again.
+/// </summary>
+[RequiresPermission(TenantPermission.ManageAppointments)]
+[RequiresCapability(TenantCapability.Appointments)]
+public record UnmarkAppointmentRequestFakeCommand(Guid AppointmentId) : IRequest<Result<AppointmentDto>>;
+
 public class AcceptAppointmentRequestCommandValidator : AbstractValidator<AcceptAppointmentRequestCommand>
 {
     public AcceptAppointmentRequestCommandValidator()
@@ -39,9 +56,27 @@ public class DeclineAppointmentRequestCommandValidator : AbstractValidator<Decli
     }
 }
 
+public class MarkAppointmentRequestFakeCommandValidator : AbstractValidator<MarkAppointmentRequestFakeCommand>
+{
+    public MarkAppointmentRequestFakeCommandValidator()
+    {
+        RuleFor(x => x.AppointmentId).NotEmpty();
+    }
+}
+
+public class UnmarkAppointmentRequestFakeCommandValidator : AbstractValidator<UnmarkAppointmentRequestFakeCommand>
+{
+    public UnmarkAppointmentRequestFakeCommandValidator()
+    {
+        RuleFor(x => x.AppointmentId).NotEmpty();
+    }
+}
+
 public class AppointmentRequestCommandHandler :
     IRequestHandler<AcceptAppointmentRequestCommand, Result<AppointmentDto>>,
-    IRequestHandler<DeclineAppointmentRequestCommand, Result<AppointmentDto>>
+    IRequestHandler<DeclineAppointmentRequestCommand, Result<AppointmentDto>>,
+    IRequestHandler<MarkAppointmentRequestFakeCommand, Result<AppointmentDto>>,
+    IRequestHandler<UnmarkAppointmentRequestFakeCommand, Result<AppointmentDto>>
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _clock;
@@ -74,6 +109,22 @@ public class AppointmentRequestCommandHandler :
     {
         var appointment = await FindAsync(request.AppointmentId, cancellationToken);
         appointment.Decline(_clock.UtcNow);
+        return await SaveAsync(appointment, await _notices.QueueDeclinedAsync(appointment, cancellationToken), cancellationToken);
+    }
+
+    public async Task<Result<AppointmentDto>> Handle(MarkAppointmentRequestFakeCommand request, CancellationToken cancellationToken)
+    {
+        var appointment = await FindAsync(request.AppointmentId, cancellationToken);
+        appointment.MarkFake(_clock.UtcNow);
+        // Nobody is told: its phone may not be of whoever sent it.
+        return await SaveAsync(appointment, noticeQueued: false, cancellationToken);
+    }
+
+    public async Task<Result<AppointmentDto>> Handle(UnmarkAppointmentRequestFakeCommand request, CancellationToken cancellationToken)
+    {
+        var appointment = await FindAsync(request.AppointmentId, cancellationToken);
+        appointment.UnmarkFake(_clock.UtcNow);
+        // A customer's after all: told it was declined, as if declined now.
         return await SaveAsync(appointment, await _notices.QueueDeclinedAsync(appointment, cancellationToken), cancellationToken);
     }
 

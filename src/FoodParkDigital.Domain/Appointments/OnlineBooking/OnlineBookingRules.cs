@@ -49,6 +49,8 @@ public static class OnlineBookingRules
     public const string CustomerCancelClosedMessage = "Esta cita ya está cerrada.";
     public const string CustomerCancelStartedMessage = "Tu cita ya empezó o ya pasó: para cambiarla, escríbele al negocio.";
     public const string CustomerCancelNotOnlineMessage = "Esta cita la agendó el negocio: para cancelarla, escríbele.";
+    public const string FakeOnlyFromCustomersMessage = "Solo una solicitud en línea de un cliente se marca como falsa.";
+    public const string NotMarkedFakeMessage = "Esta solicitud no está marcada como falsa.";
 
     /// <summary>
     /// How long a service takes, from the duration in its catalog («Duración (min)»): an hour when it has none or one out

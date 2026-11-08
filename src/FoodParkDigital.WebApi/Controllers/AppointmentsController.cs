@@ -173,6 +173,32 @@ public class AppointmentsController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Declines a request online of a customer as fake (Fase 29V, ADR 0076): its time is free, nobody is told, it does not
+    /// count in Explorar, and its phone may not request again in the business for 90 days.
+    /// </summary>
+    [HttpPost("{id:guid}/mark-fake")]
+    public async Task<ActionResult<AppointmentDto>> MarkFake(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new MarkAppointmentRequestFakeCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Takes back the mark of a request declined as fake (Fase 29V): it stays declined, now, its customer hears it, it counts
+    /// again and its phone may request again. It cannot be marked again.
+    /// </summary>
+    [HttpPost("{id:guid}/unmark-fake")]
+    public async Task<ActionResult<AppointmentDto>> UnmarkFake(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UnmarkAppointmentRequestFakeCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<AppointmentDto>> GetById(Guid id, CancellationToken cancellationToken)
     {

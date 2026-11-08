@@ -77,3 +77,6 @@ export function answerInTimeLabel(answerBy: string, now: Date = new Date()): str
 
 /** What the agenda says of a request online from the business's own team (Fase 29M, ADR 0067). */
 export const FROM_TEAM_LABEL = 'De tu equipo: no cuenta en Explorar';
+
+/** What the agenda says of a request its business declined as fake (Fase 29V, ADR 0076). */
+export const MARKED_FAKE_LABEL = 'Marcada como falsa: no cuenta en Explorar';

@@ -96,7 +96,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>
     /// When the business accepted or declined it as a request online (Fase 29J, ADR 0064): how long its customer waited for
     /// an answer, which Explorar sums up. Null for one the team booked, one still waiting or cancelled by its customer first,
-    /// and every request answered before Fase 29J. Set once: a request is answered once.
+    /// one declined as fake (Fase 29V, ADR 0076: nobody waited for it, so it does not count), and every request answered
+    /// before Fase 29J. Set once: a request is answered once.
     /// </summary>
     public DateTimeOffset? RespondedAt { get; private set; }
     /// <summary>
@@ -110,6 +111,17 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// still waited. Null for every other appointment, and for requests from before Fase 29U.
     /// </summary>
     public DateTimeOffset? AnswerReminderSentAt { get; private set; }
+    /// <summary>
+    /// When its business declined it as fake (Fase 29V, ADR 0076): a request online of a customer that nobody meant to book.
+    /// While marked (<see cref="IsMarkedFake"/>) it does not count in how soon the business answers (<see cref="ResponseTimes"/>),
+    /// and its phone may not request again in that business for <see cref="ResponseTimes.WindowDays"/> days. Null for every
+    /// other appointment. Kept once the mark is taken back (<see cref="UnmarkedFakeAt"/>).
+    /// </summary>
+    public DateTimeOffset? MarkedFakeAt { get; private set; }
+    /// <summary>When its business took back the mark of fake (Fase 29V, ADR 0076); null while marked, or never marked.</summary>
+    public DateTimeOffset? UnmarkedFakeAt { get; private set; }
+    /// <summary>Declined as fake, and the mark was not taken back (Fase 29V).</summary>
+    public bool IsMarkedFake => MarkedFakeAt is not null && UnmarkedFakeAt is null;
     /// <summary>
     /// Where the customer gets the quote of a visit they requested online (Fase 29B, ADR 0053 point 11), when they gave it:
     /// one plain address (<see cref="InvoiceEmailAddress"/>). Null otherwise. Theirs: it never goes in the activity or a log.
@@ -401,6 +413,35 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         if (Status != AppointmentStatus.Requested)
             throw new DomainException(OnlineBookingRules.NotRequestedMessage);
         Status = AppointmentStatus.Cancelled;
+        RespondedAt = now;
+    }
+
+    /// <summary>
+    /// The business declines a request online of a customer as fake (Fase 29V, ADR 0076): it is cancelled and its time is
+    /// free, as when declined, and <see cref="MarkedFakeAt"/> keeps when. It keeps no <see cref="RespondedAt"/>: nobody
+    /// waited for an answer, so it does not count in how soon the business answers. Also past its time or its limit. One of
+    /// its own team does not count anyway.
+    /// </summary>
+    public void MarkFake(DateTimeOffset now)
+    {
+        if (Channel != AppointmentChannel.Online || FromTeam)
+            throw new DomainException(OnlineBookingRules.FakeOnlyFromCustomersMessage);
+        if (Status != AppointmentStatus.Requested)
+            throw new DomainException(OnlineBookingRules.NotRequestedMessage);
+        Status = AppointmentStatus.Cancelled;
+        MarkedFakeAt = now;
+    }
+
+    /// <summary>
+    /// The business takes back the mark of a request it declined as fake (Fase 29V, ADR 0076): it was a customer's after all.
+    /// It stays declined, now: it counts again as answered when the mark is taken back, never as a quick answer its customer
+    /// did not get, and its phone may request again. When it was marked stays kept. Once taken back it is not marked again.
+    /// </summary>
+    public void UnmarkFake(DateTimeOffset now)
+    {
+        if (!IsMarkedFake)
+            throw new DomainException(OnlineBookingRules.NotMarkedFakeMessage);
+        UnmarkedFakeAt = now;
         RespondedAt = now;
     }
 
