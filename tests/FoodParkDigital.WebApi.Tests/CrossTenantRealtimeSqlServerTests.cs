@@ -210,15 +210,20 @@ public sealed class CrossTenantRealtimeSqlServerTests
         AssertRefused(await A.Client.PutAsJsonAsync($"/api/v1/employees/{receptionistMember}", Edit(receptionistMember, requestEmails: true)));
         Assert.False((await TwoBusinessesApi.ReadAsync(await receptionist.GetAsync(RequestEmails))).GetProperty("enabled").GetBoolean());
 
-        // The owner turns them on for the receptionist: she sees it in her profile, and the next request reaches her.
+        // The owner turns them on for the receptionist: she sees it in her profile, she is told who did it (Fase 30A, ADR 0081),
+        // and the next request reaches her.
         var chosen = await TwoBusinessesApi.ReadAsync(
             await owner.Client.PutAsJsonAsync($"/api/v1/employees/{receptionistMember}", Edit(receptionistMember, requestEmails: true)));
         Assert.True(chosen.GetProperty("noticeEmails").GetProperty("requests").GetBoolean());
         Assert.True((await TwoBusinessesApi.ReadAsync(await receptionist.GetAsync(RequestEmails))).GetProperty("enabled").GetBoolean());
+        await _api.DispatchOutboxAsync();
+        var told = Assert.Single(_api.PlainEmailsTo(receptionistEmail));
+        Assert.Equal("Dueño AVISOS-POR-EQUIPO cambió tus avisos por correo en Negocio AVISOS-POR-EQUIPO", told.Subject);
         using var stranger = _api.AnonymousClient();
         await RequestAsync(stranger, slug, service, "5512340031");
         await _api.DispatchOutboxAsync();
-        Assert.Single(_api.PlainEmailsTo(receptionistEmail));
+        Assert.Equal(2, _api.PlainEmailsTo(receptionistEmail).Count);
+        Assert.StartsWith("Nueva solicitud de cita", _api.PlainEmailsTo(receptionistEmail)[^1].Subject);
 
         // The owner's own are chosen in their profile, not from the team.
         var ownersOwn = await owner.Client.PutAsJsonAsync($"/api/v1/employees/{ownerMember}", Edit(ownerMember, requestEmails: false));
