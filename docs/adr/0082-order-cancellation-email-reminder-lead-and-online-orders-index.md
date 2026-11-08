@@ -43,7 +43,7 @@ El dueño del producto pidió avanzar estos puntos (el 9, el 10 y el 13), entre 
    - el correo de un pedido que el cliente cancela por teléfono o por WhatsApp (lo cancela el negocio);
    - una anticipación distinta por persona o por servicio;
    - recordar también los pedidos en línea sin confirmar por correo (se avisan en pantalla desde la 29X);
-   - reescribir la lectura del tiempo de confirmar para que un índice filtrado la ayude.
+   - reescribir la lectura del tiempo de confirmar para que un índice filtrado la ayude. *Llegó en la Fase 30E* (ver el punto 3).
 
 ## Consecuencias
 
@@ -55,7 +55,7 @@ El dueño del producto pidió avanzar estos puntos (el 9, el 10 y el 13), entre 
   - **Un correo más por pedido cancelado**, como con las citas: quien pide y cancela una y otra vez manda un correo por vuelta. Lo acota el límite por IP de pedir y de cancelar.
   - **El correo llega aunque Pedidos ya lo avisó en pantalla:** quien no lo quiere lo apaga en Mi perfil.
   - **Un recordatorio de dos o tres horas no llega** a las solicitudes cuyo límite cae antes de cuatro o seis horas desde que llegaron: basta el correo de cuando llegaron.
-  - **La foto de Explorar sigue leyendo los pedidos en línea por el índice de todos los pedidos de cada negocio**, con las ventas de mostrador: unos 0.4 s con 25,000 pedidos y 1.8 s con 100,000 en la lectura del tiempo de confirmar.
+  - **La foto de Explorar sigue leyendo los pedidos en línea por el índice de todos los pedidos de cada negocio**, con las ventas de mostrador: unos 0.4 s con 25,000 pedidos y 1.8 s con 100,000 en la lectura del tiempo de confirmar. *Desde la Fase 30E esa lectura une el historial una vez: unos 85 a 90 ms y 200 a 450 ms.*
 - **Decisión por omisión** (sin preferencia expresa del dueño):
   - que el correo llegue a los dueños mientras no eligen, como los otros avisos;
   - el día después del cual ya no se manda;

@@ -109,6 +109,46 @@ public class OrderConfirmTimeInExploreTests
     }
 
     [Fact]
+    public async Task TwoOrdersOfACustomerAtOnce_ShouldCountOnce_AsTheSlowerOfThem()
+    {
+        await using var fixture = Fixture();
+        var tacos = await KitchenAsync(fixture, "tacos", "Tacos El Güero");
+        // Two orders of one phone that arrived at the same moment, confirmed after 1 minute and after 40: since the Fase 30E
+        // the customer counts once, as the slower (before, both counted), as in the other times of Explorar.
+        var phone = NewCustomerPhone();
+        var atOnce = Now.AddDays(-2);
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(1), phone: phone, arrivedAt: atOnce);
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(40), phone: phone, arrivedAt: atOnce);
+        // Two more customers: one confirmed after 1 minute, one after 40.
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(1));
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(40));
+
+        // One of three within five minutes (counting both, two of four would be half).
+        Assert.Equal(OrderConfirmTime.Slower, Entry(await SnapshotAsync(fixture), tacos).OrderConfirmTime);
+    }
+
+    [Fact]
+    public async Task AnOrderAcceptedAsItArrived_ShouldCount_AtTheEdgeOfThe90Days()
+    {
+        await using var fixture = Fixture();
+        var tacos = await KitchenAsync(fixture, "tacos", "Tacos El Güero");
+        // Accepted automatically as it arrived, a moment after the 90 days began: its row of history is stamped a few
+        // milliseconds before the order is saved, so before the 90 days began. It is still the quick one it was.
+        var since = OrderConfirmTimes.Since(Now);
+        await OrderAsync(fixture, tacos, automatically: true, arrivedAt: since.AddMilliseconds(40));
+        var answer = await fixture.Context.OrderStatusHistories.IgnoreQueryFilters()
+            .SingleAsync(h => h.TenantId == tacos.Id && h.PreviousStatus == OrderStatus.Pending && h.NewStatus != OrderStatus.Pending);
+        fixture.Context.Entry(answer).Property(h => h.ChangedAt).CurrentValue = since.AddMilliseconds(-40);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(1));
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(40));
+
+        // Two of three within five minutes.
+        Assert.Equal(OrderConfirmTime.WithinFiveMinutes, Entry(await SnapshotAsync(fixture), tacos).OrderConfirmTime);
+    }
+
+    [Fact]
     public async Task EachBusiness_ShouldCountItsOwnCustomers_ThoughTheyOrderAtAnotherOneLater()
     {
         await using var fixture = Fixture();

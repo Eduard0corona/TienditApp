@@ -997,7 +997,8 @@ public sealed class PublicDirectorySnapshot
     /// database, never read.
     /// <para>
     /// Since the Fase 30E it reads as <see cref="ReadyTimesAsync"/> does: each order joined once with its rows of history that
-    /// took it out of «Por confirmar», and one row per customer that says, for each tramo, when the last order in it arrived.
+    /// took it out of «Por confirmar», and one row per customer that says, for each tramo, when the last order in it arrived
+    /// (of two that arrived at once, the slower counts, as for the quotes; before, both counted).
     /// Before, two subqueries looked up the history of each order, and the orders were read twice to find the last of each
     /// customer: with a kitchen of 100,000 orders in 90 days it took 0.8 to 1.8 s (now 0.2 to 0.45 s), and with a filtered
     /// index of the online orders SQL Server could pick plans of up to 28 s (now 0.17 to 0.2 s with it).
@@ -1009,12 +1010,14 @@ public sealed class PublicDirectorySnapshot
         var since = OrderConfirmTimes.Since(utcNow);
         int five = OrderConfirmTimes.LimitMinutes[0], fifteen = OrderConfirmTimes.LimitMinutes[1];
         int halfAnHour = OrderConfirmTimes.LimitMinutes[2];
-        // The rows that took an order out of «Por confirmar» (its first row, as it was created, stays in it). None is older than
-        // the orders read.
+        // The rows that took an order out of «Por confirmar» (its first row, as it was created, stays in it). An order accepted
+        // automatically as it arrived has its row a few milliseconds before its CreatedAt (stamped when it is saved): half an
+        // hour before the orders read leaves out only rows no order read can have.
         var leftPending = context.OrderStatusHistories
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(h => h.PreviousStatus == OrderStatus.Pending && h.NewStatus != OrderStatus.Pending && h.ChangedAt >= since);
+            .Where(h => h.PreviousStatus == OrderStatus.Pending && h.NewStatus != OrderStatus.Pending
+                && h.ChangedAt >= since.AddMinutes(-halfAnHour));
         // An order its customer placed on the online menu, not with the QR of a table: whoever serves the table handles it.
         // Every one has its customer's phone; saying so keeps the grouping by phone below one column. Joined with those rows
         // of its own history: when the business first answered it (its customer cancelling it is no answer), and when its
