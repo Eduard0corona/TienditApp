@@ -47,4 +47,17 @@ public static class OrderConfirmTimes
     /// <summary>What Explorar says of it: its <see cref="Typical"/> within half an hour, never <see cref="OrderConfirmTime.Slower"/>.</summary>
     public static OrderConfirmTime? Shown(OrderConfirmTime? typical)
         => typical is OrderConfirmTime.Slower ? null : typical;
+
+    /// <summary>
+    /// Its place in the order of Explorar (Fase 29W, ADR 0077), on the scale of <c>ResponseTimes.Order</c>: its first two
+    /// tramos with the first two of answering requests, within half an hour with the last of them (within a day), and half an
+    /// hour or more with the slowest. In the middle go those that say nothing yet.
+    /// </summary>
+    public static int Order(OrderConfirmTime typical) => typical switch
+    {
+        OrderConfirmTime.WithinFiveMinutes => 0,
+        OrderConfirmTime.WithinFifteenMinutes => 1,
+        OrderConfirmTime.WithinHalfAnHour => 3,
+        _ => 4
+    };
 }

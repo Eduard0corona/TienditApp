@@ -237,7 +237,7 @@ public class OrderConfirmTimeInExploreTests
     /// A kitchen listed in Explorar that takes online orders every day, accepting each one itself, with its drawer open; or
     /// that only shows its menu.
     /// </summary>
-    private static async Task<Tenant> KitchenAsync(SalesTestFixture fixture, string slug, string name, bool ordersOn = true)
+    internal static async Task<Tenant> KitchenAsync(SalesTestFixture fixture, string slug, string name, bool ordersOn = true)
     {
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: slug);
         tenant.Update(name, $"{slug}@demo.com", null, null);
@@ -259,7 +259,7 @@ public class OrderConfirmTimeInExploreTests
     /// still waiting unless the business answered it after <paramref name="answeredAfter"/>, accepted it automatically, or its
     /// customer cancelled it after <paramref name="cancelledByCustomerAfter"/>.
     /// </summary>
-    private static async Task OrderAsync(
+    internal static async Task OrderAsync(
         SalesTestFixture fixture, Tenant tenant, TimeSpan? answeredAfter = null, bool declined = false, bool automatically = false,
         TimeSpan? cancelledByCustomerAfter = null, int arrivedDaysAgo = 3, DateTimeOffset? arrivedAt = null, string? phone = null,
         string? table = null, OrderChannel channel = OrderChannel.Online, bool byTheTeam = false)

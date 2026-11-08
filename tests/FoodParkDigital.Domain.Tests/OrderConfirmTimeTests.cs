@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Orders;
 
 namespace FoodParkDigital.Domain.Tests;
@@ -39,6 +40,25 @@ public class OrderConfirmTimeTests
 
         Assert.Equal([5, 15, 30], OrderConfirmTimes.LimitMinutes);
         Assert.Equal(now.AddDays(-90), OrderConfirmTimes.Since(now));
+    }
+
+    [Fact]
+    public void TheOrderOfExplorar_ShouldPutEachTramoOnTheScaleOfAnswering()
+    {
+        // Within five and fifteen minutes, as within an hour and three hours; within half an hour, as within a day; slower, last.
+        Assert.Equal(
+            [0, 1, 3, 4],
+            new[]
+            {
+                OrderConfirmTime.WithinFiveMinutes, OrderConfirmTime.WithinFifteenMinutes, OrderConfirmTime.WithinHalfAnHour,
+                OrderConfirmTime.Slower
+            }.Select(OrderConfirmTimes.Order));
+        Assert.Equal(ResponseTimes.Order(ResponseTime.Slower), OrderConfirmTimes.Order(OrderConfirmTime.Slower));
+        // Those that say nothing yet go in the middle, between the second tramo and the last.
+        Assert.InRange(
+            ResponseTimes.Order(null),
+            OrderConfirmTimes.Order(OrderConfirmTime.WithinFifteenMinutes) + 1,
+            OrderConfirmTimes.Order(OrderConfirmTime.WithinHalfAnHour) - 1);
     }
 
     [Fact]
