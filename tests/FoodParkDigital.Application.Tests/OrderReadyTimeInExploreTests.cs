@@ -75,10 +75,20 @@ public class OrderReadyTimeInExploreTests
             await ReadyOrderAsync(fixture, pizza, readyAfter: TimeSpan.FromMinutes(90), arrivedDaysAgo: 91);
         }
 
+        // And the other way: customers whose last ready order was slow, after a quick one each, count as slow; taking the
+        // quicker or the earlier order of each, or every order, would make it quick.
+        var sushi = await KitchenAsync(fixture, "sushi", "Sushi Koi");
+        foreach (var phone in new[] { "5540000001", "5540000002", "5540000003" })
+        {
+            await ReadyOrderAsync(fixture, sushi, readyAfter: TimeSpan.FromMinutes(10), arrivedDaysAgo: 6, phone: phone);
+            await ReadyOrderAsync(fixture, sushi, readyAfter: TimeSpan.FromMinutes(70), arrivedDaysAgo: 2, phone: phone);
+        }
+
         var snapshot = await SnapshotAsync(fixture);
 
         Assert.Equal(ReadyTime.WithinFifteenMinutes, Entry(snapshot, tacos).ReadyTime);
         Assert.Null(Entry(snapshot, pizza).ReadyTime);
+        Assert.Equal(ReadyTime.Slower, Entry(snapshot, sushi).ReadyTime);
     }
 
     [Fact]
