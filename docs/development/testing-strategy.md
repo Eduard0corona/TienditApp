@@ -2483,10 +2483,11 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `AnswerReminderTests` (+3): el recordatorio llega tanto antes del límite como eligió el negocio, con la regla de las dos anticipaciones (tres horas: no antes de seis desde que llegó), y nunca con «No recordarme»; las opciones son 30, 60, 120 y 180 minutos o ninguna; una solicitud se recuerda a las dos horas si el negocio eligió dos, y nunca con ninguna.
     - `OnlineBookingTests` (+1 con 6 casos): `SetAnswerReminder` acepta las opciones y 0, rechaza 45, 240 y -30 con su mensaje, y una hora mientras no se elige.
   - **Application:**
-    - `OrderCancellationEmailTests` (5, nuevo):
+    - `OrderCancellationEmailTests` (7, nuevo):
       - un correo por persona a quien lo eligió y puede confirmar pedidos, y a los dueños mientras no eligen; no a quien no confirma pedidos, a quien no lo eligió, a quien ya no está, sin correo confirmado ni de otra cocina; nada si lo canceló el negocio;
       - dice quién canceló qué pedido y por cuánto, codificado, con el enlace a Pedidos, y nunca el teléfono ni lo que pidió;
       - no sale por un pedido que canceló el negocio, un día y un minuto después (un día exacto sí), a quien lo apagó desde que se encoló ni en un negocio suspendido;
+      - el mensaje de un pedido leído en otro negocio no le llega a nadie, ni a quien lo recibe ahí ni al dueño de la cocina del pedido; si falla el proveedor de correo, el error sube para que el outbox reintente ese correo;
       - cada quien elige el suyo y los dueños lo reciben mientras no eligen; quien no es del equipo no;
       - la regla de quién puede confirmar pedidos (permiso de Pedidos o administrar el equipo, en un negocio que vende y no suspendido) y los permisos de los dos endpoints.
     - `AnswerReminderNoticesTests` (+1): el planificador recuerda con la anticipación de su propio negocio (dos horas), y nada cuando eligió ninguna; otro negocio con ninguna no cambia el suyo.
@@ -2507,7 +2508,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la lectura de los pedidos listos baja de 85 a unos 35 ms con 25,000 pedidos, y de 556 a 178 ms con 100,000;
     - la del tiempo de confirmar sube de 387 ms a unos 2.1 s con 25,000, y de 1.8 s a 28 s con 100,000 (la foto entera llega a los 30 segundos de la petición): con el índice, SQL Server cambia el plan de sus dos subconsultas del historial.
     - Las dos buscan los mismos pedidos, así que un índice no puede servir solo a una. La migración se quedó con las dos columnas; se regeneraron y se probaron otra vez `apply.sql`, `rollback.sql` y `verify.sql`.
-  - **.NET en total:** 4,870 pruebas en verde con SQL Server (Domain 1,436; Application 2,206; WebApi 510; Infrastructure 718). **Cliente en total:** 208 archivos y 1,599 pruebas.
+  - **.NET en total:** 4,872 pruebas en verde con SQL Server (Domain 1,436; Application 2,208; WebApi 510; Infrastructure 718). **Cliente en total:** 208 archivos y 1,599 pruebas.
   - **Primera visita:** 182,241 B (`master` en `0e5abae`: 182,242 B, −1 B): lo nuevo va en Mi perfil, Equipo y Configuración, que se cargan aparte; solo varían los nombres con hash. El presupuesto (182,300 B) no cambia. El CSS global, 63,077 B de 63,200 B.
   - **Revisión independiente**, sin bloqueantes, con estos arreglos:
     - los endpoints nuevos no tenían prueba de su permiso ni de su módulo: una prueba HTTP de punta a punta y otra de la regla y de los atributos;
@@ -2519,6 +2520,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Mi perfil (las 3 de Caja y configuración y la de los avisos) suma «Pedidos cancelados», prendido. En la primera comparación salía gris en la de los avisos y no salía en las otras: el servidor simulado de las escenas no tenía su ruta y la de un pedido por su id le contestaba 404, así que la fila se escondía. Se agregó `GET`/`PUT /orders/cancellation-emails` y la escena de los avisos lo revisa.
     - Las 3 de la tarjeta de citas en línea suman «Recordatorio de solicitudes sin responder»; las 2 de «Quién atiende», debajo, quedan un píxel más abajo sin otro cambio.
     - Las del formulario de Equipo no cambian: sus avisos quedan debajo de lo que capturan, y los prueba `EmployeeFormModal.test.tsx`.
+  - **claude-review** (1 MINOR): el correo no se probaba con el mensaje de un pedido leído en otro negocio ni con una falla del proveedor; ahora sí. Sin ninguna de las comprobaciones de negocio de las dos consultas del correo, la prueba de otro negocio falla.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

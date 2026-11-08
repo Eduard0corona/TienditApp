@@ -106,6 +106,34 @@ public class OrderCancellationEmailTests
     }
 
     [Fact]
+    public async Task AnOrderOfAnotherBusiness_ShouldNeverBeTold_NotEvenToWhoGetsTheirOwn()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (kitchen, tacos) = await KitchenAsync(fixture, "cocina", "Cocina Luna");
+        var owner = await MemberAsync(fixture, kitchen, "dueña", TenantUserRole.Owner);
+        var (other, _) = await KitchenAsync(fixture, "otra", "Cocina Otra");
+        var otherOwner = await MemberAsync(fixture, other, "otra", TenantUserRole.Owner);
+        var order = await CancelledByCustomerAsync(fixture, kitchen, tacos);
+
+        // The message of Cocina Luna's order read in Cocina Otra: neither its owner nor Cocina Luna's hear of it.
+        Assert.Empty(await SendAsync(fixture, other, order, otherOwner));
+        Assert.Empty(await SendAsync(fixture, other, order, owner));
+        // In its own business, it is sent.
+        Assert.Single(await SendAsync(fixture, kitchen, order, owner));
+    }
+
+    [Fact]
+    public async Task AFailureOfTheProvider_ShouldThrow_ForTheOutboxToRetryThatEmailAlone()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (kitchen, tacos) = await KitchenAsync(fixture, "cocina", "Cocina Luna");
+        var owner = await MemberAsync(fixture, kitchen, "dueña", TenantUserRole.Owner);
+        var order = await CancelledByCustomerAsync(fixture, kitchen, tacos);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SendAsync(fixture, kitchen, order, owner, failing: true));
+    }
+
+    [Fact]
     public async Task EachPerson_ShouldChooseTheirOwn_TheOwnersGettingThemUntilTheyChoose()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -221,9 +249,12 @@ public class OrderCancellationEmailTests
         return outbox.Added;
     }
 
-    /// <summary>Sends one member's email, <paramref name="after"/> the customer cancelled it (a minute by default).</summary>
+    /// <summary>
+    /// Sends one member's email, <paramref name="after"/> the customer cancelled it (a minute by default), with an email
+    /// provider that fails when <paramref name="failing"/>.
+    /// </summary>
     private static async Task<List<(string To, string Subject, string Body)>> SendAsync(
-        SalesTestFixture fixture, Tenant tenant, Order order, Guid userId, TimeSpan? after = null)
+        SalesTestFixture fixture, Tenant tenant, Order order, Guid userId, TimeSpan? after = null, bool failing = false)
     {
         var cancelledAt = await fixture.Context.OrderStatusHistories.IgnoreQueryFilters().AsNoTracking()
             .Where(h => h.OrderId == order.Id && h.NewStatus == OrderStatus.Cancelled)
@@ -231,7 +262,7 @@ public class OrderCancellationEmailTests
             .SingleAsync();
         fixture.Clock.UtcNow = cancelledAt + (after ?? TimeSpan.FromMinutes(1));
         fixture.TenantService.SetTenant(tenant.Id);
-        var emails = new Emails();
+        var emails = new Emails(fail: failing);
         await new OrderCancellationEmailHandler(fixture.Context, new MembersAccess(fixture.Context), emails, new Links(AppUrl), fixture.Clock)
             .HandleAsync(new OrderCancellationEmailEvent(order.Id, userId), Context(tenant), CancellationToken.None);
         return emails.Sent;
