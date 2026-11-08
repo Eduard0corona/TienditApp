@@ -7,7 +7,7 @@
 // One module each because the bundler places whole modules: in a single file, the enums that only a screen loaded apart
 // used still went into the first visit with those the first screen needs (Fase 30C). Importing from enums.ts is the
 // same as importing from the enum's module.
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 
 const document = JSON.parse(await readFile(new URL('../openapi/openapi.json', import.meta.url), 'utf8'));
 const schemas = document.components?.schemas ?? {};
@@ -41,11 +41,23 @@ for (const name of Object.keys(schemas).sort()) {
   ].join('\n')]);
 }
 
-// A fresh folder: an enum the API no longer exchanges leaves no module behind.
+// Each name is a file name: two that differ only in case would be one file on Windows and macOS.
+const lowerCase = new Map();
+for (const [name] of enums) {
+  const other = lowerCase.get(name.toLowerCase());
+  if (other) throw new Error(`${other} y ${name} serían el mismo archivo en un sistema que no distingue mayúsculas.`);
+  lowerCase.set(name.toLowerCase(), name);
+}
+
+// The modules first, then whatever is left of an enum the API no longer exchanges: a run cut halfway leaves every module
+// the index names.
 const folder = new URL('../src/api/generated/enums/', import.meta.url);
-await rm(folder, { recursive: true, force: true });
 await mkdir(folder, { recursive: true });
 await Promise.all(enums.map(([name, block]) => writeFile(new URL(`${name}.ts`, folder), `${header}\n\n${block}\n`)));
+const written = new Set(enums.map(([name]) => `${name}.ts`));
+for (const file of await readdir(folder)) {
+  if (!written.has(file)) await rm(new URL(file, folder), { recursive: true, force: true, maxRetries: 3 });
+}
 
 const index = enums.map(([name]) => `export { ${name} } from './enums/${name}';`);
 await writeFile(new URL('../src/api/generated/enums.ts', import.meta.url), `${header}\n\n${index.join('\n')}\n`);
