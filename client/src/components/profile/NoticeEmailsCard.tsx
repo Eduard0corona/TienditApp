@@ -5,7 +5,8 @@ import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
 
 const REQUEST_EMAILS = '/api/v1/appointments/request-emails';
 const QUOTE_REPLY_EMAILS = '/api/v1/quotes/reply-emails';
-type NoticePath = typeof REQUEST_EMAILS | typeof QUOTE_REPLY_EMAILS;
+const ORDER_CANCELLATION_EMAILS = '/api/v1/orders/cancellation-emails';
+type NoticePath = typeof REQUEST_EMAILS | typeof QUOTE_REPLY_EMAILS | typeof ORDER_CANCELLATION_EMAILS;
 
 interface NoticeEmails {
   enabled: boolean;
@@ -19,6 +20,8 @@ interface NoticeEmailsCardProps {
   agenda: boolean;
   /** Whoever works the quotes: each answer a customer gives from a quote's link (Fase 29O). */
   quotes: boolean;
+  /** Whoever confirms the orders: each online order its customer cancels before it was accepted (Fase 30B). */
+  orders?: boolean;
   /** The owner's are theirs alone; anyone else's, whoever runs the team may also choose (Fase 29Q). */
   ownsBusiness?: boolean;
 }
@@ -26,19 +29,18 @@ interface NoticeEmailsCardProps {
 /**
  * Fases 29N and 29O: whether this person gets an email with what the customers of the business they are in do online. Each
  * notice is their choice, in that business only; until someone makes it, the owners get them. Since the Fase 29Q whoever
- * runs the team may also choose them for anyone but the owner, and the last choice holds. Whoever is not on its team (the
- * platform's admin) sees nothing.
+ * runs the team may also choose them for anyone but the owner, and the last choice holds; since the Fase 30B, also the
+ * online orders their customers cancel. Whoever is not on its team (the platform's admin) sees nothing.
  */
-export default function NoticeEmailsCard({ businessName, agenda, quotes, ownsBusiness = false }: NoticeEmailsCardProps) {
+export default function NoticeEmailsCard({ businessName, agenda, quotes, orders = false, ownsBusiness = false }: NoticeEmailsCardProps) {
   const inBusiness = businessName ? ` de ${businessName}` : '';
   const requests = useNoticeEmails(REQUEST_EMAILS, agenda);
   const replies = useNoticeEmails(QUOTE_REPLY_EMAILS, quotes);
+  const cancellations = useNoticeEmails(ORDER_CANCELLATION_EMAILS, orders);
   // A notice the server says is not theirs to choose (403, or 404 off the team) is not shown; any other failure is.
-  const rows = [agenda && !refused(requests), quotes && !refused(replies)];
+  const rows = [agenda && !refused(requests), quotes && !refused(replies), orders && !refused(cancellations)];
   if (!rows.some(Boolean)) return null;
-  const shown = [rows[0] ? requests : undefined, rows[1] ? replies : undefined].filter(
-    (query): query is NoticeQuery => !!query,
-  );
+  const shown = [requests, replies, cancellations].filter((_, index) => rows[index]);
   const loaded = shown.map((query) => query.data).filter((notice): notice is NoticeEmails => !!notice);
   const email = loaded.find((notice) => notice.email)?.email;
 
@@ -70,6 +72,14 @@ export default function NoticeEmailsCard({ businessName, agenda, quotes, ownsBus
                 query={replies}
                 label="Cotizaciones"
                 description={`Cada vez que un cliente acepta o rechaza desde su enlace una cotización${inBusiness}.`}
+              />
+            )}
+            {rows[2] && (
+              <NoticeEmailSwitch
+                path={ORDER_CANCELLATION_EMAILS}
+                query={cancellations}
+                label="Pedidos cancelados"
+                description={`Cada pedido en línea${inBusiness} que su cliente cancela antes de que lo aceptes.`}
               />
             )}
             {loaded.some((notice) => !notice.emailConfirmed) && (

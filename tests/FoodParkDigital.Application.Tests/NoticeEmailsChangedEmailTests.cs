@@ -103,12 +103,14 @@ public class NoticeEmailsChangedEmailTests
         var salon = await SalonAsync(fixture, "Estética Luna");
         var owner = await MemberAsync(fixture, salon, "Mariana", TenantUserRole.Owner);
         var cashier = await MemberAsync(fixture, salon, "Rosa", TenantUserRole.Staff, choose: true, chooseQuotes: true, permissions: [TenantPermission.ManageOrders]);
-        var clerk = await MemberAsync(fixture, salon, "Pepe", TenantUserRole.Staff, choose: true, permissions: [TenantPermission.ManageCatalog]);
+        var clerk = await MemberAsync(fixture, salon, "Pepe", TenantUserRole.Staff, choose: true, permissions: [TenantPermission.ManageCatalog], chooseOrderCancellations: true);
 
         var (_, _, body) = Assert.Single(await SendAsync(fixture, salon, cashier, owner, requestEmails: true, quoteReplyEmails: true));
         Assert.Contains("<li>Ahora te llegan las respuestas de los clientes a las cotizaciones.</li>", body);
         Assert.DoesNotContain("Agenda", body);
         Assert.Empty(await SendAsync(fixture, salon, clerk, owner, requestEmails: true));
+        // The online orders their customers cancel, to whoever may confirm the orders (Fase 30B).
+        Assert.Empty(await SendAsync(fixture, salon, clerk, owner, orderCancellationEmails: true));
     }
 
     [Fact]
@@ -122,6 +124,26 @@ public class NoticeEmailsChangedEmailTests
 
         Assert.Empty(await SendAsync(fixture, salon, receptionist, owner, requestEmails: true));
         Assert.Single(await SendAsync(fixture, salon, receptionist, owner, requestEmails: false));
+    }
+
+    [Fact]
+    public async Task TheOrdersTheirCustomersCancel_ShouldBeSaidToo_WhileTheyStillGetThem()
+    {
+        // Fase 30B (ADR 0082).
+        await using var fixture = SalesTestFixture.Create();
+        var salon = await SalonAsync(fixture, "Estética Luna");
+        var owner = await MemberAsync(fixture, salon, "Mariana", TenantUserRole.Owner);
+        var cashier = await MemberAsync(fixture, salon, "Rosa", TenantUserRole.Staff, chooseOrderCancellations: true);
+        var waiter = await MemberAsync(fixture, salon, "Pepe", TenantUserRole.Staff, chooseOrderCancellations: false);
+
+        var (_, _, on) = Assert.Single(await SendAsync(fixture, salon, cashier, owner, orderCancellationEmails: true));
+        var (_, _, off) = Assert.Single(await SendAsync(fixture, salon, waiter, owner, orderCancellationEmails: false));
+
+        Assert.Contains("<li>Ahora te llegan los pedidos en línea que sus clientes cancelan.</li>", on);
+        Assert.DoesNotContain("cotizaciones", on);
+        Assert.Contains("<li>Ya no te llegan los pedidos en línea que sus clientes cancelan.</li>", off);
+        // Turned off again since: this one no longer says what they get.
+        Assert.Empty(await SendAsync(fixture, salon, waiter, owner, orderCancellationEmails: true));
     }
 
     private static async Task<Tenant> SalonAsync(SalesTestFixture fixture, string name)
@@ -141,7 +163,7 @@ public class NoticeEmailsChangedEmailTests
 
     private static async Task<List<(string To, string Subject, string Body)>> SendAsync(
         SalesTestFixture fixture, Tenant tenant, Guid memberUserId, Guid changedBy, bool? requestEmails = null,
-        bool? quoteReplyEmails = null, Tenant? membershipOf = null)
+        bool? quoteReplyEmails = null, Tenant? membershipOf = null, bool? orderCancellationEmails = null)
     {
         var membership = await fixture.Context.TenantUsers.IgnoreQueryFilters()
             .SingleAsync(m => m.UserId == memberUserId && m.TenantId == (membershipOf ?? tenant).Id);
@@ -149,7 +171,7 @@ public class NoticeEmailsChangedEmailTests
         var emails = new Emails();
         await new NoticeEmailsChangedEmailHandler(fixture.Context, new MembersAccess(fixture.Context), emails, new Links(AppUrl))
             .HandleAsync(
-                new TenantUserNoticeEmailsChangedEvent(membership.Id, changedBy, requestEmails, quoteReplyEmails),
+                new TenantUserNoticeEmailsChangedEvent(membership.Id, changedBy, requestEmails, quoteReplyEmails, orderCancellationEmails),
                 Context(tenant),
                 CancellationToken.None);
         return emails.Sent;

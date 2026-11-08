@@ -26,6 +26,9 @@ public class TenantUserConfiguration : IEntityTypeConfiguration<TenantUser>
         // until they choose (the owners get them), which is also what the version before it saves.
         builder.Property(x => x.QuoteReplyEmails);
         builder.Ignore(x => x.GetsQuoteReplyEmails);
+        // Fase 30B (ADR 0082): null until they choose, when only the owners get them.
+        builder.Property(x => x.OrderCancellationEmails);
+        builder.Ignore(x => x.GetsOrderCancellationEmails);
 
         builder.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
         builder.HasIndex(x => x.TenantId);

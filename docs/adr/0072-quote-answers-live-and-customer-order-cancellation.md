@@ -31,7 +31,7 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
    - Pedidos dice «El cliente canceló el pedido ORD-000123 antes de que lo aceptaran.» y suena hacia abajo, con el mismo sonido que avisa los pedidos en línea.
    - Al cliente no le llega el WhatsApp de «pedido cancelado»: acaba de hacerlo él.
 4. **Fuera de esta fase:**
-   - Avisar por correo una cancelación de un pedido: el negocio que recibe pedidos en línea los atiende con la app abierta.
+   - Avisar por correo una cancelación de un pedido: el negocio que recibe pedidos en línea los atiende con la app abierta. Llegó en la Fase 30B ([ADR 0082](0082-order-cancellation-email-reminder-lead-and-online-orders-index.md)), para quien lo elige.
    - Que el cliente cancele un pedido ya aceptado, pagado o de otro canal, o pida que le devuelvan un pago en línea.
    - Avisar en pantalla un anticipo pagado.
    - Un sonido para las respuestas a cotizaciones: llegó en la Fase 29Z ([ADR 0080](0080-quote-sound-and-device-tone.md)).

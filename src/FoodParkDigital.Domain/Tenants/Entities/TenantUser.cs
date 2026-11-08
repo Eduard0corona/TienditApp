@@ -53,6 +53,18 @@ public class TenantUser : AuditableEntity, ITenantScoped
 
     public void ChooseQuoteReplyEmails(bool enabled) => QuoteReplyEmails = enabled;
 
+    /// <summary>
+    /// Whether this member gets an email each time a customer cancels an online order of the business before it was accepted
+    /// (Fase 30B, ADR 0082), as they chose; null until they choose, when only the owners get them
+    /// (<see cref="GetsOrderCancellationEmails"/>). Theirs to choose and whoever runs the team's, except the owner's.
+    /// </summary>
+    public bool? OrderCancellationEmails { get; private set; }
+
+    /// <summary>What they chose or, until they choose, whether they own the business.</summary>
+    public bool GetsOrderCancellationEmails => OrderCancellationEmails ?? Role == TenantUserRole.Owner;
+
+    public void ChooseOrderCancellationEmails(bool enabled) => OrderCancellationEmails = enabled;
+
     public void SetStatus(TenantUserStatus status) => Status = status;
 
     public void SetRole(TenantUserRole role) => Role = role;

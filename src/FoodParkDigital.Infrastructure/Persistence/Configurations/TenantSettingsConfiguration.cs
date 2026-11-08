@@ -30,6 +30,10 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
                 $"[OnlineBookingCapacity] >= 1 AND [OnlineBookingCapacity] <= {OnlineBookingRules.MaxCapacity}");
             table.HasCheckConstraint(
                 "CK_TenantSettings_HomeVisitChargePolicy", "[HomeVisitChargePolicy] >= 0 AND [HomeVisitChargePolicy] <= 2");
+            // Fase 30B (ADR 0082): the minutes before its limit a request is recalled, or none.
+            table.HasCheckConstraint(
+                "CK_TenantSettings_AnswerReminderMinutes",
+                $"[AnswerReminderMinutes] IN ({ResponseTimes.NoReminder}, {string.Join(", ", ResponseTimes.ReminderMinuteChoices)})");
             table.HasCheckConstraint(
                 "CK_TenantSettings_QuoteValidityDays",
                 $"[QuoteValidityDays] >= {QuoteRules.MinValidityDays} AND [QuoteValidityDays] <= {QuoteRules.MaxValidityDays}");
@@ -72,6 +76,12 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             .IsRequired();
         builder.Property(s => s.OnlineBookingCapacity)
             .HasDefaultValue(OnlineBookingRules.DefaultCapacity)
+            .ValueGeneratedNever()
+            .IsRequired();
+        // Fase 30B (ADR 0082): an hour, as since the Fase 29U, for the rows that exist and those the previous version saves
+        // while this one is published. EF always writes the value.
+        builder.Property(s => s.AnswerReminderMinutes)
+            .HasDefaultValue(ResponseTimes.DefaultReminderMinutes)
             .ValueGeneratedNever()
             .IsRequired();
         // Fase 29A (ADR 0053): visits to quote start off, charged; the database defaults fill the rows that exist and those

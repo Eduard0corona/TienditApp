@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Orders;
+using FoodParkDigital.Application.Orders.CancellationNotices;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Orders.Queries;
@@ -22,6 +23,30 @@ public class OrdersController : ControllerBase
     public OrdersController(IMediator mediator)
     {
         _mediator = mediator;
+    }
+
+    /// <summary>
+    /// Whether the person gets an email each time a customer cancels an online order of this business, and where it arrives
+    /// (Fase 30B). Only for its team: the platform's admin acting in it gets 404.
+    /// </summary>
+    [HttpGet("cancellation-emails")]
+    public async Task<ActionResult<OrderCancellationEmailsDto>> GetCancellationEmails(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetOrderCancellationEmailsQuery(), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Turns those emails on or off for the person, in this business only (Fase 30B).</summary>
+    [HttpPut("cancellation-emails")]
+    public async Task<ActionResult<OrderCancellationEmailsDto>> UpdateCancellationEmails(
+        [FromBody] UpdateOrderCancellationEmailsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return Ok(result.Value);
     }
 
     [HttpGet]

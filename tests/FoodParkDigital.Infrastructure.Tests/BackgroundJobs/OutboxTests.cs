@@ -365,7 +365,8 @@ public class OutboxTests
             new FoodParkDigital.Domain.Appointments.Events.AppointmentAnswerReminderEmailEvent(Guid.NewGuid(), Guid.NewGuid()),
             new FoodParkDigital.Domain.Quotes.Events.QuoteAnsweredFromLinkEvent(Guid.NewGuid(), TenantA, Accepted: true),
             new FoodParkDigital.Domain.Quotes.Events.QuoteReplyEmailEvent(Guid.NewGuid(), Guid.NewGuid()),
-            new FoodParkDigital.Domain.Tenants.Events.TenantUserNoticeEmailsChangedEvent(Guid.NewGuid(), Guid.NewGuid(), true, null)
+            new FoodParkDigital.Domain.Tenants.Events.TenantUserNoticeEmailsChangedEvent(Guid.NewGuid(), Guid.NewGuid(), true, null, false),
+            new OrderCancellationEmailEvent(Guid.NewGuid(), Guid.NewGuid())
         };
 
         foreach (var domainEvent in events)

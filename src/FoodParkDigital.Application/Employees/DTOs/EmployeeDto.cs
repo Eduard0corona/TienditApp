@@ -34,6 +34,8 @@ public class EmployeeNoticeEmailsDto
     public bool Requests { get; set; }
     /// <summary>One each time a customer accepts or rejects a quote from its link.</summary>
     public bool QuoteReplies { get; set; }
+    /// <summary>One each time a customer cancels an online order before it was accepted (Fase 30B).</summary>
+    public bool OrderCancellations { get; set; }
     /// <summary>Whether the email of their account is confirmed: until it is, none reaches them.</summary>
     public bool EmailConfirmed { get; set; }
 
@@ -41,6 +43,7 @@ public class EmployeeNoticeEmailsDto
     {
         Requests = member.GetsRequestEmails,
         QuoteReplies = member.GetsQuoteReplyEmails,
+        OrderCancellations = member.GetsOrderCancellationEmails,
         EmailConfirmed = emailConfirmed
     };
 }

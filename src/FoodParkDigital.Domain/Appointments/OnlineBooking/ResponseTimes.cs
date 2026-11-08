@@ -60,20 +60,40 @@ public static class ResponseTimes
 
     /// <summary>
     /// How long before its limit (<see cref="AnswerBy"/>) a request still waiting is recalled to its business (Fase 29U, ADR
-    /// 0075).
+    /// 0075), until the business picks another (Fase 30B, ADR 0082).
     /// </summary>
-    public static readonly TimeSpan ReminderLead = TimeSpan.FromHours(1);
+    public static readonly TimeSpan ReminderLead = TimeSpan.FromMinutes(DefaultReminderMinutes);
+
+    /// <summary>The minutes before its limit a business is reminded until it picks (Fase 30B): the hour of the Fase 29U.</summary>
+    public const int DefaultReminderMinutes = 60;
 
     /// <summary>
-    /// When to recall a request still waiting to its business (Fase 29U, ADR 0075): <see cref="ReminderLead"/> before its
-    /// limit. Null when its limit came less than two of those after it arrived: the email of its arrival is enough.
+    /// The minutes before its limit a business may pick to be reminded (Fase 30B, ADR 0082); <see cref="NoReminder"/> sends none.
+    /// </summary>
+    public static readonly IReadOnlyList<int> ReminderMinuteChoices = [30, 60, 120, 180];
+
+    /// <summary>The business wants no reminder, only the email of each request as it arrives.</summary>
+    public const int NoReminder = 0;
+
+    public const string ReminderChoiceMessage = "Elige cuánto antes del límite te recordamos una solicitud, o que no te la recordemos.";
+
+    /// <summary>Whether <paramref name="minutes"/> is one a business may pick.</summary>
+    public static bool IsReminderChoice(int minutes) => minutes == NoReminder || ReminderMinuteChoices.Contains(minutes);
+
+    /// <summary>
+    /// When to recall a request still waiting to its business (Fase 29U, ADR 0075): <paramref name="lead"/> before its limit
+    /// (<see cref="ReminderLead"/> unless its business picked another, Fase 30B). Null when its limit came less than two of
+    /// those after it arrived (the email of its arrival is enough), or when its business wants none (a lead of zero).
     /// </summary>
     /// <param name="arrivedAt">When the request arrived.</param>
     /// <param name="askedFor">The time its customer asked for (<c>RequestedStartAt</c>, or its time when it has none).</param>
-    public static DateTimeOffset? RemindAt(DateTimeOffset arrivedAt, DateTimeOffset askedFor)
+    public static DateTimeOffset? RemindAt(DateTimeOffset arrivedAt, DateTimeOffset askedFor, TimeSpan? lead = null)
     {
+        var before = lead ?? ReminderLead;
+        if (before <= TimeSpan.Zero)
+            return null;
         var answerBy = AnswerBy(arrivedAt, askedFor);
-        return answerBy - arrivedAt < ReminderLead * 2 ? null : answerBy - ReminderLead;
+        return answerBy - arrivedAt < before * 2 ? null : answerBy - before;
     }
 
     /// <summary>

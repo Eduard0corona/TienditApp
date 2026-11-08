@@ -4,7 +4,7 @@ import { apiRequest, type Schemas } from '../../api/typedClient';
 import { getApiErrorMessage } from '../../api/errors';
 import { useTenant } from '../../hooks/useTenant';
 import { TenantCapability } from '../../types';
-import { hasAnyCapability, hasCapability } from '../../utils/tenantCapabilities';
+import { COMMERCE_CAPABILITIES, hasAnyCapability, hasCapability } from '../../utils/tenantCapabilities';
 import {
   AppRole,
   BusinessRole,
@@ -53,14 +53,18 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
   const [permissions, setPermissions] = useState<string[]>(initialPermissions);
   const initialRequestEmails = employee?.noticeEmails?.requests ?? false;
   const initialQuoteReplyEmails = employee?.noticeEmails?.quoteReplies ?? false;
+  const initialOrderCancellationEmails = employee?.noticeEmails?.orderCancellations ?? false;
   const [requestEmails, setRequestEmails] = useState(initialRequestEmails);
   const [quoteReplyEmails, setQuoteReplyEmails] = useState(initialQuoteReplyEmails);
+  const [orderCancellationEmails, setOrderCancellationEmails] = useState(initialOrderCancellationEmails);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const { capabilities } = useTenant();
-  // The notices the business has: the agenda's with appointments, the answers to quotes with services or appointments.
+  // The notices the business has: the agenda's with appointments, the answers to quotes with services or appointments, and
+  // the online orders their customers cancel in a business that sells (Fase 30B).
   const offersRequests = hasCapability(capabilities, TenantCapability.Appointments);
   const offersQuoteReplies = hasAnyCapability(capabilities, TenantCapability.Service | TenantCapability.Appointments);
+  const offersOrderCancellations = hasAnyCapability(capabilities, COMMERCE_CAPABILITIES);
 
   const isManager = isManagerPreset(presets.find((preset) => preset.key === presetKey));
   const noAccess = !isManager && !editingOwner && permissions.length === 0;
@@ -86,6 +90,8 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
   const noticeFields = () => ({
     requestEmails: offersRequests && requestEmails !== initialRequestEmails ? requestEmails : null,
     quoteReplyEmails: offersQuoteReplies && quoteReplyEmails !== initialQuoteReplyEmails ? quoteReplyEmails : null,
+    orderCancellationEmails:
+      offersOrderCancellations && orderCancellationEmails !== initialOrderCancellationEmails ? orderCancellationEmails : null,
   });
   // The permission a notice still needs, by its name; nothing while the names have not loaded.
   const missingPermission = (code: string) =>
@@ -248,7 +254,7 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
               )}
             </fieldset>
 
-            {(offersRequests || offersQuoteReplies) && (
+            {(offersRequests || offersQuoteReplies || offersOrderCancellations) && (
               <fieldset className="mt-3">
                 <legend className="form-label fs-6 fw-semibold">Avisos por correo</legend>
                 <p className="small text-muted mb-2">
@@ -273,6 +279,15 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
                     description="Cada vez que un cliente acepta o rechaza una cotización desde su enlace."
                     checked={quoteReplyEmails}
                     onChange={setQuoteReplyEmails}
+                    missing={missingPermission('ManageOrders')}
+                  />
+                )}
+                {offersOrderCancellations && (
+                  <NoticeSwitch
+                    label="Pedidos cancelados"
+                    description="Cada pedido en línea que su cliente cancela antes de que lo acepten."
+                    checked={orderCancellationEmails}
+                    onChange={setOrderCancellationEmails}
                     missing={missingPermission('ManageOrders')}
                   />
                 )}

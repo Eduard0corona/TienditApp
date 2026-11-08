@@ -99,6 +99,47 @@ public class AnswerReminderTests
         Assert.DoesNotContain(new[] { accepted, cancelled, team, booked }.SelectMany(a => a.DomainEvents), e => e is AppointmentAnswerDueSoonEvent);
     }
 
+    [Fact]
+    public void RemindAt_ShouldBeAsLongBeforeTheLimitAsTheBusinessPicked_OrNeverWhenItPickedNone()
+    {
+        // For two days from now: its limit is a day after it arrived (Fase 30B, ADR 0082).
+        Assert.Equal(Arrived.AddHours(23).AddMinutes(30), ResponseTimes.RemindAt(Arrived, Arrived.AddDays(2), TimeSpan.FromMinutes(30)));
+        Assert.Equal(Arrived.AddHours(21), ResponseTimes.RemindAt(Arrived, Arrived.AddDays(2), TimeSpan.FromHours(3)));
+        Assert.Equal(ResponseTimes.RemindAt(Arrived, Arrived.AddDays(2)), ResponseTimes.RemindAt(Arrived, Arrived.AddDays(2), TimeSpan.FromHours(1)));
+        // Two of its lead after it arrived are still enough; less is not.
+        Assert.Equal(Arrived.AddHours(3), ResponseTimes.RemindAt(Arrived, Arrived.AddHours(6), TimeSpan.FromHours(3)));
+        Assert.Null(ResponseTimes.RemindAt(Arrived, Arrived.AddHours(6).AddMinutes(-1), TimeSpan.FromHours(3)));
+        Assert.Equal(Arrived.AddMinutes(30), ResponseTimes.RemindAt(Arrived, Arrived.AddHours(1), TimeSpan.FromMinutes(30)));
+        // None picked: never.
+        Assert.Null(ResponseTimes.RemindAt(Arrived, Arrived.AddDays(2), TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void TheChoices_ShouldBeHalfAnHourToThreeHours_OrNone()
+    {
+        Assert.Equal([30, 60, 120, 180], ResponseTimes.ReminderMinuteChoices);
+        Assert.True(ResponseTimes.IsReminderChoice(ResponseTimes.NoReminder));
+        Assert.All(ResponseTimes.ReminderMinuteChoices, minutes => Assert.True(ResponseTimes.IsReminderChoice(minutes)));
+        Assert.All(new[] { -60, 1, 45, 90, 240 }, minutes => Assert.False(ResponseTimes.IsReminderChoice(minutes)));
+        Assert.Equal(60, ResponseTimes.DefaultReminderMinutes);
+    }
+
+    [Fact]
+    public void ARequestOfABusinessThatPickedAnotherLead_ShouldBeRemindedThen_AndNeverWhenItPickedNone()
+    {
+        var request = Request(startsAfter: TimeSpan.FromHours(5));
+        var limit = Arrived.AddHours(5);
+
+        Assert.False(request.RemindToAnswer(limit.AddMinutes(-121), TimeSpan.FromHours(2)));
+        Assert.True(request.RemindToAnswer(limit.AddMinutes(-120), TimeSpan.FromHours(2)));
+        Assert.Equal(limit.AddMinutes(-120), request.AnswerReminderSentAt);
+
+        var none = Request(startsAfter: TimeSpan.FromHours(5));
+        Assert.False(none.RemindToAnswer(limit.AddMinutes(-30), TimeSpan.Zero));
+        Assert.Null(none.AnswerReminderSentAt);
+        Assert.DoesNotContain(none.DomainEvents, e => e is AppointmentAnswerDueSoonEvent);
+    }
+
     private static Appointment Request(TimeSpan startsAfter, bool fromTeam = false)
     {
         var start = Arrived + startsAfter;

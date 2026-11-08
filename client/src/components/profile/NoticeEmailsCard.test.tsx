@@ -10,6 +10,7 @@ vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 
 const REQUESTS = '/api/v1/appointments/request-emails';
 const QUOTES = '/api/v1/quotes/reply-emails';
+const ORDERS = '/api/v1/orders/cancellation-emails';
 
 function apiError(status: number, detail: string): AxiosError {
   const headers = new AxiosHeaders();
@@ -17,13 +18,14 @@ function apiError(status: number, detail: string): AxiosError {
   return new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, response);
 }
 
-const renderCard = (props: { agenda?: boolean; quotes?: boolean; ownsBusiness?: boolean } = {}) =>
+const renderCard = (props: { agenda?: boolean; quotes?: boolean; orders?: boolean; ownsBusiness?: boolean } = {}) =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <NoticeEmailsCard
         businessName="Estética Luna"
         agenda={props.agenda ?? true}
         quotes={props.quotes ?? true}
+        orders={props.orders}
         ownsBusiness={props.ownsBusiness}
       />
     </QueryClientProvider>,
@@ -65,6 +67,24 @@ describe('NoticeEmailsCard (Fases 29N and 29O)', () => {
     expect(agenda).toBeChecked();
     expect(apiRequest).toHaveBeenCalledWith('put', QUOTES, { body: { enabled: false } });
     expect(apiRequest).not.toHaveBeenCalledWith('put', REQUESTS, expect.anything());
+  });
+
+  it('lets whoever confirms the orders choose the online orders their customers cancel (Fase 30B)', async () => {
+    const user = userEvent.setup();
+    serve({ [ORDERS]: { enabled: false } });
+    renderCard({ agenda: false, quotes: false, orders: true });
+
+    const orders = await screen.findByRole('switch', { name: 'Pedidos cancelados' });
+    await waitFor(() => expect(orders).toBeEnabled());
+    expect(orders).not.toBeChecked();
+    expect(orders).toHaveAccessibleDescription('Cada pedido en línea de Estética Luna que su cliente cancela antes de que lo aceptes.');
+    expect(screen.queryByRole('switch', { name: 'Citas en línea' })).not.toBeInTheDocument();
+
+    await user.click(orders);
+
+    await waitFor(() => expect(orders).toBeChecked());
+    expect(apiRequest).toHaveBeenCalledWith('put', ORDERS, { body: { enabled: true } });
+    expect(apiRequest).not.toHaveBeenCalledWith('get', REQUESTS, expect.anything());
   });
 
   it('shows only the notices the person may choose', async () => {

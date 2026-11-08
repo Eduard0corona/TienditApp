@@ -9698,6 +9698,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/cancellation-emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderCancellationEmailsDto"];
+                        "application/json": components["schemas"]["OrderCancellationEmailsDto"];
+                        "text/json": components["schemas"]["OrderCancellationEmailsDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateOrderCancellationEmailsCommand"];
+                    "text/json": components["schemas"]["UpdateOrderCancellationEmailsCommand"];
+                    "application/*+json": components["schemas"]["UpdateOrderCancellationEmailsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderCancellationEmailsDto"];
+                        "application/json": components["schemas"]["OrderCancellationEmailsDto"];
+                        "text/json": components["schemas"]["OrderCancellationEmailsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders": {
         parameters: {
             query?: never;
@@ -17069,6 +17133,7 @@ export interface components {
             permissions?: string[] | null;
             requestEmails?: boolean | null;
             quoteReplyEmails?: boolean | null;
+            orderCancellationEmails?: boolean | null;
         };
         CreateInventoryLocationCommand: {
             name: string;
@@ -18004,6 +18069,7 @@ export interface components {
         EmployeeNoticeEmailsDto: {
             requests: boolean;
             quoteReplies: boolean;
+            orderCancellations: boolean;
             emailConfirmed: boolean;
         };
         EmployeePermissionOptionDto: {
@@ -19274,6 +19340,9 @@ export interface components {
             slug: string;
             /** Format: int32 */
             staffCount: number;
+            /** Format: int32 */
+            answerReminderMinutes: number;
+            answerReminderChoices: number[];
         };
         OnlineBookingStaffMemberDto: {
             /** Format: uuid */
@@ -19460,6 +19529,11 @@ export interface components {
             problem?: string | null;
             awaitsAutomaticIssue: boolean;
             creditNotes: components["schemas"]["CreditNoteDto"][];
+        };
+        OrderCancellationEmailsDto: {
+            enabled: boolean;
+            email?: string | null;
+            emailConfirmed: boolean;
         };
         /**
          * Format: int32
@@ -22522,6 +22596,7 @@ export interface components {
             permissions?: string[] | null;
             requestEmails?: boolean | null;
             quoteReplyEmails?: boolean | null;
+            orderCancellationEmails?: boolean | null;
         };
         UpdateHomeVisitRequestsSettingsCommand: {
             enabled: boolean;
@@ -22583,6 +22658,8 @@ export interface components {
             enabled: boolean;
             /** Format: int32 */
             capacity: number;
+            /** Format: int32 */
+            answerReminderMinutes?: number | null;
         };
         UpdateOnlineBookingStaffRequest: {
             enabled: boolean;
@@ -22596,6 +22673,9 @@ export interface components {
         };
         UpdateOpeningHoursRequest: {
             intervals?: components["schemas"]["OpeningIntervalDto"][] | null;
+        };
+        UpdateOrderCancellationEmailsCommand: {
+            enabled: boolean;
         };
         UpdateOrderStatusRequest: {
             newStatus: components["schemas"]["OrderStatus"];

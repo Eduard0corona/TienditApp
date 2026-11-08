@@ -46,7 +46,7 @@ public class QuoteOnlineRepliesMigrationSqlServerTests
             (tenantId, quoteId) = (tenant.Id, quote.Id);
         }
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeOrderCancellationEmails.CreateContext(database, tenantId);
         Assert.True((await context.TenantSettings.SingleAsync()).QuoteOnlineReplies);
         var saved = await context.Quotes.SingleAsync(q => q.Id == quoteId);
         Assert.Equal((QuoteStatus.Accepted, QuoteReplyChannel.InPerson), (saved.Status, saved.ReplyChannel!.Value));
@@ -59,7 +59,7 @@ public class QuoteOnlineRepliesMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var (tenantId, quoteId) = await SeedAsync(database, answeredFromTheLink: true);
 
-        await using var check = database.CreateContext(tenantId);
+        await using var check = BeforeOrderCancellationEmails.CreateContext(database, tenantId);
         var saved = await check.Quotes.AsNoTracking().SingleAsync(q => q.Id == quoteId);
         Assert.Equal((QuoteStatus.Accepted, QuoteReplyChannel.Link, "Los espero"), (saved.Status, saved.ReplyChannel!.Value, saved.CustomerResponse));
 
@@ -78,7 +78,7 @@ public class QuoteOnlineRepliesMigrationSqlServerTests
         // A customer answered from the link.
         var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
         Assert.True(stopped is SqlException { Number: 50055 }, stopped?.Message ?? "it was not stopped");
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeOrderCancellationEmails.CreateContext(database, tenantId))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(QuoteReplyChannel.Link, (await context.Quotes.SingleAsync(q => q.Id == quoteId)).ReplyChannel);
@@ -92,7 +92,7 @@ public class QuoteOnlineRepliesMigrationSqlServerTests
         // A business turned it off.
         stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
         Assert.True(stopped is SqlException { Number: 50055 }, stopped?.Message ?? "it was not stopped");
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeOrderCancellationEmails.CreateContext(database, tenantId))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.False((await context.TenantSettings.SingleAsync()).QuoteOnlineReplies);
@@ -118,7 +118,7 @@ public class QuoteOnlineRepliesMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the answers from the link are on.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenantId);
+        await using var forward = BeforeOrderCancellationEmails.CreateContext(database, tenantId);
         Assert.True((await forward.TenantSettings.SingleAsync()).QuoteOnlineReplies);
     }
 
@@ -146,7 +146,7 @@ public class QuoteOnlineRepliesMigrationSqlServerTests
             quote.ReplyFromLink(accepted: true, Today, "Los espero", Now);
         else
             quote.Accept(Today, QuoteReplyChannel.WhatsApp, null, Now);
-        await using var seed = database.CreateContext(tenant.Id);
+        await using var seed = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id);
         seed.AddRange(tenant, settings, quote);
         await seed.SaveChangesAsync();
         return (tenant.Id, quote.Id);

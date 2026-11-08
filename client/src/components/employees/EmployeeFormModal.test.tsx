@@ -34,7 +34,7 @@ function member(overrides: Partial<EmployeeRecord> = {}): EmployeeRecord {
     isActive: true,
     createdAt: '2026-11-01T00:00:00Z',
     permissions: ['ManageAppointments'],
-    noticeEmails: { requests: false, quoteReplies: false, emailConfirmed: true },
+    noticeEmails: { requests: false, quoteReplies: false, orderCancellations: false, emailConfirmed: true },
     ...overrides,
   };
 }
@@ -82,9 +82,34 @@ describe('EmployeeFormModal: the notices by email of each person (Fase 29Q)', ()
     expect(sentBody()).toMatchObject({ tenantUserId: 'm-1', requestEmails: true, quoteReplyEmails: true });
   });
 
+  it('lets whoever runs the team choose the online orders their customers cancel, in a business that sells (Fase 30B)', async () => {
+    const user = userEvent.setup();
+    inBusiness(TenantCapability.Food);
+    renderForm(member({ permissions: ['ManageOrders'] }));
+
+    expect(screen.queryByRole('switch', { name: 'Citas en línea' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Cotizaciones' })).not.toBeInTheDocument();
+    const orders = screen.getByRole('switch', { name: 'Pedidos cancelados' });
+    expect(orders).not.toBeChecked();
+    expect(orders).toHaveAccessibleDescription('Cada pedido en línea que su cliente cancela antes de que lo acepten.');
+    await user.click(orders);
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(apiRequest).toHaveBeenCalled());
+    expect(sentBody()).toMatchObject({ orderCancellationEmails: true, requestEmails: null, quoteReplyEmails: null });
+  });
+
+  it('offers no orders\' notice in a business that only takes appointments', () => {
+    inBusiness(TenantCapability.Appointments);
+    renderForm(member());
+
+    expect(screen.getByRole('switch', { name: 'Citas en línea' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Pedidos cancelados' })).not.toBeInTheDocument();
+  });
+
   it('shows only the notices the business has', async () => {
     inBusiness(TenantCapability.Service);
-    renderForm(member({ noticeEmails: { requests: false, quoteReplies: true, emailConfirmed: false } }));
+    renderForm(member({ noticeEmails: { requests: false, quoteReplies: true, orderCancellations: false, emailConfirmed: false } }));
 
     expect(screen.queryByRole('switch', { name: 'Citas en línea' })).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Cotizaciones' })).toBeChecked();
@@ -93,7 +118,7 @@ describe('EmployeeFormModal: the notices by email of each person (Fase 29Q)', ()
 
   it('sends only the notices changed here, never undoing what the person chose after the list was read', async () => {
     const user = userEvent.setup();
-    renderForm(member({ noticeEmails: { requests: true, quoteReplies: false, emailConfirmed: true } }));
+    renderForm(member({ noticeEmails: { requests: true, quoteReplies: false, orderCancellations: false, emailConfirmed: true } }));
 
     // Another permission, and a notice turned off and on again: neither notice changed.
     await user.click(screen.getByRole('radio', { name: /Cajero/ }));
@@ -116,7 +141,7 @@ describe('EmployeeFormModal: the notices by email of each person (Fase 29Q)', ()
 
   it('never chooses the owner\'s: they choose them in Mi perfil', async () => {
     const user = userEvent.setup();
-    renderForm(member({ tenantRole: 'Owner', appRole: 'TenantAdmin', noticeEmails: { requests: true, quoteReplies: true, emailConfirmed: true } }));
+    renderForm(member({ tenantRole: 'Owner', appRole: 'TenantAdmin', noticeEmails: { requests: true, quoteReplies: true, orderCancellations: true, emailConfirmed: true } }));
 
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Sus avisos por correo los elige en Mi perfil.');
@@ -125,6 +150,7 @@ describe('EmployeeFormModal: the notices by email of each person (Fase 29Q)', ()
     await waitFor(() => expect(apiRequest).toHaveBeenCalled());
     expect(sentBody()).not.toHaveProperty('requestEmails');
     expect(sentBody()).not.toHaveProperty('quoteReplyEmails');
+    expect(sentBody()).not.toHaveProperty('orderCancellationEmails');
   });
 
   it('invites someone with the notices chosen, off until someone turns them on', async () => {

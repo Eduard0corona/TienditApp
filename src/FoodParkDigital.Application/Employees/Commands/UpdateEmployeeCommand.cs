@@ -33,6 +33,10 @@ public record UpdateEmployeeCommand : IRequest<Result<EmployeeDto>>
     public bool? RequestEmails { get; init; }
     /// <summary>Whether they get an email with each answer to a quote from its link; null leaves what they have.</summary>
     public bool? QuoteReplyEmails { get; init; }
+    /// <summary>
+    /// Whether they get an email with each online order its customer cancels (Fase 30B, ADR 0082); null leaves what they have.
+    /// </summary>
+    public bool? OrderCancellationEmails { get; init; }
 }
 
 public class UpdateEmployeeCommandValidator : AbstractValidator<UpdateEmployeeCommand>
@@ -94,7 +98,8 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
             return Result.Failure<EmployeeDto>("Empleado no encontrado.");
 
         // Before anything changes: a refused change of the owner's notices leaves their name and permissions as they were.
-        if (EmployeeNoticeEmails.RefusalFor(tenantUser, request.RequestEmails, request.QuoteReplyEmails) is { } noticesRefused)
+        var asked = new NoticeChoices(request.RequestEmails, request.QuoteReplyEmails, request.OrderCancellationEmails);
+        if (EmployeeNoticeEmails.RefusalFor(tenantUser, asked) is { } noticesRefused)
             return Result.Failure<EmployeeDto>(noticesRefused);
 
         // The owner keeps the business: their role never changes from here.
@@ -156,12 +161,12 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
             tenantUser.SetPermissionCodes(TenantPermissionCatalog.GetDefaultCodes(appRole, tenantRole));
         else
             tenantUser.SetExplicitPermissions(request.Permissions);
-        var (requestsChanged, quoteRepliesChanged) = EmployeeNoticeEmails.Apply(tenantUser, request.RequestEmails, request.QuoteReplyEmails);
+        var changed = EmployeeNoticeEmails.Apply(tenantUser, asked);
         // Fase 30A (ADR 0081): someone else changed what the person gets by email; it is told who and what, saved with the change.
-        if ((requestsChanged is not null || quoteRepliesChanged is not null)
-            && Guid.TryParse(_currentUserService.UserId, out var changedBy) && changedBy != tenantUser.UserId)
+        if (changed.Any && Guid.TryParse(_currentUserService.UserId, out var changedBy) && changedBy != tenantUser.UserId)
             _outbox.Add(
-                new TenantUserNoticeEmailsChangedEvent(tenantUser.Id, changedBy, requestsChanged, quoteRepliesChanged),
+                new TenantUserNoticeEmailsChangedEvent(
+                    tenantUser.Id, changedBy, changed.RequestEmails, changed.QuoteReplyEmails, changed.OrderCancellationEmails),
                 _tenantService.TenantId);
 
         await _context.SaveChangesAsync(cancellationToken);

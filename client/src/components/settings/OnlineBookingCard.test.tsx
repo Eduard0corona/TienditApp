@@ -20,7 +20,10 @@ const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn(
 const NO_HOURS = 'Pon el horario de tu negocio: los horarios libres salen de él.';
 
 function settings(overrides: Partial<OnlineBookingSettings> = {}): OnlineBookingSettings {
-  return { enabled: false, capacity: 1, maxCapacity: 20, booksOnline: false, missing: [], slug: 'barberia-luis', staffCount: 0, ...overrides };
+  return {
+    enabled: false, capacity: 1, maxCapacity: 20, booksOnline: false, missing: [], slug: 'barberia-luis', staffCount: 0,
+    answerReminderMinutes: 60, answerReminderChoices: [30, 60, 120, 180], ...overrides,
+  };
 }
 
 function withCapabilities(capabilities: number) {
@@ -63,9 +66,42 @@ describe('OnlineBookingCard', () => {
     await user.type(screen.getByLabelText('Citas a la vez'), '2');
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
-    await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 2));
+    await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 2, 60));
     expect(toast.success).toHaveBeenCalledWith('Guardado.');
     expect(await screen.findByText(/Tus clientes todavía no pueden agendar en línea/)).toBeInTheDocument();
+  });
+
+  it('picks how long before its limit a request still waiting is recalled, or none (Fase 30B)', async () => {
+    const user = userEvent.setup();
+    api.getOnlineBooking.mockResolvedValue(settings({ enabled: true }) as never);
+    api.updateOnlineBooking.mockResolvedValue(settings({ enabled: true, answerReminderMinutes: 0 }) as never);
+    renderCard();
+
+    const reminder = await screen.findByRole('combobox', { name: 'Recordatorio de solicitudes sin responder' });
+    expect(reminder).toHaveValue('60');
+    expect(Array.from((reminder as HTMLSelectElement).options).map((option) => option.text)).toEqual([
+      'Media hora antes del límite', 'Una hora antes del límite', '2 horas antes del límite', '3 horas antes del límite', 'No recordarme',
+    ]);
+    expect(reminder).toHaveAccessibleDescription(/si una solicitud sigue sin respuesta, para que la respondas a tiempo/);
+
+    await user.selectOptions(reminder, 'No recordarme');
+    expect(reminder).toHaveAccessibleDescription('Solo te llega el correo de cada solicitud cuando llega.');
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 1, 0));
+    expect(await screen.findByRole('combobox', { name: 'Recordatorio de solicitudes sin responder' })).toHaveValue('0');
+  });
+
+  it('keeps the hour of always when the API answering is one of before (Fase 30B)', async () => {
+    const before: Partial<OnlineBookingSettings> = settings({ enabled: true });
+    delete before.answerReminderMinutes;
+    delete before.answerReminderChoices;
+    api.getOnlineBooking.mockResolvedValue(before as never);
+    renderCard();
+
+    const reminder = await screen.findByRole('combobox', { name: 'Recordatorio de solicitudes sin responder' });
+    expect(reminder).toHaveValue('60');
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
   });
 
   it('links the booking page while customers book', async () => {

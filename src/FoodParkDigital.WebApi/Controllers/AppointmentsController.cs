@@ -75,7 +75,10 @@ public class AppointmentsController : ControllerBase
     public async Task<ActionResult<OnlineBookingSettingsDto>> GetOnlineBooking(CancellationToken cancellationToken)
         => Ok(await _mediator.Send(new GetOnlineBookingSettingsQuery(), cancellationToken));
 
-    /// <summary>Turns online appointments on or off and sets how many the business attends at once (owners and admins).</summary>
+    /// <summary>
+    /// Turns online appointments on or off, sets how many the business attends at once and, since the Fase 30B, how long before
+    /// its limit a request still waiting is recalled, or not at all (owners and admins).
+    /// </summary>
     [HttpPut("online-booking")]
     public async Task<ActionResult<OnlineBookingSettingsDto>> UpdateOnlineBooking(
         [FromBody] UpdateOnlineBookingSettingsCommand command, CancellationToken cancellationToken)

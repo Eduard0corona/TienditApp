@@ -194,7 +194,7 @@ public sealed class MessagingWorker
 
     /// <summary>
     /// Reminds each business of its requests online still waiting an hour before their limit to be answered in time (Fase 29U,
-    /// ADR 0075). Which businesses have any is read across all of them (only the business of each request); each is then
+    /// ADR 0075), or as long before as it picked, or never (Fase 30B, ADR 0082). Which businesses have any is read across all of them (only the business of each request); each is then
     /// reminded in its own scope, where its requests decide whether they are due, and saved on its own: the outbox sends the
     /// emails. Another instance that reminded the same request first wins (its version), and this pass skips that business.
     /// </summary>
