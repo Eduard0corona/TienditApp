@@ -1081,22 +1081,19 @@ public sealed class PublicDirectorySnapshot
         var since = OrderReadyTimes.Since(utcNow);
         int quarter = OrderReadyTimes.LimitMinutes[0], halfAnHour = OrderReadyTimes.LimitMinutes[1], anHour = OrderReadyTimes.LimitMinutes[2];
         var history = context.OrderStatusHistories.IgnoreQueryFilters().AsNoTracking();
-        // An order its customer placed on the online menu, not with the QR of a table, with when it was first ready.
-        var ready = context.Orders
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(o => o.Channel == OrderChannel.Online && !o.CreatedByBusiness && o.TableNumber == null && o.OpenTableId == null
-                && o.CustomerPhone != null && o.CreatedAt >= since && listed.Any(t => t.Id == o.TenantId))
-            .Select(o => new
-            {
-                o.TenantId,
-                o.CustomerPhone,
-                o.CreatedAt,
-                ReadyAt = history
-                    .Where(h => h.TenantId == o.TenantId && h.OrderId == o.Id && h.NewStatus == OrderStatus.Ready)
-                    .Min(h => (DateTimeOffset?)h.ChangedAt)
-            })
-            .Where(o => o.ReadyAt != null);
+        // An order its customer placed on the online menu, not with the QR of a table, with when it was ready: joined with its
+        // row of «Listo» in its own history, so the tramos below compare one column (a subquery in each of them was read once
+        // for each tramo, and one apply per order made SQL Server pick plans of seconds). An order is ready once: its state
+        // machine leaves «Listo» only to deliver it.
+        var ready =
+            from o in context.Orders
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(o => o.Channel == OrderChannel.Online && !o.CreatedByBusiness && o.TableNumber == null && o.OpenTableId == null
+                    && o.CustomerPhone != null && o.CreatedAt >= since && listed.Any(t => t.Id == o.TenantId))
+            join h in history.Where(h => h.NewStatus == OrderStatus.Ready)
+                on new { o.TenantId, OrderId = o.Id } equals new { h.TenantId, h.OrderId }
+            select new { o.TenantId, o.CustomerPhone, o.CreatedAt, ReadyAt = h.ChangedAt };
         var customers = await ready
             .GroupBy(o => new { o.TenantId, o.CustomerPhone })
             .Select(customer => new
