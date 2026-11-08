@@ -103,12 +103,14 @@ public class NoticeEmailsChangedEmailTests
         var salon = await SalonAsync(fixture, "Estética Luna");
         var owner = await MemberAsync(fixture, salon, "Mariana", TenantUserRole.Owner);
         var cashier = await MemberAsync(fixture, salon, "Rosa", TenantUserRole.Staff, choose: true, chooseQuotes: true, permissions: [TenantPermission.ManageOrders]);
-        var clerk = await MemberAsync(fixture, salon, "Pepe", TenantUserRole.Staff, choose: true, permissions: [TenantPermission.ManageCatalog]);
+        var clerk = await MemberAsync(fixture, salon, "Pepe", TenantUserRole.Staff, choose: true, permissions: [TenantPermission.ManageCatalog], chooseOrderCancellations: true);
 
         var (_, _, body) = Assert.Single(await SendAsync(fixture, salon, cashier, owner, requestEmails: true, quoteReplyEmails: true));
         Assert.Contains("<li>Ahora te llegan las respuestas de los clientes a las cotizaciones.</li>", body);
         Assert.DoesNotContain("Agenda", body);
         Assert.Empty(await SendAsync(fixture, salon, clerk, owner, requestEmails: true));
+        // The online orders their customers cancel, to whoever may confirm the orders (Fase 30B).
+        Assert.Empty(await SendAsync(fixture, salon, clerk, owner, orderCancellationEmails: true));
     }
 
     [Fact]
