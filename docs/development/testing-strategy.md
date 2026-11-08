@@ -2423,6 +2423,27 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - y pruebas para los 30 minutos exactos y una cocina en pausa.
   - **claude-review** (1 MINOR): «una vez por cliente» solo se probaba con el último pedido más rápido; ahora también con el último más lento.
   - **Escenas:** contra la línea base de `master` en `288c26e` (810 escenas): **las 810 iguales**. Las tarjetas, el menú y «Cómo te ven» de las escenas no traen `readyTime`.
+- Fase 29Z, el sonido de las respuestas a cotizaciones y el tono y volumen de cada dispositivo ([ADR 0080](../adr/0080-quote-sound-and-device-tone.md)):
+  - **Cliente:**
+    - `useArrivalChime.test.ts` (+5):
+      - cada sonido suena con el tono y el volumen que eligió el dispositivo, y como antes mientras no elige: los tiempos de cada nota de los cuatro tonos, y una cancelación con las notas al revés;
+      - un tono o volumen que esta versión no conoce (también `toString`) suena como antes, y otra pestaña que elige se sigue;
+      - elegir un tono lo hace sonar con cualquier sonido prendido, ese clic deja sonar, y no más de una vez cada 300 ms;
+      - nada suena mientras el navegador no deja arrancar el sonido;
+      - si el navegador no deja guardar, el tono y el volumen duran mientras la página siga abierta.
+    - `ChimeSettingsButton.test.tsx` (2, nuevo): elige el tono, que suena, y el volumen, y los guarda; muestra lo que el dispositivo ya eligió, y lo que elige un botón lo muestra el otro.
+    - `useQuoteReplies.test.tsx` (+1): suena con el sonido de las cotizaciones de este dispositivo, hacia arriba con una aceptada y hacia abajo con una rechazada.
+    - `QuotesList.test.tsx` (+1): prende en este navegador el sonido de las respuestas y pide el toque mientras falta.
+    - `OrdersList.test.tsx`: su doble de `useArrivalChime` deja el tono y el volumen como son.
+    - Ocho mutaciones (una rechazada que suena hacia arriba, aceptar `toString` como tono, un volumen fijo, sin la pausa de 300 ms, sin guardar en la página, sin la nota del toque, sin sonar al elegir un tono, sin guardar el volumen) hacen fallar su prueba.
+  - **.NET:** sin cambios en el servidor ni en el contrato. **Cliente en total:** 207 archivos y 1,589 pruebas.
+  - **Primera visita:** 182,223 B (`master` en `5bcae66`: 182,198 B, +25 B): la lista de precarga de la entrada nombra el chunk compartido del botón de tono y volumen y su diálogo, que se cargan con Pedidos, la Agenda, Cocina y Cotizaciones, más la variación de los nombres con hash. El sonido de las cotizaciones va con `LiveNotices`, que se carga aparte. El presupuesto sube a 182,300 B. El CSS global, 63,077 B de 63,200 B.
+  - **Revisión independiente**, sin bloqueantes, con estos arreglos:
+    - si el navegador no dejaba guardar el tono o el volumen, no cambiaban: ahora la página los conserva hasta cerrarse, y un valor guardado como `toString` ya no es un tono;
+    - «Probar» sonaba antes de que el navegador dejara sonar, y recorrer los tonos con las flechas encimaba los sonidos: ahora suena solo cuando ya puede, y no más de una vez cada 300 ms;
+    - la nota del toque en Cotizaciones no se anunciaba: va en una región que ya estaba, y el botón dice que abre un diálogo;
+    - y pruebas para los tiempos de cada nota, lo que elige un botón en el otro, el almacenamiento bloqueado y el sonido que no arranca.
+  - **Escenas:** contra la línea base de `master` en `5bcae66` (810 escenas): 725 iguales y 85 distintas, todas por el botón «Tono y volumen de los sonidos» junto al interruptor de sonido: 21 de la Agenda, 53 de Pedidos (también las de un detalle o una factura abiertos sobre la lista), 7 de Cocina y 4 de Cotizaciones, que suman su interruptor. Cada diferencia cae en la franja de esa barra, de unos 48 px de alto; en el teléfono, Cotizaciones baja «Nueva cotización» a otra línea (41 px más de alto). Ninguna otra pantalla cambia.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
