@@ -2521,6 +2521,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Las 3 de la tarjeta de citas en línea suman «Recordatorio de solicitudes sin responder»; las 2 de «Quién atiende», debajo, quedan un píxel más abajo sin otro cambio.
     - Las del formulario de Equipo no cambian: sus avisos quedan debajo de lo que capturan, y los prueba `EmployeeFormModal.test.tsx`.
   - **claude-review** (1 MINOR): el correo no se probaba con el mensaje de un pedido leído en otro negocio ni con una falla del proveedor; ahora sí. Sin ninguna de las comprobaciones de negocio de las dos consultas del correo, la prueba de otro negocio falla.
+- Fase 30C, los enums del contrato fuera de la primera visita (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Generador:** `scripts/generate-enums.mjs` escribe un módulo por enum en `src/api/generated/enums/` (85) y `enums.ts`, que los reexporta. Correrlo otra vez no cambia nada, y una carpeta nueva deja fuera los enums que el contrato ya no tiene.
+  - **CI:** el paso «Check the generated API types» revisa toda la carpeta `src/api/generated` con `git status`, que ve también los módulos nuevos o sobrantes que `git diff` no veía.
+  - **WebApi:** `ClientEnumContractTests` lee los módulos además de `enums.ts` y `types/index.ts` (73 en verde). Con `InventoryMovementType.Entry` cambiado a 0 en su módulo, falla `ClientCopy_ShouldMatchTheDomainEnum(InventoryMovementType)`.
+  - **Cliente:** 208 archivos y 1,599 pruebas, lint y build en verde.
+  - **Primera visita:** 180,232 B (`master` en `3b8157c`: 182,241 B, −2,009 B). La entrada lleva solo 9 enums (574 B sin comprimir, antes 4,403 B); los demás bajan con su pantalla, y los que comparten varias van en 7 chunks propios de 100 a 200 B. El presupuesto baja de 182,300 a 180,300 B. Con `output.experimentalMinChunkSize` de Rollup en 1,000 B la primera visita bajaba a 179,961 B y quedaban 35 archivos menos, pero esa opción experimental reacomoda todo el grafo: no se usa.
+  - **Escenas:** contra la línea base de `master` en `3b8157c` (810 escenas): 809 iguales. «La tienda: botón del pedido» salió distinta y también falla sola con el build de `master` (una de cuatro corridas): no depende del cambio.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
