@@ -2371,6 +2371,26 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **809 iguales.**
     - **1 cambia**, como se esperaba: «Cómo te ven» de un oficio con su tiempo, con la nota nueva. Dio la misma imagen en dos corridas seguidas.
     - «La tienda: botón del pedido» salió distinta en la primera comparación e igual en la segunda. Sola, con el build de `master`, da la misma imagen que con el de esta rama: depende de con qué escenas corre, no del cambio.
+- Fase 29X, avisar de un pedido en línea que lleva tiempo sin confirmar ([ADR 0078](../adr/0078-online-order-waiting-notice.md)):
+  - **Domain:** `OrderConfirmTimeTests` (+1): se avisa a los 15 minutos, cuenta entre los más lentos a la media hora, y `ConfirmBy` es media hora después de llegar.
+  - **Application:**
+    - `AttentionQueryTests` (+1): son urgentes los pedidos del menú en línea que llevan 15 y 40 minutos; no el de 14 minutos, el de una mesa, el que tomó el equipo ni el ya respondido, que sí siguen en la cuenta salvo el respondido.
+    - `DtoMappingTests` (+1): `confirmBy` sale igual en memoria y en la proyección para SQL, solo en el pedido que espera.
+  - **Infrastructure:** `DtoProjectionSqlServerTests` (+1, SQL Server): SQL Server y la carga en memoria dan el mismo `confirmBy` para el pedido que espera, y ninguno para el de una mesa, el del equipo, el respondido ni una venta de mostrador.
+  - **Cliente:**
+    - `orderConfirmInTime.test.ts` (2, nuevo): hasta qué hora confirmarlo, en la zona horaria del negocio, y que pasó la media hora, también en su minuto exacto.
+    - `useOnlineOrdersWaiting.test.tsx` (4, nuevo): no avisa lo que ya esperaba al abrir; avisa y suena cuando uno más cumple 15 minutos, no cuando uno se responde; lee la campana con la pestaña oculta y no avisa a quien no confirma pedidos; y sus textos.
+    - `attention.test.ts` (+1): cuántos llevan 15 minutos o más, la campana en rojo y el enlace con el filtro.
+    - `OrdersList.test.tsx` (+3): la campana abre los que esperan de cualquier día; seguida otra vez con Pedidos abierto pone su filtro, y un filtro a mano o «Limpiar filtros» quita el enlace; y el texto de cada pedido antes y después de la media hora.
+    - `Topbar.test.tsx` (+2): avisa solo a quien confirma los pedidos de un negocio activo que vende.
+  - **.NET en total:** 4,826 pruebas en verde con SQL Server (Domain 1,424; Application 2,180; WebApi 507; Infrastructure 715). Una corrida anterior falló porque Docker se detuvo a la mitad (SQL Server no respondía); con SQL Server arriba, todo en verde. **Cliente en total:** 206 archivos y 1,575 pruebas.
+  - **Primera visita:** 182,156 B (`master` en `3e4ea03`: 182,060 B, +96 B). La campana de la barra superior dice cuántos pedidos llevan 15 minutos y abre Pedidos con su filtro. El aviso (`useOnlineOrdersWaiting`) queda en su propio chunk y el texto de cada pedido en el de Pedidos. El presupuesto sube a 182,200 B. El CSS global, 63,077 B de 63,200 B.
+  - **Revisión independiente**, sin bloqueantes, con estos arreglos:
+    - con Pedidos abierto, seguir la campana no cambiaba los filtros: ahora pone el de los que esperan, y un filtro a mano quita el enlace;
+    - con la pestaña oculta, la campana dejaba de leer y el aviso no salía: ahora el aviso lee también así;
+    - «en Explorar» no valía para un negocio que no aparece ahí: ahora dice «en tu tiempo para confirmar»;
+    - el aviso respeta a quien no lo escucha, una lista vacía sin fechas lo dice, y pruebas para `confirmBy` en memoria y para la barra superior.
+  - **Escenas:** contra la línea base de `master` en `3e4ea03` (810 escenas): **las 810 iguales**. Las escenas de Pedidos no tienen pedidos en línea por confirmar con `confirmBy`, y la campana de las escenas no tiene urgentes.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
