@@ -22,7 +22,7 @@ El dueño del producto pidió avanzar estos puntos (el 9, el 10 y el 13), entre 
    - Dice quién lo canceló, el folio, el total y que ya no hay que prepararlo, con el enlace a Pedidos. Nunca el teléfono ni la dirección del cliente, ni lo que pidió línea por línea: eso se queda en el pedido.
    - **A quién:** a quien puede confirmar los pedidos (el permiso de Pedidos, en un negocio que vende y no está suspendido), activo en el equipo, con su cuenta activa y su correo confirmado. Como los otros avisos, los dueños lo reciben mientras no eligen; los demás, cuando lo prenden.
    - **Dónde se elige:** en Mi perfil, «Pedidos cancelados», y en Equipo, como los otros avisos ([ADR 0071](0071-team-notices-and-orders-cleanup.md)). El del dueño solo desde su perfil. Si alguien más lo cambia, el correo de la Fase 30A lo dice ([ADR 0081](0081-notice-changes-fake-watch-and-account-cap.md)).
-   - Sale por el outbox, un mensaje por persona, y se reintenta solo. Al mandarlo se comprueba otra vez que el pedido siga cancelado por su cliente, hace menos de un día, y que la persona lo siga recibiendo y pueda confirmar pedidos.
+   - Sale por el outbox, un mensaje por persona, y se reintenta solo. Al mandarlo se comprueba otra vez que el pedido siga cancelado por su cliente, hace un día o menos, y que la persona lo siga recibiendo y pueda confirmar pedidos.
    - El negocio que cancela un pedido no se manda correo a sí mismo.
 2. **Cada negocio elige cuánto antes recordar una solicitud.**
    - En Configuración › Citas en línea, «Recordatorio de solicitudes sin responder»: media hora, una, dos o tres horas antes del límite, o «No recordarme».

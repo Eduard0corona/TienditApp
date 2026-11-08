@@ -307,6 +307,72 @@ public sealed class CrossTenantRealtimeSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task CancelledOnlineOrders_ShouldReachByEmailOnlyTheirKitchen_ForWhoeverConfirmsOrdersAndChoseThem()
+    {
+        // Fase 30B (ADR 0082).
+        var mine = await _api.SignUpAsync("cancela-aviso-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("cancela-aviso-b", TwoBusinessesApi.FoodBusiness);
+        var (cashier, _, cashierEmail, _) = await EmployeeAsync(mine, "ManageOrders");
+        var (clerk, _, clerkEmail, _) = await EmployeeAsync(mine, "ManageCatalog");
+
+        // The choice is for whoever confirms the orders: off for a member of the team until they choose, on for the owner.
+        Assert.Equal(HttpStatusCode.Forbidden, (await clerk.GetAsync(OrderCancellationEmails)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await clerk.PutAsJsonAsync(OrderCancellationEmails, new { enabled = true })).StatusCode);
+        Assert.False((await TwoBusinessesApi.ReadAsync(await cashier.GetAsync(OrderCancellationEmails))).GetProperty("enabled").GetBoolean());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await cashier.PutAsJsonAsync(OrderCancellationEmails, new { enabled = true }))).GetProperty("enabled").GetBoolean());
+        var owners = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(OrderCancellationEmails));
+        Assert.Equal((true, mine.Email), (owners.GetProperty("enabled").GetBoolean(), owners.GetProperty("email").GetString()));
+
+        // A customer of each kitchen cancels from the link of the receipt: each hears only of its own.
+        using var stranger = _api.AnonymousClient();
+        var myKitchen = await KitchenAsync(mine);
+        var theirKitchen = await KitchenAsync(theirs);
+        await CancelledOrderAsync(stranger, myKitchen, "5522107765");
+        await CancelledOrderAsync(stranger, theirKitchen, "5522107766");
+        await _api.DispatchOutboxAsync();
+
+        var ownerGot = Assert.Single(_api.PlainEmailsTo(mine.Email), e => e.Subject.StartsWith("Pedido cancelado"));
+        Assert.StartsWith("Pedido cancelado en Negocio CANCELA-AVISO-A: ORD-", ownerGot.Subject);
+        Assert.Contains("antes de que lo aceptaran", ownerGot.Body);
+        Assert.DoesNotContain("5522107765", ownerGot.Body + ownerGot.Subject);
+        Assert.DoesNotContain("Tacos", ownerGot.Body);
+        Assert.Single(_api.PlainEmailsTo(cashierEmail), e => e.Subject.StartsWith("Pedido cancelado en Negocio CANCELA-AVISO-A"));
+        Assert.Empty(_api.PlainEmailsTo(clerkEmail));
+        Assert.StartsWith("Pedido cancelado en Negocio CANCELA-AVISO-B",
+            Assert.Single(_api.PlainEmailsTo(theirs.Email), e => e.Subject.StartsWith("Pedido cancelado")).Subject);
+
+        // The owner turns them off for themselves; the cashier keeps theirs, and the other kitchen its own.
+        Assert.False((await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync(OrderCancellationEmails, new { enabled = false }))).GetProperty("enabled").GetBoolean());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync(OrderCancellationEmails))).GetProperty("enabled").GetBoolean());
+        await CancelledOrderAsync(stranger, myKitchen, "5522107767");
+        await _api.DispatchOutboxAsync();
+        Assert.Single(_api.PlainEmailsTo(mine.Email), e => e.Subject.StartsWith("Pedido cancelado"));
+        Assert.Equal(2, _api.PlainEmailsTo(cashierEmail).Count(e => e.Subject.StartsWith("Pedido cancelado")));
+    }
+
+    /// <summary>The owner's kitchen taking online orders, with its drawer open: its slug and a product.</summary>
+    private static async Task<(SignedUp Owner, string Slug, Guid Product)> KitchenAsync(SignedUp owner)
+    {
+        var product = await CrossTenantManagementSqlServerTests.ProductAsync(owner.Client, "Tacos al pastor");
+        await TwoBusinessesApi.IdAsync(owner.Client, "/api/v1/cash/open", new { openingAmount = 100m });
+        var slug = (await TwoBusinessesApi.ReadAsync(await owner.Client.PutAsJsonAsync("/api/v1/auth/my-tenant/online-menu", new { mode = 2 })))
+            .GetProperty("slug").GetString()!;
+        return (owner, slug, product);
+    }
+
+    /// <summary>An order of the online menu that its customer cancels from the link of its receipt, before it is accepted.</summary>
+    private static async Task CancelledOrderAsync(HttpClient customer, (SignedUp Owner, string Slug, Guid Product) kitchen, string phone)
+    {
+        var token = (await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync($"/api/v1/public/menu/{kitchen.Slug}/orders", new
+        {
+            customerName = "Valeria Ruiz",
+            customerPhone = phone,
+            items = new[] { new { productId = kitchen.Product, quantity = 1 } }
+        }))).GetProperty("trackingToken").GetString()!;
+        Assert.Equal(HttpStatusCode.OK, (await customer.PostAsJsonAsync("/api/v1/public/orders/tracking/cancel", new { token })).StatusCode);
+    }
+
+    [SqlServerFact]
     public async Task AnswersToQuotes_ShouldReachByEmailOnlyTheirBusiness_ForWhoeverWorksTheQuotesAndChoseThem()
     {
         // Fase 29O (ADR 0069).
@@ -632,6 +698,8 @@ public sealed class CrossTenantRealtimeSqlServerTests
     private const string RequestEmails = "/api/v1/appointments/request-emails";
 
     private const string QuoteReplyEmails = "/api/v1/quotes/reply-emails";
+
+    private const string OrderCancellationEmails = "/api/v1/orders/cancellation-emails";
 
     /// <summary>A customer's request online at <paramref name="slug"/>, at its first free time; its id.</summary>
     private static async Task<Guid> RequestAsync(HttpClient customer, string slug, Guid service, string phone)

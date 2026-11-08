@@ -27,7 +27,8 @@ internal static class RequestEmail
         => status == AppointmentStatus.Requested && now < ResponseTimes.AnswerBy(arrivedAt, askedFor);
 
     /// <summary>
-    /// The reminder of a request still waiting an hour before its limit (Fase 29U, ADR 0075): what was asked for, when and by
+    /// The reminder of a request still waiting before its limit (Fase 29U, ADR 0075; as long before as its business picked
+    /// since the Fase 30B, ADR 0082): what was asked for, when and by
     /// whom, by when to answer it, and the link to the agenda. Never the customer's phone, notes, address or photos.
     /// </summary>
     public static RequestEmailContent ComposeReminder(
@@ -98,7 +99,7 @@ internal static class RequestEmail
 
     /// <summary>
     /// Why the agenda's emails arrive (Fases 29N, 29O and 29U): the member gets one with each request online, its reminder if it
-    /// still waits an hour before its limit, and one with each appointment its customer cancels.
+    /// still waits before its limit (as long before as the business picked), and one with each appointment its customer cancels.
     /// </summary>
     internal static string Footer(string business, string? app)
         => NoticeEmailText.Footer(

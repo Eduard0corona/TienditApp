@@ -697,6 +697,9 @@ public class OnlineBookingFlowTests
         var none = await handler.Handle(new UpdateOnlineBookingSettingsCommand(true, 3, 0), CancellationToken.None);
         Assert.Equal(0, none.Value!.AnswerReminderMinutes);
         Assert.Equal(0, (await fixture.Context.TenantSettings.AsNoTracking().SingleAsync()).AnswerReminderMinutes);
+        // Each change is recorded, also one of the reminder alone; saving it as it is records nothing.
+        await handler.Handle(new UpdateOnlineBookingSettingsCommand(true, 3, 0), CancellationToken.None);
+        Assert.Equal(3, await fixture.Context.AuditLogs.CountAsync(a => a.Action == "OnlineBookingUpdated"));
 
         var validator = new UpdateOnlineBookingSettingsCommandValidator();
         Assert.False(validator.Validate(new UpdateOnlineBookingSettingsCommand(true, 3, 45)).IsValid);

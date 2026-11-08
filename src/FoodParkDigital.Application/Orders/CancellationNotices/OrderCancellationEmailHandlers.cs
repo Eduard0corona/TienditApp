@@ -38,7 +38,7 @@ public sealed class OrderCancelledEmailsHandler : IOutboxEventHandler<OrderCance
 
 /// <summary>
 /// Sends one member the email of an online order its customer cancelled (Fase 30B, ADR 0082), from the platform's provider. It
-/// checks again that the order stays cancelled by its customer, less than a day ago, and that the member still gets them and
+/// checks again that the order stays cancelled by its customer, a day ago or less, and that the member still gets them and
 /// may confirm orders, as either may have changed since it was queued; then nothing is sent. A failure of the provider throws,
 /// and the outbox retries this member's email alone.
 /// </summary>

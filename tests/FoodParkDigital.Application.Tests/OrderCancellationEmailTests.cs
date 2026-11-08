@@ -1,4 +1,6 @@
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Notices;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.OnlineMenu;
@@ -90,7 +92,8 @@ public class OrderCancellationEmailTests
         Assert.Single(await SendAsync(fixture, kitchen, order, owner, after: TimeSpan.FromDays(1)));
         Assert.Empty(await SendAsync(fixture, kitchen, order, owner, after: TimeSpan.FromDays(1) + TimeSpan.FromMinutes(1)));
 
-        // Turned them off since it was queued.
+        // The cashier gets it while they chose it, and not once they turned it off since it was queued.
+        Assert.Single(await SendAsync(fixture, kitchen, order, cashier));
         var membership = await fixture.Context.TenantUsers.IgnoreQueryFilters().SingleAsync(m => m.UserId == cashier);
         membership.ChooseOrderCancellationEmails(false);
         await fixture.Context.SaveChangesAsync();
@@ -126,6 +129,28 @@ public class OrderCancellationEmailTests
         // Someone who is not of the team.
         var stranger = await GetAsync(fixture, kitchen, Guid.NewGuid());
         Assert.Equal(NoticeEmailPreferences.NotAMemberMessage, stranger.Error);
+    }
+
+    [Fact]
+    public void OnlyWhoeverMayConfirmTheOrders_InABusinessThatSells_ShouldGetThem_OrChooseThem()
+    {
+        // As the API asks to confirm orders: ManageOrders (or running the team), in a business with food, a shop or services.
+        TenantAccessSnapshot Access(TenantCapability modules, bool suspended = false, bool manager = false, params string[] permissions)
+            => new(true, modules, permissions, TenantSuspended: suspended, IsManager: manager);
+        Assert.True(OrderCancellationEmailRecipients.MayConfirmOrders(Access(TenantCapability.Food, permissions: "ManageOrders")));
+        Assert.True(OrderCancellationEmailRecipients.MayConfirmOrders(Access(TenantCapability.Retail, manager: true)));
+        Assert.True(OrderCancellationEmailRecipients.MayConfirmOrders(Access(TenantCapability.Service, permissions: "ManageOrders")));
+        Assert.False(OrderCancellationEmailRecipients.MayConfirmOrders(Access(TenantCapability.Food, permissions: "ManageCatalog")));
+        Assert.False(OrderCancellationEmailRecipients.MayConfirmOrders(Access(TenantCapability.Appointments, manager: true, permissions: "ManageOrders")));
+        Assert.False(OrderCancellationEmailRecipients.MayConfirmOrders(Access(TenantCapability.Food, suspended: true, permissions: "ManageOrders")));
+
+        foreach (var request in new[] { typeof(GetOrderCancellationEmailsQuery), typeof(UpdateOrderCancellationEmailsCommand) })
+        {
+            var permission = Assert.Single(request.GetCustomAttributes(typeof(RequiresPermissionAttribute), false).Cast<RequiresPermissionAttribute>());
+            var capability = Assert.Single(request.GetCustomAttributes(typeof(RequiresCapabilityAttribute), false).Cast<RequiresCapabilityAttribute>());
+            Assert.Equal([TenantPermission.ManageOrders], permission.AnyOf);
+            Assert.Equal(TenantCapability.Food | TenantCapability.Retail | TenantCapability.Service, capability.AnyOf);
+        }
     }
 
     /// <summary>A kitchen that takes online orders and accepts each one itself: they arrive waiting.</summary>

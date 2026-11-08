@@ -47,13 +47,15 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
   const ids = useId();
   const [enabled, setEnabled] = useState(settings.enabled);
   const [capacity, setCapacity] = useState(String(settings.capacity));
-  const [reminder, setReminder] = useState(settings.answerReminderMinutes);
+  // An API of before (while a version is published) sends neither: the hour of always.
+  const savedReminder = settings.answerReminderMinutes ?? 60;
+  const [reminder, setReminder] = useState(savedReminder);
   const [saving, setSaving] = useState(false);
   const parsed = Number(capacity);
   const capacityValid = Number.isInteger(parsed) && parsed >= 1 && parsed <= settings.maxCapacity;
-  const dirty = enabled !== settings.enabled || parsed !== settings.capacity || reminder !== settings.answerReminderMinutes;
+  const dirty = enabled !== settings.enabled || parsed !== settings.capacity || reminder !== savedReminder;
   // Its own choice stays listed even if this version no longer offers it.
-  const reminderChoices = [...new Set([...settings.answerReminderChoices, settings.answerReminderMinutes, 0])];
+  const reminderChoices = [...new Set([...(settings.answerReminderChoices ?? [30, 60, 120, 180]), savedReminder, 0])];
 
   const save = async () => {
     if (!capacityValid) return;
@@ -149,7 +151,7 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
             onClick={() => {
               setEnabled(settings.enabled);
               setCapacity(String(settings.capacity));
-              setReminder(settings.answerReminderMinutes);
+              setReminder(savedReminder);
             }}
           >
             Descartar

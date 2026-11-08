@@ -107,8 +107,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public DateTimeOffset? RequestedStartAt { get; private set; }
     /// <summary>
-    /// When its business was reminded to answer it in time (Fase 29U, ADR 0075): once, an hour before its limit, while it
-    /// still waited. Null for every other appointment, and for requests from before Fase 29U.
+    /// When its business was reminded to answer it in time (Fase 29U, ADR 0075): once, an hour before its limit (or as long
+    /// before as its business picked, Fase 30B), while it still waited. Null for every other appointment, and for requests from before Fase 29U.
     /// </summary>
     public DateTimeOffset? AnswerReminderSentAt { get; private set; }
     /// <summary>
@@ -388,7 +388,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>
     /// Reminds its business to answer a request online still waiting (Fase 29U, ADR 0075): once, from
     /// <see cref="ResponseTimes.RemindAt"/> until its limit (<see cref="ResponseTimes.AnswerBy"/>). Never one of its own team,
-    /// one whose limit came less than two hours after it arrived, or one already answered, cancelled or reminded:
+    /// one whose limit came less than two leads after it arrived, or one already answered, cancelled or reminded:
     /// <see cref="AppointmentAnswerDueSoonEvent"/> then is not raised.
     /// </summary>
     /// <param name="lead">

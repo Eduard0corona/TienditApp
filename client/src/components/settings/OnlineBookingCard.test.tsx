@@ -92,6 +92,18 @@ describe('OnlineBookingCard', () => {
     expect(await screen.findByRole('combobox', { name: 'Recordatorio de solicitudes sin responder' })).toHaveValue('0');
   });
 
+  it('keeps the hour of always when the API answering is one of before (Fase 30B)', async () => {
+    const before: Partial<OnlineBookingSettings> = settings({ enabled: true });
+    delete before.answerReminderMinutes;
+    delete before.answerReminderChoices;
+    api.getOnlineBooking.mockResolvedValue(before as never);
+    renderCard();
+
+    const reminder = await screen.findByRole('combobox', { name: 'Recordatorio de solicitudes sin responder' });
+    expect(reminder).toHaveValue('60');
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+  });
+
   it('links the booking page while customers book', async () => {
     api.getOnlineBooking.mockResolvedValue(settings({ enabled: true, booksOnline: true }) as never);
     renderCard();
