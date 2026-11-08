@@ -4,7 +4,7 @@ import { BusinessCategory } from '../../api/generated/enums';
 import type { PublicMenu } from '../../api/publicMenuApi';
 import type { RatingSummary } from '../../api/reviewsApi';
 import { categoryInfo } from '../../utils/businessCategories';
-import { orderConfirmTimeLabel, responseTimeLabel } from '../../utils/responseTime';
+import { orderConfirmTimeLabel, readyTimeLabel, responseTimeLabel } from '../../utils/responseTime';
 import { formatAverage, reviewCountLabel, storeRatingName } from '../../utils/reviews';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 
@@ -62,6 +62,8 @@ export default function StoreHero({
   const answers = tableLabel ? null : responseTimeLabel(menu.responseTime);
   // And how soon it confirms its online orders (Fase 29T), likewise not at a table, where whoever serves it is there.
   const confirms = tableLabel ? null : orderConfirmTimeLabel(menu.orderConfirmTime);
+  // And how soon its kitchen has them ready (Fase 29Y), likewise not at a table.
+  const ready = tableLabel ? null : readyTimeLabel(menu.readyTime);
   const shared = shareNotice === 'Enlace copiado';
 
   useEffect(() => {
@@ -140,7 +142,7 @@ export default function StoreHero({
           </p>
         )}
 
-        {(onOpenInfo || menu.deliveryOnly || rating || answers || confirms) && (
+        {(onOpenInfo || menu.deliveryOnly || rating || answers || confirms || ready) && (
           <div className="pm-pills">
             {rating && (
               <button
@@ -170,6 +172,9 @@ export default function StoreHero({
             )}
             {confirms && (
               <span className="pm-pill static"><i className="ri-check-double-line" aria-hidden="true"></i>{confirms}</span>
+            )}
+            {ready && (
+              <span className="pm-pill static"><i className="ri-restaurant-2-line" aria-hidden="true"></i>{ready}</span>
             )}
             {answers && (
               <span className="pm-pill static"><i className="ri-chat-check-line" aria-hidden="true"></i>{answers}</span>

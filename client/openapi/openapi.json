@@ -25687,6 +25687,7 @@
           "category",
           "countsOrders",
           "countsQuotes",
+          "countsReady",
           "countsRequests",
           "homeVisitAddressNotice",
           "listed",
@@ -25731,6 +25732,12 @@
           },
           "orderConfirmTime": {
             "$ref": "#/components/schemas/OrderConfirmTime"
+          },
+          "countsReady": {
+            "type": "boolean"
+          },
+          "readyTime": {
+            "$ref": "#/components/schemas/ReadyTime"
           }
         },
         "additionalProperties": false
@@ -35167,6 +35174,9 @@
           "orderConfirmTime": {
             "$ref": "#/components/schemas/OrderConfirmTime"
           },
+          "readyTime": {
+            "$ref": "#/components/schemas/ReadyTime"
+          },
           "receivesVisits": {
             "type": "boolean"
           },
@@ -35680,6 +35690,9 @@
           },
           "orderConfirmTime": {
             "$ref": "#/components/schemas/OrderConfirmTime"
+          },
+          "readyTime": {
+            "$ref": "#/components/schemas/ReadyTime"
           },
           "categories": {
             "type": "array",
@@ -37308,6 +37321,22 @@
           }
         },
         "additionalProperties": false
+      },
+      "ReadyTime": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "WithinFifteenMinutes",
+          "WithinHalfAnHour",
+          "WithinAnHour",
+          "Slower"
+        ]
       },
       "ReceivableDto": {
         "required": [

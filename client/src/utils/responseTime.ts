@@ -1,4 +1,4 @@
-import { OrderConfirmTime, QuoteTime, ResponseTime } from '../api/generated/enums';
+import { OrderConfirmTime, QuoteTime, ReadyTime, ResponseTime } from '../api/generated/enums';
 import { addCalendarDays, formatInBusinessZone, getBusinessToday, toBusinessDateTimeInput } from './dates';
 
 /** The times the card says: every one but the slowest, which it never says. */
@@ -52,6 +52,24 @@ const CONFIRM_LABELS: Record<ShownConfirmTime, string> = {
  */
 export function orderConfirmTimeLabel(confirmTime: OrderConfirmTime | null | undefined): string | null {
   return confirmTime == null || confirmTime === OrderConfirmTime.Slower ? null : CONFIRM_LABELS[confirmTime];
+}
+
+/** The ready times the card says: every one but the slowest, which it never says. */
+type ShownReadyTime = Exclude<ReadyTime, typeof ReadyTime.Slower>;
+
+const READY_LABELS: Record<ShownReadyTime, string> = {
+  [ReadyTime.WithinFifteenMinutes]: 'Suele tener tu pedido listo en menos de 15 minutos',
+  [ReadyTime.WithinHalfAnHour]: 'Suele tener tu pedido listo en menos de media hora',
+  [ReadyTime.WithinAnHour]: 'Suele tener tu pedido listo en menos de una hora',
+};
+
+/**
+ * What the card and the menu of a kitchen say of how soon it has ready the orders placed on its online menu (Fase 29Y, ADR
+ * 0079): within what at least half of them were ready from when they arrived, as the server sums it up. Nothing without
+ * enough orders or past an hour.
+ */
+export function readyTimeLabel(readyTime: ReadyTime | null | undefined): string | null {
+  return readyTime == null || readyTime === ReadyTime.Slower ? null : READY_LABELS[readyTime];
 }
 
 /**

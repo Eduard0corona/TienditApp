@@ -1,4 +1,4 @@
-import { OrderConfirmTime, QuoteTime, ResponseTime } from '../api/generated/enums';
+import { OrderConfirmTime, QuoteTime, ReadyTime, ResponseTime } from '../api/generated/enums';
 
 // What an owner reads of their own times in «Cómo te ven en TienditApp». Apart from utils/responseTime, which the cards of
 // Explorar (the first visit) load: these notes come with Configuración only.
@@ -36,4 +36,13 @@ export function ownOrderConfirmTimeNote(confirmTime: OrderConfirmTime | null | u
   if (confirmTime === OrderConfirmTime.Slower)
     return 'Sueles tardar media hora o más en confirmar tus pedidos en línea, así que tus clientes no lo leen.';
   return 'Lo contamos desde que llega cada pedido de tu menú en línea hasta que lo aceptas o lo rechazas, en los últimos 90 días, el último de cada cliente y sin los de tus mesas. Tus clientes lo leen en tu tarjeta y en tu menú.';
+}
+
+/** What the owner of a kitchen reads of how soon it has its online orders ready, while Explorar counts them (Fase 29Y, ADR 0079). */
+export function ownReadyTimeNote(readyTime: ReadyTime | null | undefined): string {
+  if (readyTime == null)
+    return 'Todavía no contamos pedidos en línea de 3 clientes marcados como listos para saber en cuánto sueles tenerlos listos: uno cuenta cuando lo marcas como «Listo» en Pedidos o en Cocina.';
+  if (readyTime === ReadyTime.Slower)
+    return 'Sueles tardar una hora o más en tener listos tus pedidos en línea, así que tus clientes no lo leen.';
+  return 'Lo contamos desde que llega cada pedido de tu menú en línea hasta que lo marcas como «Listo», en los últimos 90 días, el último de cada cliente y sin los de tus mesas. Uno que entregas sin marcarlo listo no cuenta. Tus clientes lo leen en tu tarjeta y en tu menú.';
 }

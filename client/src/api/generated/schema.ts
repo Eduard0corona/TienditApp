@@ -17910,6 +17910,8 @@ export interface components {
             quoteTime?: components["schemas"]["QuoteTime"];
             countsOrders: boolean;
             orderConfirmTime?: components["schemas"]["OrderConfirmTime"];
+            countsReady: boolean;
+            readyTime?: components["schemas"]["ReadyTime"];
         };
         /**
          * Format: int32
@@ -20726,6 +20728,7 @@ export interface components {
             responseTime?: components["schemas"]["ResponseTime"];
             quoteTime?: components["schemas"]["QuoteTime"];
             orderConfirmTime?: components["schemas"]["OrderConfirmTime"];
+            readyTime?: components["schemas"]["ReadyTime"];
             receivesVisits: boolean;
             visitChargePolicy?: components["schemas"]["HomeVisitChargePolicy"];
             visitPrice?: components["schemas"]["HomeVisitPriceDto"];
@@ -20867,6 +20870,7 @@ export interface components {
             rating?: components["schemas"]["RatingSummaryDto"];
             responseTime?: components["schemas"]["ResponseTime"];
             orderConfirmTime?: components["schemas"]["OrderConfirmTime"];
+            readyTime?: components["schemas"]["ReadyTime"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
         PublicMenuProductDto: {
@@ -21351,6 +21355,11 @@ export interface components {
             /** Format: double */
             average?: number | null;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        ReadyTime: 0 | 1 | 2 | 3;
         ReceivableDto: {
             phone: string;
             name: string;

@@ -11,7 +11,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OnlineMenuMode } from '../../types';
 import { BUSINESS_CATEGORIES, categoryInfo } from '../../utils/businessCategories';
-import { ownOrderConfirmTimeNote, ownQuoteTimeNote, ownResponseTimeNote } from '../../utils/ownResponseTime';
+import { ownOrderConfirmTimeNote, ownQuoteTimeNote, ownReadyTimeNote, ownResponseTimeNote } from '../../utils/ownResponseTime';
 
 // The same limit as the API (Tenant.MaxPublicDescriptionLength).
 const MAX_DESCRIPTION = 160;
@@ -165,12 +165,15 @@ function DirectoryForm({ profile, onNoticeDismissed }: { profile: DirectoryProfi
             quoteTime: profile.countsQuotes ? profile.quoteTime : undefined,
             // And how soon it confirms its online orders (Fase 29T): the card says it within half an hour.
             orderConfirmTime: profile.countsOrders ? profile.orderConfirmTime : undefined,
+            // And how soon its kitchen has them ready (Fase 29Y): the card says it within an hour.
+            readyTime: profile.countsReady ? profile.readyTime : undefined,
           }}
         />
       </div>
       {profile.countsRequests && <p className="small text-muted mb-3">{ownResponseTimeNote(profile.responseTime)}</p>}
       {profile.countsQuotes && <p className="small text-muted mb-3">{ownQuoteTimeNote(profile.quoteTime)}</p>}
       {profile.countsOrders && <p className="small text-muted mb-3">{ownOrderConfirmTimeNote(profile.orderConfirmTime)}</p>}
+      {profile.countsReady && <p className="small text-muted mb-3">{ownReadyTimeNote(profile.readyTime)}</p>}
 
       <div className="d-flex gap-2">
         <button type="button" className="btn btn-primary" disabled={!dirty || saving} onClick={() => void save()}>

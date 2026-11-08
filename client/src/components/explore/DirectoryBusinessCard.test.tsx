@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { BusinessCategory, HomeVisitChargePolicy, OrderConfirmTime, QuoteTime, ResponseTime } from '../../api/generated/enums';
+import { BusinessCategory, HomeVisitChargePolicy, OrderConfirmTime, QuoteTime, ReadyTime, ResponseTime } from '../../api/generated/enums';
 import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
 import DirectoryBusinessCard from './DirectoryBusinessCard';
 
@@ -72,6 +72,19 @@ describe('DirectoryBusinessCard', () => {
     expect(paused).toHaveTextContent('Suele confirmar los pedidos en menos de media hora');
     expect(menuOnly).not.toHaveTextContent('Suele confirmar');
     expect(trade).not.toHaveTextContent('Suele confirmar');
+  });
+
+  it('says how soon a kitchen that takes online orders has them ready, paused too, and never for one without orders (Fase 29Y)', () => {
+    renderCard(business({ name: 'Tacos El Güero', acceptsOrders: true, readyTime: ReadyTime.WithinFifteenMinutes }));
+    renderCard(business({ name: 'Pizzería Napoli', acceptsOrders: false, ordersPaused: true, readyTime: ReadyTime.WithinAnHour }));
+    renderCard(business({ name: 'Café Luna', acceptsOrders: false, ordersPaused: false, readyTime: ReadyTime.WithinFifteenMinutes }));
+    renderCard(business({ name: 'Fonda Doña Mary', acceptsOrders: true, readyTime: ReadyTime.Slower }));
+
+    const [taking, paused, menuOnly, slow] = screen.getAllByRole('link');
+    expect(taking).toHaveTextContent('Suele tener tu pedido listo en menos de 15 minutos');
+    expect(paused).toHaveTextContent('Suele tener tu pedido listo en menos de una hora');
+    expect(menuOnly).not.toHaveTextContent('Suele tener tu pedido listo');
+    expect(slow).not.toHaveTextContent('Suele tener tu pedido listo');
   });
 
   it('says nothing of how soon it answers when the server sends none (Fase 29J)', () => {
