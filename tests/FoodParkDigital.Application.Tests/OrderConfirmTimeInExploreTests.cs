@@ -237,7 +237,8 @@ public class OrderConfirmTimeInExploreTests
     /// A kitchen listed in Explorar that takes online orders every day, accepting each one itself, with its drawer open; or
     /// that only shows its menu.
     /// </summary>
-    internal static async Task<Tenant> KitchenAsync(SalesTestFixture fixture, string slug, string name, bool ordersOn = true)
+    internal static async Task<Tenant> KitchenAsync(
+        SalesTestFixture fixture, string slug, string name, bool ordersOn = true, bool drawerOpen = true)
     {
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: slug);
         tenant.Update(name, $"{slug}@demo.com", null, null);
@@ -247,8 +248,12 @@ public class OrderConfirmTimeInExploreTests
         settings.Update(settings.Currency, settings.TimeZone, autoAcceptOrders: false, settings.MaxConcurrentOrders);
         settings.SetOpeningHours(OpeningHours.Create(EveryDay.Select(d => new OpeningInterval(d, TimeOnly.MinValue, new TimeOnly(23, 59)))));
         await fixture.AddProductAsync(tenant, "Orden de tacos", 120m);
-        var branch = await fixture.Context.Branches.IgnoreQueryFilters().SingleAsync(b => b.TenantId == tenant.Id && b.IsDefault);
-        await fixture.OpenCashSessionAsync(tenant, branch.Id);
+        // Without its drawer open, its orders are paused (Fase 29Y).
+        if (drawerOpen)
+        {
+            var branch = await fixture.Context.Branches.IgnoreQueryFilters().SingleAsync(b => b.TenantId == tenant.Id && b.IsDefault);
+            await fixture.OpenCashSessionAsync(tenant, branch.Id);
+        }
         return tenant;
     }
 

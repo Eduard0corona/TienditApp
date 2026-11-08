@@ -19,7 +19,7 @@ El dueño del producto pidió avanzar este punto (el 5), entre otros, sin espera
 1. **Qué cuenta:**
    - Los mismos pedidos que el tiempo de confirmar ([ADR 0074](0074-order-confirm-time.md)): los que sus clientes hicieron en su menú en línea en los últimos 90 días, sin los de una mesa ni los que tomó el equipo.
    - **Solo los que se marcaron «Listo»** alguna vez. Uno que el negocio entregó sin marcarlo listo, uno cancelado antes y uno que todavía no está listo no cuentan, ni como rápidos ni como lentos.
-   - **La espera** va desde que llegó el pedido hasta la primera vez que se marcó «Listo»: con el tiempo de confirmarlo, porque es lo que espera su cliente.
+   - **La espera** va desde que llegó el pedido hasta que se marcó «Listo»: con el tiempo de confirmarlo, porque es lo que espera su cliente. Un pedido llega a «Listo» una sola vez: su máquina de estados solo sale de ahí para entregarlo.
    - **Cada cliente cuenta una vez**, por el último de sus pedidos que se marcó listo, como las solicitudes ([ADR 0067](0067-requests-that-count.md)). El teléfono y quién lo marcó solo se comparan en la base, nunca se leen.
 2. **Qué dice:** desde 3 pedidos, el tramo más corto que reúne al menos la mitad (`TypicalWait`, como responder, cotizar y confirmar). «Menos de» es estricto:
    - «Suele tener tu pedido listo en menos de 15 minutos»;
@@ -31,9 +31,9 @@ El dueño del producto pidió avanzar este punto (el 5), entre otros, sin espera
    - En su menú, salvo en una mesa.
    - Para su dueño, en «Cómo te ven en TienditApp», solo si es una cocina. Ahí también lee si tarda una hora o más, o que todavía no se cuenta y cuándo cuenta un pedido: «uno cuenta cuando lo marcas como «Listo» en Pedidos o en Cocina».
 4. **De dónde:** de la foto de Explorar, como el tiempo de confirmar.
-   - Una sola lectura entre negocios, filtrada por los negocios listados, une cada pedido con la primera vez que llegó a «Listo» en su historial, dentro del mismo negocio.
+   - Una sola lectura entre negocios, filtrada por las cocinas listadas (los pedidos de los demás negocios ni se leen), une cada pedido con su fila de «Listo» en el historial, dentro del mismo negocio.
    - La misma lectura agrupa los pedidos de cada teléfono y dice, de cada tramo, cuándo llegó el último ([ADR 0077](0077-explore-order-with-every-time.md)). Solo vuelven el negocio y esas horas.
-   - Si no se puede leer, nadie lo dice hasta la siguiente foto, y al dueño no se le dice que todavía no se cuenta. Los demás tiempos siguen.
+   - Si no se puede leer, nadie lo dice hasta la siguiente foto, y al dueño no se le dice que todavía no se cuenta. Los demás tiempos siguen, y una lectura fallida del tiempo de confirmar no calla este: cada uno depende de su propia lectura.
 5. **No cambia el orden de Explorar:** una cocina sigue por su tiempo de confirmar ([ADR 0077](0077-explore-order-with-every-time.md)).
 6. **Fuera de esta fase:**
    - ordenar Explorar por el tiempo de tener listo el pedido;
@@ -51,8 +51,8 @@ El dueño del producto pidió avanzar este punto (el 5), entre otros, sin espera
   - **Depende de que la cocina marque «Listo»:** una que entrega sin marcarlo no dice nada, y una que lo marca tarde (al entregarlo) se ve más lenta de lo que es.
   - **No distingue lo que se pidió:** un pedido grande y uno de una bebida cuentan igual. Es lo que el cliente lee: lo usual de esa cocina.
   - **Se puede inflar** con pedidos falsos desde varios teléfonos, como los demás tiempos ([ADR 0064](0064-response-time-in-explore.md)). Es una señal para el cliente, no una garantía.
-  - **Costo de la foto:** cada foto (cada 30 segundos, si alguien la pide) lee otra vez los pedidos en línea de 90 días de los negocios listados, como el tiempo de confirmar, y busca en el historial su primer «Listo» por pedido y estado.
-    - Lo une con su fila de «Listo» en una sola lectura. Medida aparte, con una sola cocina en SQL Server: unos 85 ms con 25,000 pedidos (2,500 en línea) y entre 450 y 550 ms con 100,000 (10,000 en línea).
+  - **Costo de la foto:** cada foto (cada 30 segundos, si alguien la pide) lee otra vez los pedidos en línea de 90 días de las cocinas listadas, como el tiempo de confirmar.
+    - Une cada uno con su fila de «Listo» en una sola lectura. Medida aparte, con una sola cocina en SQL Server: unos 85 ms con 25,000 pedidos (2,500 en línea) y entre 450 y 550 ms con 100,000 (10,000 en línea).
     - La forma con una subconsulta en cada tramo tardaba unos 140 y entre 700 y 1,000 ms, y la que buscaba el primer «Listo» de cada pedido con un APPLY, de 12 a 30 segundos con un plan que SQL Server elegía.
     - Un pedido llega a «Listo» una sola vez: su máquina de estados solo sale de ahí para entregarlo. Si alguna vez llegara dos veces, contaría en los dos tramos y su cliente, en el más lento.
     - Comparte el límite del tiempo de confirmar: con varios negocios de ese tamaño conviene el índice filtrado de los pedidos en línea, que pide migración.

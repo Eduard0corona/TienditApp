@@ -14,7 +14,8 @@ public enum ReadyTime
 
 /// <summary>
 /// How long the customers of a business waited for the orders they placed on its online menu to be ready (Fase 29Y, ADR
-/// 0079): from when the order arrived until it was first marked «Listo», confirming it included, as its customer waits. Only
+/// 0079): from when the order arrived until it was marked «Listo» (once: its state machine leaves it only to deliver it),
+/// confirming it included, as its customer waits. Only
 /// a kitchen marks an order ready: one that never was (a store, or a kitchen that hands it over without marking it) does not
 /// count, neither as quick nor as slow; nor does one ordered with the QR of a table, handled by whoever serves it.
 /// </summary>

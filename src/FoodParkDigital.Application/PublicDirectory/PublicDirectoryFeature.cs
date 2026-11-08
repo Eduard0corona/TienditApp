@@ -1070,7 +1070,8 @@ public sealed class PublicDirectorySnapshot
     /// <summary>
     /// How soon each business listed has ready the orders its customers place on its online menu (Fase 29Y, ADR 0079): one
     /// row per customer, of its orders since <see cref="OrderReadyTimes.Since"/> that its history says were marked «Listo»,
-    /// counted by how long after arriving they were first. One never marked ready does not count, nor does one of a table. As
+    /// counted by how long after arriving they were. One never marked ready does not count, nor does one of a table, nor any
+    /// of a business that is not a kitchen (only a kitchen marks them ready: its orders are not even read). As
     /// for the confirming (Fase 29T, ADR 0074), a customer counts once: of the orders of one phone, the one that arrived last,
     /// found in one reading that says, for each tramo, when the last order in it arrived (Fase 29W). Only the business and
     /// those times come back, never the phone nor who marked it.
@@ -1090,7 +1091,8 @@ public sealed class PublicDirectorySnapshot
                 .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(o => o.Channel == OrderChannel.Online && !o.CreatedByBusiness && o.TableNumber == null && o.OpenTableId == null
-                    && o.CustomerPhone != null && o.CreatedAt >= since && listed.Any(t => t.Id == o.TenantId))
+                    && o.CustomerPhone != null && o.CreatedAt >= since
+                    && listed.Any(t => t.Id == o.TenantId && t.BusinessType == BusinessType.Food))
             join h in history.Where(h => h.NewStatus == OrderStatus.Ready)
                 on new { o.TenantId, OrderId = o.Id } equals new { h.TenantId, h.OrderId }
             select new { o.TenantId, o.CustomerPhone, o.CreatedAt, ReadyAt = h.ChangedAt };
