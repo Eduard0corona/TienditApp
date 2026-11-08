@@ -36,13 +36,14 @@ El dueño del producto pidió avanzar estos puntos (el 9, el 10 y el 13), entre 
      - la del tiempo de confirmar sube de 0.4 a 2.2 s con 25,000, y de 1.8 a 28 s con 100,000. Con el índice, SQL Server cambia el plan de sus dos subconsultas del historial, y con 100,000 pedidos la foto llega a los 30 segundos de la petición.
      - Las dos lecturas buscan los mismos pedidos, así que las dos usan el índice: no se puede dar solo a la de los pedidos listos.
    - Mejorar la del tiempo de confirmar pide otra forma de la consulta (como la de los pedidos listos, que une el historial en vez de buscarlo por pedido) y medirla otra vez; queda para otra fase.
+     - *Hecho en la Fase 30E:* la lectura une el historial una vez y dice, por cliente, cuándo llegó el último pedido de cada tramo. Sin índice tarda unos 85 a 90 ms con 25,000 pedidos y 200 a 450 ms con 100,000 (antes 370 ms y 0.8 s en la misma máquina). Con el índice filtrado ya no empeora: 35 a 50 ms y 170 a 200 ms, en tres corridas. Agregarlo sigue pidiendo migración.
    - **Se queda** `IX_Appointments_OnlineRequests_CreatedAt` de la 29J: desde la 29M Explorar ya no lo usa, pero el recordatorio de la 29U busca con él las solicitudes que esperan ([ADR 0075](0075-answer-reminder.md)).
    - El detalle de la medición está en [la estrategia de pruebas](../development/testing-strategy.md).
 4. **Fuera de esta fase:**
    - el correo de un pedido que el cliente cancela por teléfono o por WhatsApp (lo cancela el negocio);
    - una anticipación distinta por persona o por servicio;
    - recordar también los pedidos en línea sin confirmar por correo (se avisan en pantalla desde la 29X);
-   - reescribir la lectura del tiempo de confirmar para que un índice filtrado la ayude.
+   - reescribir la lectura del tiempo de confirmar para que un índice filtrado la ayude. *Llegó en la Fase 30E* (ver el punto 3).
 
 ## Consecuencias
 
@@ -54,7 +55,7 @@ El dueño del producto pidió avanzar estos puntos (el 9, el 10 y el 13), entre 
   - **Un correo más por pedido cancelado**, como con las citas: quien pide y cancela una y otra vez manda un correo por vuelta. Lo acota el límite por IP de pedir y de cancelar.
   - **El correo llega aunque Pedidos ya lo avisó en pantalla:** quien no lo quiere lo apaga en Mi perfil.
   - **Un recordatorio de dos o tres horas no llega** a las solicitudes cuyo límite cae antes de cuatro o seis horas desde que llegaron: basta el correo de cuando llegaron.
-  - **La foto de Explorar sigue leyendo los pedidos en línea por el índice de todos los pedidos de cada negocio**, con las ventas de mostrador: unos 0.4 s con 25,000 pedidos y 1.8 s con 100,000 en la lectura del tiempo de confirmar.
+  - **La foto de Explorar sigue leyendo los pedidos en línea por el índice de todos los pedidos de cada negocio**, con las ventas de mostrador: unos 0.4 s con 25,000 pedidos y 1.8 s con 100,000 en la lectura del tiempo de confirmar. *Desde la Fase 30E esa lectura une el historial una vez: unos 85 a 90 ms y 200 a 450 ms.*
 - **Decisión por omisión** (sin preferencia expresa del dueño):
   - que el correo llegue a los dueños mientras no eligen, como los otros avisos;
   - el día después del cual ya no se manda;

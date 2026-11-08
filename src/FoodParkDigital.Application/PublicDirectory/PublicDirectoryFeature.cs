@@ -995,6 +995,14 @@ public sealed class PublicDirectorySnapshot
     /// table. As for the requests (Fase 29M, ADR 0067), a customer counts once: of the orders of one phone, the one that arrived
     /// last. The history says only when and whether its customer did it; the phone and who answered are only compared in the
     /// database, never read.
+    /// <para>
+    /// Since the Fase 30E it reads as <see cref="ReadyTimesAsync"/> does: each order joined once with its rows of history that
+    /// took it out of «Por confirmar», and one row per customer that says, for each tramo, when the last order in it arrived
+    /// (of two that arrived at once, the slower counts, as for the quotes; before, both counted).
+    /// Before, two subqueries looked up the history of each order, and the orders were read twice to find the last of each
+    /// customer: with a kitchen of 100,000 orders in 90 days it took 0.8 to 1.8 s (now 0.2 to 0.45 s), and with a filtered
+    /// index of the online orders SQL Server could pick plans of up to 28 s (now 0.17 to 0.2 s with it).
+    /// </para>
     /// </summary>
     internal static async Task<Dictionary<Guid, OrderConfirmTime?>> OrderConfirmTimesAsync(
         IApplicationDbContext context, IQueryable<Tenant> listed, DateTimeOffset utcNow, CancellationToken cancellationToken)
@@ -1002,69 +1010,84 @@ public sealed class PublicDirectorySnapshot
         var since = OrderConfirmTimes.Since(utcNow);
         int five = OrderConfirmTimes.LimitMinutes[0], fifteen = OrderConfirmTimes.LimitMinutes[1];
         int halfAnHour = OrderConfirmTimes.LimitMinutes[2];
-        var history = context.OrderStatusHistories.IgnoreQueryFilters().AsNoTracking();
-        // An order its customer placed on the online menu, not with the QR of a table: whoever serves the table handles it.
-        // Every one has its customer's phone; saying so keeps the comparison of phones below one equality.
-        var placed = context.Orders
+        // The rows that took an order out of «Por confirmar» (its first row, as it was created, stays in it). An order accepted
+        // automatically as it arrived has its row a few milliseconds before its CreatedAt (stamped when it is saved): half an
+        // hour before the orders read leaves out only rows no order read can have.
+        var leftPending = context.OrderStatusHistories
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(o => o.Channel == OrderChannel.Online && !o.CreatedByBusiness && o.TableNumber == null && o.OpenTableId == null
-                && o.CustomerPhone != null && o.CreatedAt >= since && listed.Any(t => t.Id == o.TenantId))
-            .Select(o => new
+            .Where(h => h.PreviousStatus == OrderStatus.Pending && h.NewStatus != OrderStatus.Pending
+                && h.ChangedAt >= since.AddMinutes(-halfAnHour));
+        // An order its customer placed on the online menu, not with the QR of a table: whoever serves the table handles it.
+        // Every one has its customer's phone; saying so keeps the grouping by phone below one column. Joined with those rows
+        // of its own history: when the business first answered it (its customer cancelling it is no answer), and when its
+        // customer cancelled it.
+        var orders =
+            from o in context.Orders
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(o => o.Channel == OrderChannel.Online && !o.CreatedByBusiness && o.TableNumber == null && o.OpenTableId == null
+                    && o.CustomerPhone != null && o.CreatedAt >= since && listed.Any(t => t.Id == o.TenantId))
+            join h in leftPending on new { o.TenantId, OrderId = o.Id } equals new { h.TenantId, h.OrderId } into rows
+            from h in rows.DefaultIfEmpty()
+            select new
             {
                 o.TenantId,
+                o.Id,
                 o.CustomerPhone,
                 o.CreatedAt,
                 o.Status,
-                // When it first left «Por confirmar» by the business, in its own history (its first row, as it was created, stays
-                // in it): its customer cancelling it is no answer.
-                AnsweredAt = history
-                    .Where(h => h.TenantId == o.TenantId && h.OrderId == o.Id
-                        && h.PreviousStatus == OrderStatus.Pending && h.NewStatus != OrderStatus.Pending
-                        && (h.ChangedBy == null || h.ChangedBy != Order.CustomerPerformedBy))
-                    .Min(h => (DateTimeOffset?)h.ChangedAt),
-                CancelledByCustomerAt = history
-                    .Where(h => h.TenantId == o.TenantId && h.OrderId == o.Id
-                        && h.PreviousStatus == OrderStatus.Pending && h.NewStatus == OrderStatus.Cancelled
-                        && h.ChangedBy == Order.CustomerPerformedBy)
-                    .Min(h => (DateTimeOffset?)h.ChangedAt),
-                Limit = o.CreatedAt.AddMinutes(halfAnHour)
-            })
-            // Answered within half an hour, or past it: answered late, still waiting, or cancelled by its customer after it.
-            .Where(o => o.AnsweredAt < o.Limit
-                || (o.Limit <= utcNow
+                AnsweredAt = h != null && (h.ChangedBy == null || h.ChangedBy != Order.CustomerPerformedBy)
+                    ? h.ChangedAt : (DateTimeOffset?)null,
+                CancelledByCustomerAt = h != null && h.NewStatus == OrderStatus.Cancelled && h.ChangedBy == Order.CustomerPerformedBy
+                    ? h.ChangedAt : (DateTimeOffset?)null
+            };
+        var answered = orders
+            .GroupBy(o => new { o.TenantId, o.Id, o.CustomerPhone, o.CreatedAt, o.Status })
+            .Select(order => new
+            {
+                order.Key.TenantId,
+                order.Key.CustomerPhone,
+                order.Key.CreatedAt,
+                order.Key.Status,
+                AnsweredAt = order.Min(o => o.AnsweredAt),
+                CancelledByCustomerAt = order.Min(o => o.CancelledByCustomerAt),
+                Limit = order.Key.CreatedAt.AddMinutes(halfAnHour)
+            });
+        // One per customer of each business: of those of the same phone, the one that arrived last (one that has waited less
+        // than half an hour, or that its customer cancelled sooner, does not take its place). Each tramo says when its last
+        // order arrived; the slowest: answered after half an hour, or past it still waiting or cancelled by its customer.
+        var customers = await answered
+            .GroupBy(o => new { o.TenantId, o.CustomerPhone })
+            .Select(customer => new
+            {
+                customer.Key.TenantId,
+                WithinFiveMinutes = customer.Max(o => o.AnsweredAt < o.CreatedAt.AddMinutes(five) ? o.CreatedAt : (DateTimeOffset?)null),
+                WithinFifteenMinutes = customer.Max(o => o.AnsweredAt >= o.CreatedAt.AddMinutes(five) && o.AnsweredAt < o.CreatedAt.AddMinutes(fifteen)
+                    ? o.CreatedAt : (DateTimeOffset?)null),
+                WithinHalfAnHour = customer.Max(o => o.AnsweredAt >= o.CreatedAt.AddMinutes(fifteen) && o.AnsweredAt < o.Limit
+                    ? o.CreatedAt : (DateTimeOffset?)null),
+                Slower = customer.Max(o => o.Limit <= utcNow
                     && (o.AnsweredAt >= o.Limit
                         || (o.AnsweredAt == null && o.Status == OrderStatus.Pending)
-                        || (o.AnsweredAt == null && o.CancelledByCustomerAt >= o.Limit))));
-        // One per customer of each business: of those of the same phone, the one that arrived last (a later one still
-        // undecided does not take its place). The last of each customer is found once, grouped, not once for each order.
-        var lastOfEachCustomer = placed
-            .GroupBy(o => new { o.TenantId, o.CustomerPhone })
-            .Select(g => new { g.Key.TenantId, g.Key.CustomerPhone, CreatedAt = g.Max(o => o.CreatedAt) });
-        var counted = await (
-                from o in placed
-                join last in lastOfEachCustomer
-                    on new { o.TenantId, o.CustomerPhone, o.CreatedAt } equals new { last.TenantId, last.CustomerPhone, last.CreatedAt }
-                select o)
-            .GroupBy(o => o.TenantId)
-            .Select(g => new
-            {
-                TenantId = g.Key,
-                Orders = g.Count(),
-                WithinFiveMinutes = g.Count(o => o.AnsweredAt < o.CreatedAt.AddMinutes(five)),
-                WithinFifteenMinutes = g.Count(o => o.AnsweredAt < o.CreatedAt.AddMinutes(fifteen)),
-                WithinHalfAnHour = g.Count(o => o.AnsweredAt < o.Limit)
+                        || (o.AnsweredAt == null && o.CancelledByCustomerAt >= o.Limit))
+                    ? o.CreatedAt : (DateTimeOffset?)null)
             })
             .ToListAsync(cancellationToken);
-        return counted.ToDictionary(
-            row => row.TenantId,
-            row => OrderConfirmTimes.Typical(
-            [
-                row.WithinFiveMinutes,
-                row.WithinFifteenMinutes - row.WithinFiveMinutes,
-                row.WithinHalfAnHour - row.WithinFifteenMinutes,
-                row.Orders - row.WithinHalfAnHour
-            ]));
+        return customers
+            // A customer with no order decided yet counts for nothing.
+            .Where(customer => customer.WithinFiveMinutes is not null || customer.WithinFifteenMinutes is not null
+                || customer.WithinHalfAnHour is not null || customer.Slower is not null)
+            .GroupBy(customer => customer.TenantId)
+            .ToDictionary(
+                business => business.Key,
+                business =>
+                {
+                    var counts = new int[OrderConfirmTimes.LimitMinutes.Count + 1];
+                    foreach (var customer in business)
+                        counts[LastTramo([customer.WithinFiveMinutes, customer.WithinFifteenMinutes, customer.WithinHalfAnHour, customer.Slower])]++;
+                    return OrderConfirmTimes.Typical(counts);
+                });
     }
 
     /// <summary>

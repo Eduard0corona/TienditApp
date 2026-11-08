@@ -114,6 +114,32 @@ public sealed class CrossTenantDirectoryOrderConfirmTimeSqlServerTests
         Assert.Equal(3, profile.GetProperty("orderConfirmTime").GetInt32());
     }
 
+    [SqlServerFact]
+    public async Task ACustomer_ShouldCountByTheirLastOrder_ThoughAnEarlierOneWasInTheSameTramo()
+    {
+        var kitchen = await KitchenAsync("confirma-f");
+        using var stranger = _api.AnonymousClient();
+        // One customer confirmed after 2 minutes, then after 40, then after 2 again: their last is quick. Since the Fase 30E the
+        // reading takes, for each tramo, when its last order arrived (one taking the first would count the slow one).
+        foreach (var (hoursAgo, minutes) in new[] { (240, 2), (120, 40), (24, 2) })
+        {
+            var order = await OrderAsync(kitchen, stranger, "5570000001");
+            await AcceptAsync(kitchen, order);
+            await AnsweredAsync(kitchen, order, arrivedHoursAgo: hoursAgo, waitedMinutes: minutes);
+        }
+        // Two more customers: one confirmed after 2 minutes, one after 40.
+        foreach (var (phone, minutes) in new[] { ("5570000002", 2), ("5570000003", 40) })
+        {
+            var order = await OrderAsync(kitchen, stranger, phone);
+            await AcceptAsync(kitchen, order);
+            await AnsweredAsync(kitchen, order, arrivedHoursAgo: 48, waitedMinutes: minutes);
+        }
+        _api.ForgetDirectorySnapshot();
+
+        // Two of three within five minutes.
+        Assert.Equal(0, (await CardsAsync(stranger))[kitchen.Slug].GetInt32());
+    }
+
     private sealed record Kitchen(SignedUp Business, string Slug, Guid Product)
     {
         public HttpClient Client => Business.Client;
