@@ -448,7 +448,7 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         var tenantId = business.Tenant.Id;
         var now = _clock.UtcNow;
         // Until the business decides them, a phone cannot keep piling up requests.
-        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, now, cancellationToken) is { } refused)
+        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, account?.Id, now, cancellationToken) is { } refused)
             return Result.Failure<PublicAppointmentReceiptDto>(refused);
 
         var settings = business.Settings;
@@ -471,7 +471,7 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         await _bookingLock.AcquireAsync(tenantId, cancellationToken);
         if (request.IdempotencyKey is { } lockedKey && await RequestedAsync(lockedKey, phone, business, account, cancellationToken) is { } answered)
             return answered;
-        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, now, cancellationToken) is { } refusedNow)
+        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, account?.Id, now, cancellationToken) is { } refusedNow)
             return Result.Failure<PublicAppointmentReceiptDto>(refusedNow);
         var hours = await BusinessHours.ReadAsync(_context, tenantId, settings.OpeningHours, settings.TimeZone, now, cancellationToken);
         var endAt = startAt + service.Duration;
@@ -568,10 +568,12 @@ internal static class PublicAppointmentReceipts
     /// The phone is compared as a number (<see cref="MessagingPhone.ToKey"/>), as the requests keep it when they arrive, and
     /// one message says it for both, so a stranger who types a phone does not learn whether its customer cancelled. Since the
     /// Fase 29V (ADR 0076), a phone whose request the business declined as fake may not request again for
-    /// <see cref="ResponseTimes.WindowDays"/> days from then, the days Explorar counts, unless the mark was taken back.
+    /// <see cref="ResponseTimes.WindowDays"/> days from then, the days Explorar counts, unless the mark was taken back. Since
+    /// the Fase 30A (ADR 0081), a customer signed in to its account (<paramref name="accountId"/>) also counts the requests and
+    /// cancellations of that account made with its other phones: changing the phone does not start the count again.
     /// </summary>
     public static async Task<string?> RefusalForPhoneAsync(
-        IApplicationDbContext context, string phone, DateTimeOffset now, CancellationToken cancellationToken)
+        IApplicationDbContext context, string phone, Guid? accountId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var key = MessagingPhone.ToKey(phone);
         var fakeSince = ResponseTimes.Since(now);
@@ -581,9 +583,11 @@ internal static class PublicAppointmentReceipts
             return RequestPublicAppointmentCommandHandler.MarkedFakeMessage;
 
         var since = now - OnlineBookingRules.CancelledCountFor;
-        // A request its customer cancelled is no longer waiting: it counts once.
-        var counted = await context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online
-            && a.RequestPhone == key
+        // A request its customer cancelled is no longer waiting: it counts once, by its phone or by its account.
+        var ofTheCustomer = accountId is { } account
+            ? context.Appointments.Where(a => a.RequestPhone == key || a.CustomerUserId == account)
+            : context.Appointments.Where(a => a.RequestPhone == key);
+        var counted = await ofTheCustomer.CountAsync(a => a.Channel == AppointmentChannel.Online
             && ((a.Status == AppointmentStatus.Requested && a.StartAt > now) || a.CancelledByCustomerAt >= since), cancellationToken);
         return counted >= OnlineBookingRules.MaxPendingPerPhone
             ? RequestPublicAppointmentCommandHandler.TooManyPendingMessage

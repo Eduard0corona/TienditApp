@@ -39,7 +39,7 @@ El dueño del producto pidió avanzar este punto (el 12), entre otros, sin esper
 6. **Lo que lee el dueño** en «Cómo te ven en TienditApp» ([ADR 0065](0065-response-time-outside-explore.md)): «Lo calculamos con tus solicitudes en línea de los últimos 90 días, la última de cada cliente, sin las de tu equipo ni las que marcaste como falsas. …».
 7. **La migración** `20261107190735_AddAppointmentMarkedFakeAt` agrega dos columnas que admiten `NULL` (`MarkedFakeAt` y `UnmarkedFakeAt`), sin valor por omisión y sin índice, y no cambia datos. La versión anterior sigue funcionando con ellas. El teléfono marcado se busca con el índice de cada cliente que ya existe (`IX_Appointments_OnlineRequests_Customer`, Fase 29M). Su `apply.sql`, `rollback.sql` y `verify.sql` están en `database/production/`.
 8. **Fuera de esta fase:**
-   - un tope de cuántas solicitudes puede marcar un negocio, o que alguien revise las que marca;
+   - un tope de cuántas solicitudes puede marcar un negocio, o que alguien revise las que marca: desde la Fase 30A ([ADR 0081](0081-notice-changes-fake-watch-and-account-cap.md)) la consola de la plataforma muestra quién marca más y qué teléfonos marcaron varios negocios;
    - pedir que el cliente confirme su teléfono antes de pedir (las mismas razones de la [ADR 0067](0067-requests-that-count.md));
    - bloquear por la IP o por la cuenta de quien la mandó;
    - avisarle a TienditApp de un teléfono que varios negocios marcan.

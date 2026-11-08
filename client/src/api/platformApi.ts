@@ -7,6 +7,7 @@ export type PlanInput = Omit<Schemas['CreatePlanCommand'], 'modules'> & { module
 export type PlanUpdate = Omit<Schemas['UpdatePlanCommand'], 'modules'> & { modules: number };
 export type PlatformTenant = Schemas['PlatformTenantDto'];
 export type PlatformOverview = Schemas['PlatformOverviewDto'];
+export type FakeRequestsWatch = Schemas['FakeRequestsWatchDto'];
 export type SubscriptionDetail = Schemas['SubscriptionDetailDto'];
 export type SubscriptionStatus = Schemas['SubscriptionStatus'];
 export type SubscriptionPaymentMethod = Schemas['SubscriptionPaymentMethod'];
@@ -45,6 +46,9 @@ export const PAYMENT_METHOD_LABELS: Record<SubscriptionPaymentMethod, string> = 
 /** Platform console (platform admin only): businesses, plans and billing. */
 export const platformApi = {
   getOverview: () => apiRequest('get', '/api/v1/platform/overview'),
+
+  /** Fase 30A: the requests marked as fake in every business, as the platform watches them. */
+  getFakeRequests: () => apiRequest('get', '/api/v1/platform/fake-requests'),
 
   getTenants: (query: { search?: string; subscriptionStatus?: SubscriptionStatus; withoutPlan?: boolean; planId?: string; pageNumber?: number; pageSize?: number }) =>
     apiRequest('get', '/api/v1/platform/tenants', { query }),

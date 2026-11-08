@@ -20,12 +20,21 @@ public static class EmployeeNoticeEmails
     /// Saves only what changes what the person gets: null leaves a notice as it is, and asking for what they already get keeps
     /// their choice (or its absence) as it was.
     /// </summary>
-    public static void Apply(TenantUser member, bool? requestEmails, bool? quoteReplyEmails)
+    /// <returns>What changed, each notice null when it did not (Fase 30A): what the person is told.</returns>
+    public static (bool? RequestEmails, bool? QuoteReplyEmails) Apply(TenantUser member, bool? requestEmails, bool? quoteReplyEmails)
     {
+        bool? requestsChanged = null, quoteRepliesChanged = null;
         if (requestEmails is { } requests && requests != member.GetsRequestEmails)
+        {
             member.ChooseRequestEmails(requests);
+            requestsChanged = requests;
+        }
         if (quoteReplyEmails is { } quoteReplies && quoteReplies != member.GetsQuoteReplyEmails)
+        {
             member.ChooseQuoteReplyEmails(quoteReplies);
+            quoteRepliesChanged = quoteReplies;
+        }
+        return (requestsChanged, quoteRepliesChanged);
     }
 
     private static bool Changes(TenantUser member, bool? requestEmails, bool? quoteReplyEmails)

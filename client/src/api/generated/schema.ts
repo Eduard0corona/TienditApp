@@ -11144,6 +11144,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/fake-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["FakeRequestsWatchDto"];
+                        "application/json": components["schemas"]["FakeRequestsWatchDto"];
+                        "text/json": components["schemas"]["FakeRequestsWatchDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform/reviews": {
         parameters: {
             query?: never;
@@ -17990,6 +18027,32 @@ export interface components {
         ExtendTrialRequest: {
             /** Format: int32 */
             days: number;
+        };
+        FakeRequestsBusinessDto: {
+            /** Format: uuid */
+            tenantId: string;
+            name: string;
+            slug: string;
+            /** Format: int32 */
+            marked: number;
+            /** Format: int32 */
+            takenBack: number;
+            /** Format: int32 */
+            requests: number;
+            /** Format: date-time */
+            lastMarkedAt: string;
+        };
+        FakeRequestsPhoneDto: {
+            ending: string;
+            businessNames: string[];
+            /** Format: date-time */
+            lastMarkedAt: string;
+        };
+        FakeRequestsWatchDto: {
+            businesses: components["schemas"]["FakeRequestsBusinessDto"][];
+            phones: components["schemas"]["FakeRequestsPhoneDto"][];
+            /** Format: int32 */
+            top: number;
         };
         ForgotPasswordBySmsCommand: {
             email: string;

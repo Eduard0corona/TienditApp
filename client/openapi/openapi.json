@@ -13244,6 +13244,35 @@
         }
       }
     },
+    "/api/v1/platform/fake-requests": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FakeRequestsWatchDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FakeRequestsWatchDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FakeRequestsWatchDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/reviews": {
       "get": {
         "tags": [
@@ -26035,6 +26064,98 @@
         "type": "object",
         "properties": {
           "days": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FakeRequestsBusinessDto": {
+        "required": [
+          "lastMarkedAt",
+          "marked",
+          "name",
+          "requests",
+          "slug",
+          "takenBack",
+          "tenantId"
+        ],
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "marked": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "takenBack": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "requests": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastMarkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FakeRequestsPhoneDto": {
+        "required": [
+          "businessNames",
+          "ending",
+          "lastMarkedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "ending": {
+            "type": "string"
+          },
+          "businessNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastMarkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FakeRequestsWatchDto": {
+        "required": [
+          "businesses",
+          "phones",
+          "top"
+        ],
+        "type": "object",
+        "properties": {
+          "businesses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FakeRequestsBusinessDto"
+            }
+          },
+          "phones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FakeRequestsPhoneDto"
+            }
+          },
+          "top": {
             "type": "integer",
             "format": "int32"
           }

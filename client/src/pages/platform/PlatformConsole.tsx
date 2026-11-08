@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
+import FakeRequestsWatch from '../../components/platform/FakeRequestsWatch';
 import TenantBillingModal from '../../components/platform/TenantBillingModal';
 import { getApiErrorMessage } from '../../api/errors';
 import {
@@ -181,6 +182,8 @@ export default function PlatformConsole() {
           )}
         </div>
       </div>
+
+      <FakeRequestsWatch />
 
       {selectedTenant && <TenantBillingModal tenant={selectedTenant} plans={plans.data ?? []} onClose={() => setSelected(null)} />}
     </>

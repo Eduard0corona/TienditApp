@@ -39,7 +39,7 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
 3. **Inicio deja de recibir `ordersByStatus`.** Sale de `DashboardMetricsDto`. Las tarjetas de Inicio salen del mismo conteo por estado, que se queda.
 4. **El nombre largo del negocio usa dos líneas** en teléfonos de hasta 575 px, en vez de recortarse: en 360 px, «Taquería Los Compadres» se lee completo. Uno corto se ve igual que antes.
 5. **Fuera de esta fase:**
-   - Avisar a la persona cuando alguien más cambia sus avisos, o decir quién lo hizo.
+   - Avisar a la persona cuando alguien más cambia sus avisos, o decir quién lo hizo: llegó en la Fase 30A ([ADR 0081](0081-notice-changes-fake-watch-and-account-cap.md)), por correo.
    - Elegir por el equipo otros avisos (WhatsApp o del navegador).
    - Ofrecer en el filtro el canal de un menú que dejó de tomar pedidos o de un número de WhatsApp que se quitó.
 
