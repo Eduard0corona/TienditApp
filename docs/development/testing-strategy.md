@@ -2528,6 +2528,25 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Cliente:** 208 archivos y 1,599 pruebas, lint y build en verde.
   - **Primera visita:** 180,232 B (`master` en `3b8157c`: 182,241 B, −2,009 B). La entrada lleva solo 9 enums (574 B sin comprimir, antes 4,403 B); los demás bajan con su pantalla, y los que comparten varias van en 7 chunks propios de 45 a 108 B sin comprimir. El presupuesto baja de 182,300 a 180,300 B. Con `output.experimentalMinChunkSize` de Rollup en 1,000 B la primera visita bajaba a 179,961 B y quedaban 35 archivos menos, pero esa opción experimental reacomoda todo el grafo: no se usa.
   - **Escenas:** contra la línea base de `master` en `3b8157c` (810 escenas): 809 iguales. «La tienda: botón del pedido» salió distinta y también falla sola con el build de `master` (una de cuatro corridas): no depende del cambio.
+- Fase 30E, la lectura del tiempo de confirmar une el historial una vez (continúa la [ADR 0082](../adr/0082-order-cancellation-email-reminder-lead-and-online-orders-index.md), punto 3):
+  - **Application:** `OrderConfirmTimeInExploreTests` (+1, 11 en total): un cliente confirmado al momento, después a los 40 minutos y otra vez al momento cuenta por el último. La consulta nueva toma, de cada tramo, cuándo llegó su último pedido, y una que tomara el primero contaría el lento.
+  - **WebApi:** las 11 de `CrossTenantDirectory*SqlServerTests`, sin cambios, en verde contra SQL Server: la consulta traduce y da lo mismo que antes.
+  - **Mutaciones:** las 6 hacen fallar una prueba:
+    - quitar el filtro de los clientes sin nada decidido;
+    - contar como lento un pedido que aún no espera media hora;
+    - tomar la cancelación del cliente como respuesta;
+    - el primer pedido de cada tramo en vez del último (la mataba solo la prueba nueva);
+    - borrar el tramo de 15 a 30 minutos;
+    - contar los pedidos que registró el equipo.
+  - **Medición** con una prueba desechable, que no se versiona. Fue la misma de la 30B: la foto completa de Explorar en SQL Server, sin otra carga, una cocina con 25,000 y 100,000 pedidos en 90 días (uno de cada diez en línea) y el tiempo de cada consulta (`sys.dm_exec_query_stats`, con el caché limpio entre cada prueba). La lectura del tiempo de confirmar:
+
+    | Pedidos | `master` | 30E | `master` con el índice filtrado | 30E con el índice filtrado |
+    |---|---|---|---|---|
+    | 25,000 | 367 ms | 84 a 90 ms | 1,965 ms | 35 a 50 ms |
+    | 100,000 | 826 ms | 206 a 436 ms | 985 ms | 168 a 198 ms |
+
+    Son tres corridas de la 30E y una de `master` en la misma máquina; la 30B había medido 1.8 s y hasta 28 s con el índice. Los tiempos varían entre corridas: la lectura de los pedidos listos, que no cambió, salió de 157 a 375 ms. El índice filtrado ya no empeora la lectura y la ayuda, pero agregarlo pide migración.
+  - **.NET en total:** 4,873 pruebas en verde con SQL Server (Domain 1,436; Application 2,209; WebApi 510; Infrastructure 718). Sin cambios en el cliente.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
