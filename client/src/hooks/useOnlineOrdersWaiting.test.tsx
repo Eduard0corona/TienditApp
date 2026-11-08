@@ -18,7 +18,7 @@ function Live({ enabled = true }: { enabled?: boolean }) {
   return null;
 }
 
-const renderLive = () => render(<ToastProvider><Live /></ToastProvider>);
+const renderLive = (enabled = true) => render(<ToastProvider><Live enabled={enabled} /></ToastProvider>);
 
 describe('the online orders waiting 15 minutes, on any screen (Fase 29X)', () => {
   beforeEach(() => {
@@ -55,10 +55,21 @@ describe('the online orders waiting 15 minutes, on any screen (Fase 29X)', () =>
     expect(screen.getByText(describeWaiting(3).message)).toBeInTheDocument();
   });
 
+  it('reads the bell also with the tab hidden, and tells nothing to whoever does not confirm the orders', () => {
+    withWaiting(0);
+    const { rerender } = renderLive(false);
+    expect(vi.mocked(useAttention)).toHaveBeenCalledWith(false, { inBackground: true });
+
+    withWaiting(2);
+    act(() => rerender(<ToastProvider><Live enabled={false} /></ToastProvider>));
+    expect(screen.queryByText(/sin confirmar/)).not.toBeInTheDocument();
+    expect(chime.play).not.toHaveBeenCalled();
+  });
+
   it('says how many wait, and when they count among the slowest', () => {
     expect(describeWaiting(1).message)
-      .toBe('Un pedido en línea lleva 15 minutos sin confirmar. A la media hora cuenta entre los más lentos en Explorar.');
+      .toBe('Un pedido en línea lleva 15 minutos o más sin confirmar. A la media hora cuenta entre los más lentos en tu tiempo para confirmar.');
     expect(describeWaiting(2).message)
-      .toBe('2 pedidos en línea llevan 15 minutos o más sin confirmar. A la media hora cuentan entre los más lentos en Explorar.');
+      .toBe('2 pedidos en línea llevan 15 minutos o más sin confirmar. A la media hora cuentan entre los más lentos en tu tiempo para confirmar.');
   });
 });

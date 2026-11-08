@@ -16,22 +16,22 @@ El dueño del producto pidió avanzar este punto (el 1), entre otros, sin espera
 
 1. **Qué pedido:** uno del menú en línea que sigue «Por confirmar», como en la [ADR 0074](0074-order-confirm-time.md): no uno de una mesa (lo atiende quien sirve la mesa) ni uno que tomó el equipo.
 2. **Sus tiempos** (los de la [ADR 0074](0074-order-confirm-time.md)):
-   - a los 15 minutos de llegar se avisa: va a la mitad de contar entre los más lentos;
-   - a la media hora ya cuenta entre los más lentos.
+   - a los 15 minutos de llegar se avisa: lleva la mitad del tiempo antes de contar entre los más lentos;
+   - a la media hora ya cuenta entre los más lentos de su tiempo para confirmar.
 3. **En Pedidos:**
    - la API manda `confirmBy` en el pedido: media hora después de llegar, solo mientras sigue por confirmar;
    - la fila dice «Confírmalo antes de las 3:30 p.m. para que no cuente entre los más lentos», en la zona horaria del negocio;
-   - pasada la media hora dice, en rojo, «Ya pasó la media hora: cuenta entre los más lentos en Explorar»;
+   - pasada la media hora dice, en rojo, «Ya pasó la media hora: cuenta entre los más lentos en tu tiempo para confirmar». No dice «en Explorar»: un negocio que no aparece ahí, o un pedido que no cuenta (no es el último de su cliente), también lo lee;
    - lee el reloj cada minuto, así que el texto cambia con Pedidos abierto, como el de las solicitudes ([ADR 0066](0066-answer-requests-in-time.md)).
 4. **En la campana y en «Requiere atención» de Inicio:**
    - «3 pedidos en línea por confirmar (2 llevan 15 minutos o más)»;
    - con alguno de 15 minutos o más se pone roja;
-   - abre Pedidos en los que esperan, de cualquier día (`/orders?estado=por-confirmar`).
+   - abre Pedidos en los que esperan, de cualquier día (`/orders?estado=por-confirmar`), también con Pedidos abierto; un filtro que la persona elige o «Limpiar filtros» quita el enlace, así que al recargar se quedan los suyos.
 5. **En cualquier pantalla:**
-   - quien confirma los pedidos lee «Un pedido en línea lleva 15 minutos sin confirmar. A la media hora cuenta entre los más lentos en Explorar.», o cuántos llevan;
+   - quien confirma los pedidos lee «Un pedido en línea lleva 15 minutos o más sin confirmar. A la media hora cuenta entre los más lentos en tu tiempo para confirmar.», o cuántos llevan;
    - sale cuando uno más cumple 15 minutos, y suena si el dispositivo tiene prendido el sonido de los pedidos en línea (el de Pedidos, Fase 29P);
    - lo que ya esperaba al abrir la pantalla está en la campana, y no se avisa otra vez;
-   - lee la cuenta de la campana, que la API calcula y la campana lee cada minuto: el aviso llega dentro de ese minuto.
+   - lee la cuenta de la campana, que la API calcula, cada minuto y también con la pestaña oculta: el aviso llega en más o menos un minuto.
 6. **Fuera de esta fase:**
    - avisar por correo, WhatsApp o una notificación del navegador;
    - poner primero en Pedidos los que esperan;
@@ -47,10 +47,11 @@ El dueño del producto pidió avanzar este punto (el 1), entre otros, sin espera
 - **Lo que limita:**
   - **Es de buena fe:**
     - el aviso sale de la cuenta de la campana, así que si en el mismo minuto un pedido cumple 15 minutos y otro se confirma, la cuenta no sube y no se avisa (la campana sí lo cuenta);
-    - sin conexión o con la sesión cerrada no se avisa.
+    - sin conexión o con la sesión cerrada no se avisa;
+    - con la pestaña oculta, el navegador puede espaciar las lecturas más de un minuto.
   - **Los minutos están en el texto:** «15 minutos» y «media hora» los dice el cliente. Si cambian los tramos de la [ADR 0074](0074-order-confirm-time.md), hay que cambiar los textos.
   - **El texto de la fila usa el reloj del dispositivo:** con la hora mal puesta dice algo equivocado. Un pedido que llegó cerca de la medianoche dice solo la hora, sin el día.
-  - **Un pedido de mesa** sigue en la campana, pero no la pone roja ni se avisa.
+  - **Un pedido de mesa** sigue en la campana, pero no la pone roja ni se avisa: el número entre paréntesis cuenta solo los del menú en línea.
   - **Contrato:** `OrderDto` suma `confirmBy`; los clientes anteriores lo ignoran.
 - **Decisión por omisión** (sin preferencia expresa del dueño):
   - avisar a los 15 minutos;

@@ -150,6 +150,9 @@ function getStatusLabel(status: OrderStatus): string {
 // Several realtime events usually arrive together; one reload covers all of them.
 const EVENT_RELOAD_DELAY_MS = 400;
 
+/** The link of the bell's online orders to confirm (Fase 29X). */
+const TO_CONFIRM_LINK = 'por-confirmar';
+
 /**
  * By when an order of the online menu still waiting is confirmed in time (Fase 29X); it reads the clock every minute, so it
  * says the half hour passed with Pedidos open.
@@ -170,11 +173,12 @@ export default function OrdersList() {
   const receiptTitleId = useId();
   const queryClient = useQueryClient();
   const today = getBusinessToday();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // A search from the global search (Ctrl K) or a link looks in every date, not only today.
   const initialSearch = searchParams.get('search')?.trim() ?? '';
   // The bell's online orders to confirm (Fase 29X) open the ones still waiting, of any day.
-  const toConfirm = searchParams.get('estado') === 'por-confirmar';
+  const linkedStatus = searchParams.get('estado');
+  const toConfirm = linkedStatus === TO_CONFIRM_LINK;
   const [data, setData] = useState<PaginatedList<OrderDto>>({
     items: [],
     pageNumber: 1,
@@ -193,6 +197,25 @@ export default function OrdersList() {
   const [search, setSearch] = useState(initialSearch);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  // The bell leads here also from this screen: a link followed again opens the ones waiting, of any day.
+  const [seenLink, setSeenLink] = useState(linkedStatus);
+  if (seenLink !== linkedStatus) {
+    setSeenLink(linkedStatus);
+    if (linkedStatus === TO_CONFIRM_LINK) {
+      setSelectedStatus(String(OrderStatusConst.Pending));
+      setFromDate('');
+      setToDate('');
+      setPageNumber(1);
+    }
+  }
+  // A filter set by hand drops the one the link named: the bell sets it again, and a reload keeps these.
+  const dropLink = () => {
+    if (linkedStatus)
+      setSearchParams((params) => {
+        params.delete('estado');
+        return params;
+      }, { replace: true });
+  };
   const [selectedOrder, setSelectedOrder] = useState<OrderDto | null>(null);
   // The realtime handlers read the open order without resubscribing on every selection.
   const selectedOrderIdRef = useRef<string | null>(null);
@@ -561,7 +584,9 @@ export default function OrdersList() {
                 columns={columns}
                 keyExtractor={(order) => order.id}
                 loading={loading}
-                emptyMessage={search ? 'No hay pedidos que coincidan con la búsqueda.' : 'No hay pedidos en estas fechas.'}
+                emptyMessage={search
+                  ? 'No hay pedidos que coincidan con la búsqueda.'
+                  : fromDate || toDate ? 'No hay pedidos en estas fechas.' : 'No hay pedidos con estos filtros.'}
                 searchPlaceholder="Folio, cliente o teléfono"
                 initialSearch={initialSearch}
                 filters={(
@@ -574,6 +599,7 @@ export default function OrdersList() {
                           onChange={(e) => {
                             setSelectedOrderType(e.target.value);
                             setSelectedStatus('');
+                            dropLink();
                             setPageNumber(1);
                           }}
                         >
@@ -590,6 +616,7 @@ export default function OrdersList() {
                         value={selectedStatus}
                         onChange={(e) => {
                           setSelectedStatus(e.target.value);
+                          dropLink();
                           setPageNumber(1);
                         }}
                       >
@@ -608,6 +635,7 @@ export default function OrdersList() {
                           value={selectedChannel}
                           onChange={(e) => {
                             setSelectedChannel(e.target.value);
+                            dropLink();
                             setPageNumber(1);
                           }}
                         >
@@ -627,6 +655,7 @@ export default function OrdersList() {
                         value={fromDate}
                         onChange={(e) => {
                           setFromDate(e.target.value);
+                          dropLink();
                           setPageNumber(1);
                         }}
                       />
@@ -638,6 +667,7 @@ export default function OrdersList() {
                         value={toDate}
                         onChange={(e) => {
                           setToDate(e.target.value);
+                          dropLink();
                           setPageNumber(1);
                         }}
                       />
@@ -651,6 +681,7 @@ export default function OrdersList() {
                         setSelectedChannel('');
                         setFromDate(today);
                         setToDate(today);
+                        dropLink();
                         setPageNumber(1);
                       }}
                     >

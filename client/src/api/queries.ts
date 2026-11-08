@@ -24,12 +24,17 @@ export const queryKeys = {
 const ATTENTION_REFRESH_MS = 60_000;
 
 /** What needs someone now, counted by the API only for what the person may handle (the bell and Inicio). */
-export function useAttention(enabled = true) {
+/**
+ * What needs someone now (the bell), read every minute. `inBackground` keeps reading while the tab is hidden: the notice of
+ * the online orders waiting (Fase 29X) is for whoever left TienditApp in another tab.
+ */
+export function useAttention(enabled = true, { inBackground = false }: { inBackground?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.attention,
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/dashboard/attention', { signal }),
     enabled,
     refetchInterval: ATTENTION_REFRESH_MS,
+    refetchIntervalInBackground: inBackground,
   });
 }
 

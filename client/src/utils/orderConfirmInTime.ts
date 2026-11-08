@@ -8,7 +8,7 @@ import { formatInBusinessZone } from './dates';
 export function confirmInTimeLabel(confirmBy: string, now: Date = new Date()): { text: string; late: boolean } {
   const limit = new Date(confirmBy);
   if (limit.getTime() <= now.getTime())
-    return { text: 'Ya pasó la media hora: cuenta entre los más lentos en Explorar', late: true };
+    return { text: 'Ya pasó la media hora: cuenta entre los más lentos en tu tiempo para confirmar', late: true };
   const time = formatInBusinessZone(limit, { hour: 'numeric', minute: '2-digit' });
   // "de las 3:30", but "de la 1:30" in the one o'clock hour.
   return { text: `Confírmalo antes de ${time.startsWith('1:') ? 'la' : 'las'} ${time} para que no cuente entre los más lentos`, late: false };

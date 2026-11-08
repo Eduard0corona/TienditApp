@@ -19,7 +19,7 @@ describe('confirmInTimeLabel (Fase 29X)', () => {
   it('says when the half hour passed, at its very minute too', () => {
     setBusinessTimeZone('America/Mexico_City');
 
-    const late = { text: 'Ya pasó la media hora: cuenta entre los más lentos en Explorar', late: true };
+    const late = { text: 'Ya pasó la media hora: cuenta entre los más lentos en tu tiempo para confirmar', late: true };
     expect(confirmInTimeLabel('2027-03-01T19:10:00Z', now)).toEqual(late);
     expect(confirmInTimeLabel('2027-03-01T18:00:00Z', now)).toEqual(late);
   });

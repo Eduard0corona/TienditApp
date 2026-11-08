@@ -75,7 +75,7 @@ public static class OrderMappings
         CreatedAt = order.CreatedAt,
         ConfirmBy = order.Channel == OrderChannel.Online && !order.CreatedByBusiness && order.TableNumber == null
             && order.OpenTableId == null && order.Status == OrderStatus.Pending
-                ? order.CreatedAt.AddMinutes(OrderConfirmTimes.SlowAfterMinutes)
+                ? OrderConfirmTimes.ConfirmBy(order.CreatedAt)
                 : null,
         UpdatedAt = order.UpdatedAt,
         Items = order.Items.Select(ToDto).ToList(),
