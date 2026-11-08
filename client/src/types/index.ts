@@ -1713,6 +1713,8 @@ export interface OrderDto {
   tipTotal?: number;
   cancellationReason?: string;
   createdAt: string;
+  /** For an order of the online menu still «Por confirmar», until when its answer keeps it out of the slowest (Fase 29X). */
+  confirmBy?: string | null;
   updatedAt?: string;
   items: OrderItemDto[];
   statusHistory: OrderStatusHistoryDto[];
