@@ -89,6 +89,13 @@ describe('quoteTimeLabel and ownQuoteTimeNote (Fase 29S)', () => {
     expect(ownQuoteTimeNote(QuoteTime.Slower)).toMatch(/^Sueles tardar una semana o más/);
     expect(ownQuoteTimeNote(null)).toMatch(/^Todavía no contamos visitas en línea de 3 clientes/);
   });
+
+  it('tells its owner that a visit a week past its end without its quote counts among the slowest (Fase 29W)', () => {
+    expect(ownQuoteTimeNote(QuoteTime.WithinThreeDays)).toContain(
+      'Una visita que lleva una semana de terminada sin su cotización mandada cuenta entre las más lentas, salvo que descartes su cotización o que cobres el trabajo en la visita sin empezar una.');
+    expect(ownQuoteTimeNote(QuoteTime.Slower)).toMatch(/Cuentan así también las visitas que llevan una semana de terminadas sin su cotización mandada\.$/);
+    expect(ownQuoteTimeNote(null)).toMatch(/o cuando pasa una semana desde que termina la visita sin que la mandes\.$/);
+  });
 });
 
 describe('orderConfirmTimeLabel and ownOrderConfirmTimeNote (Fase 29T)', () => {

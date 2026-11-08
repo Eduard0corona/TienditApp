@@ -16,13 +16,17 @@ export function ownResponseTimeNote(responseTime: ResponseTime | null | undefine
   return 'Lo calculamos con tus solicitudes en línea de los últimos 90 días, la última de cada cliente, sin las de tu equipo ni las que marcaste como falsas. Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas.';
 }
 
-/** What its owner reads of how soon it quotes, while Explorar counts its requests and it receives visits (Fase 29S). */
+/**
+ * What its owner reads of how soon it quotes, while Explorar counts its requests and it receives visits (Fase 29S). Since
+ * Fase 29W (ADR 0077) a visit accepted that goes a week past its end without its quote sent counts among the slowest, unless
+ * its quote was discarded, or its work was charged at the visit and no quote was started.
+ */
 export function ownQuoteTimeNote(quoteTime: QuoteTime | null | undefined): string {
   if (quoteTime == null)
-    return 'Todavía no contamos visitas en línea de 3 clientes con su cotización mandada para saber en cuánto sueles cotizar.';
+    return 'Todavía no contamos visitas en línea de 3 clientes para saber en cuánto sueles cotizar: una cuenta cuando mandas su cotización, o cuando pasa una semana desde que termina la visita sin que la mandes.';
   if (quoteTime === QuoteTime.Slower)
-    return 'Sueles tardar una semana o más en mandar la cotización después de la visita, así que tus clientes no lo leen.';
-  return 'Lo contamos desde que termina cada visita en línea hasta que mandas su cotización, en los últimos 90 días, la última de cada cliente. Tus clientes lo leen en tu tarjeta y donde te piden la visita.';
+    return 'Sueles tardar una semana o más en mandar la cotización después de la visita, así que tus clientes no lo leen. Cuentan así también las visitas que llevan una semana de terminadas sin su cotización mandada.';
+  return 'Lo contamos desde que termina cada visita en línea hasta que mandas su cotización, en los últimos 90 días, la última de cada cliente. Una visita que lleva una semana de terminada sin su cotización mandada cuenta entre las más lentas, salvo que descartes su cotización o que cobres el trabajo en la visita sin empezar una. Tus clientes lo leen en tu tarjeta y donde te piden la visita.';
 }
 
 /** What its owner reads of how soon it confirms its online orders, while Explorar counts them (Fase 29T, ADR 0074). */

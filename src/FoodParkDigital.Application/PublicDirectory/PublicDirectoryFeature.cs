@@ -727,11 +727,12 @@ public sealed class PublicDirectorySnapshot
             .Select(entry => entry.Business.AcceptsOrders || entry.Business.OrdersPaused
                 ? entry with { OrderConfirmTime = confirms.GetValueOrDefault(entry.TenantId), OrderConfirmTimeRead = confirmsRead }
                 : entry)
-            // The order of Explorar (Fase 29S, ADR 0073): by group, those that answer their requests sooner first within it
-            // (one without enough in the middle, as one that takes none), then by name. Every list of Explorar keeps it: the
-            // whole list, each category, and the products and services of a search; «Cerca de mí» orders by distance.
+            // The order of Explorar (Fase 29S, ADR 0073): by group, the quicker first within it (one that says nothing yet in
+            // the middle), then by name. Since the Fase 29W (ADR 0077) it counts every time: answering its requests, sending
+            // its quotes and confirming its orders. Every list of Explorar keeps it: the whole list, each category, and the
+            // products and services of a search; «Cerca de mí» orders by distance.
             .OrderBy(entry => entry.Rank)
-            .ThenBy(entry => ResponseTimes.Order(entry.ResponseTime))
+            .ThenBy(entry => ExploreOrder.Of(entry.ResponseTime, entry.QuoteTime, entry.OrderConfirmTime))
             .ThenBy(entry => entry.Business.Name, Names)
             .ToList();
         foreach (var entry in entries)
@@ -850,52 +851,99 @@ public sealed class PublicDirectorySnapshot
     /// How soon each trade listed sends the quote after the visits its customers requested online (Fase 29S, ADR 0073): one
     /// row per business, the first version of each visit's quote sent since <see cref="QuoteTimes.Since"/>, counted by how long
     /// after the end of its visit it was sent (before the end, nothing), once the visit ended and unless it was cancelled or
-    /// missed. As for the requests (Fase 29M, ADR 0067), visits from
-    /// the business's own team do not count, and a customer counts once: of the visits of one phone, the one quoted last. The
-    /// phone is only compared in the database, never read.
+    /// missed. Since the Fase 29W (ADR 0077), a visit accepted that went <see cref="QuoteTimes.NeverQuotedAfterHours"/> past
+    /// its end without its quote sent counts as sent then, among the slowest, when nothing came of it for its customer: a quote
+    /// started and not discarded, or no quote at all and no work charged at the visit (a sale with more than the visit's
+    /// service). A request nobody accepted never took place, and counts already among the slowest to answer. As for the
+    /// requests (Fase 29M, ADR 0067), visits from the business's own team do not count, and a customer counts once: of the
+    /// visits of one phone, the one decided last (its quote sent, or its week past). The phone is only compared in the
+    /// database, never read.
     /// </summary>
     internal static async Task<Dictionary<Guid, QuoteTime?>> QuoteTimesAsync(
         IApplicationDbContext context, IQueryable<Tenant> listed, DateTimeOffset utcNow, CancellationToken cancellationToken)
     {
         var since = QuoteTimes.Since(utcNow);
         int aDay = QuoteTimes.LimitHours[0], threeDays = QuoteTimes.LimitHours[1], aWeek = QuoteTimes.LimitHours[2];
-        // A visit requested online, by a customer, that took place (it ended, and was neither cancelled nor missed), whose first
-        // version of its quote was sent: the one of its business only. A sent quote is never discarded; saying so lets SQL
-        // Server use the index of the first version of each visit's quote.
-        var quoted =
-            from visit in context.Appointments.IgnoreQueryFilters().AsNoTracking()
-            join quote in context.Quotes.IgnoreQueryFilters().AsNoTracking()
-                on new { visit.TenantId, AppointmentId = (Guid?)visit.Id } equals new { quote.TenantId, quote.AppointmentId }
-            where visit.Channel == AppointmentChannel.Online && visit.Visit != null && !visit.FromTeam
+        var neverQuotedAfter = QuoteTimes.NeverQuotedAfterHours;
+        // A visit counts as never quoted once it ended a week ago, while that week ended within the window: computed here, so
+        // the database compares the end of each visit as it is.
+        DateTimeOffset endedBy = utcNow.AddHours(-neverQuotedAfter), endedSince = since.AddHours(-neverQuotedAfter);
+        // A visit requested online, by a customer, that took place (it ended, and was neither cancelled nor missed): the ones of
+        // the businesses listed, read first, so the query below compares each visit with a plain list.
+        var listedIds = await listed.Select(t => t.Id).ToListAsync(cancellationToken);
+        var visits = context.Appointments.IgnoreQueryFilters().AsNoTracking()
+            .Where(visit => visit.Channel == AppointmentChannel.Online && visit.Visit != null && !visit.FromTeam
                 && visit.EndAt <= utcNow && visit.Status != AppointmentStatus.Cancelled && visit.Status != AppointmentStatus.NoShow
-                && quote.Revision == 1 && quote.Status != QuoteStatus.Discarded && quote.SentAt >= since
-                && listed.Any(t => t.Id == visit.TenantId)
-            // Never null past the filter: written so, the comparison below is one subquery, not two.
-            select new { visit.TenantId, visit.RequestPhone, visit.EndAt, SentAt = quote.SentAt ?? since };
-        var counted = await quoted
-            // One per customer of each business: of those of the same phone, the one quoted last.
-            .Where(v => v.SentAt == quoted
-                .Where(same => same.TenantId == v.TenantId && same.RequestPhone == v.RequestPhone)
-                .Max(same => same.SentAt))
-            .GroupBy(v => v.TenantId)
-            .Select(g => new
+                && listedIds.Contains(visit.TenantId));
+        var quotes = context.Quotes.IgnoreQueryFilters().AsNoTracking();
+        var sales = context.Orders.IgnoreQueryFilters().AsNoTracking();
+        var lines = context.OrderItems.IgnoreQueryFilters().AsNoTracking();
+        // Each visit with the first version of its quote, the one of its business only: a visit has at most one not discarded
+        // (an index says so, and lets SQL Server find it), and any version sent means the first one was sent, so it says
+        // both whether and when its quote went out. A visit counts when that quote was sent since the window opened, or
+        // (Fase 29W) when it is a week past its end without it, counted as sent then: only accepted ones, and only when a
+        // quote was started and not discarded, or when neither a quote nor the work came of it (a sale of the visit, not
+        // cancelled, with a line of something else than the visit's own service, charged the work).
+        var counting =
+            from visit in visits
+            join quote in quotes.Where(quote => quote.Revision == 1 && quote.Status != QuoteStatus.Discarded)
+                on new { visit.TenantId, AppointmentId = (Guid?)visit.Id } equals new { quote.TenantId, quote.AppointmentId }
+                into firsts
+            from first in firsts.DefaultIfEmpty()
+            where (first != null && first.SentAt >= since)
+                || (visit.Status != AppointmentStatus.Requested && visit.EndAt <= endedBy && visit.EndAt >= endedSince
+                    && (first != null
+                        ? first.SentAt == null
+                        : !quotes.Any(quote => quote.TenantId == visit.TenantId && quote.AppointmentId == visit.Id)
+                            && !sales.Any(sale => sale.TenantId == visit.TenantId && sale.Id == visit.SaleOrderId
+                                && sale.Status != OrderStatus.Cancelled
+                                && lines.Any(line => line.TenantId == visit.TenantId && line.OrderId == sale.Id
+                                    && line.ProductId != visit.ServiceProductId))))
+            select new
             {
-                TenantId = g.Key,
-                Visits = g.Count(),
-                WithinADay = g.Count(v => v.SentAt < v.EndAt.AddHours(aDay)),
-                WithinThreeDays = g.Count(v => v.SentAt < v.EndAt.AddHours(threeDays)),
-                WithinAWeek = g.Count(v => v.SentAt < v.EndAt.AddHours(aWeek))
+                visit.TenantId,
+                visit.RequestPhone,
+                visit.EndAt,
+                SentAt = first != null && first.SentAt != null ? first.SentAt.Value : visit.EndAt.AddHours(neverQuotedAfter)
+            };
+        // One per customer of each business: the visit of each phone decided last (its quote sent, or its week past). One
+        // reading groups the visits of each phone and says, for each tramo, when the last one in it was decided; the tramo of
+        // the customer's last visit is the one decided last (the slower one if two were decided at once). Only the business
+        // and those times come back, never the phone.
+        var customers = await counting
+            .GroupBy(v => new { v.TenantId, v.RequestPhone })
+            .Select(customer => new
+            {
+                customer.Key.TenantId,
+                WithinADay = customer.Max(v => v.SentAt < v.EndAt.AddHours(aDay) ? v.SentAt : (DateTimeOffset?)null),
+                WithinThreeDays = customer.Max(v => v.SentAt >= v.EndAt.AddHours(aDay) && v.SentAt < v.EndAt.AddHours(threeDays)
+                    ? v.SentAt : (DateTimeOffset?)null),
+                WithinAWeek = customer.Max(v => v.SentAt >= v.EndAt.AddHours(threeDays) && v.SentAt < v.EndAt.AddHours(aWeek)
+                    ? v.SentAt : (DateTimeOffset?)null),
+                Slower = customer.Max(v => v.SentAt >= v.EndAt.AddHours(aWeek) ? v.SentAt : (DateTimeOffset?)null)
             })
             .ToListAsync(cancellationToken);
-        return counted.ToDictionary(
-            row => row.TenantId,
-            row => QuoteTimes.Typical(
-            [
-                row.WithinADay,
-                row.WithinThreeDays - row.WithinADay,
-                row.WithinAWeek - row.WithinThreeDays,
-                row.Visits - row.WithinAWeek
-            ]));
+        return customers
+            .GroupBy(customer => customer.TenantId)
+            .ToDictionary(
+                business => business.Key,
+                business =>
+                {
+                    var counts = new int[QuoteTimes.LimitHours.Count + 1];
+                    foreach (var customer in business)
+                        counts[LastTramo([customer.WithinADay, customer.WithinThreeDays, customer.WithinAWeek, customer.Slower])]++;
+                    return QuoteTimes.Typical(counts);
+                });
+    }
+
+    /// <summary>The tramo decided last, of when the last visit in each was decided; the slower one of two at once.</summary>
+    private static int LastTramo(IReadOnlyList<DateTimeOffset?> lastInEach)
+    {
+        var last = 0;
+        for (var tramo = 1; tramo < lastInEach.Count; tramo++)
+            if (lastInEach[tramo] is { } decided && (lastInEach[last] is not { } soFar || decided >= soFar))
+                last = tramo;
+        return last;
     }
 
     /// <summary>

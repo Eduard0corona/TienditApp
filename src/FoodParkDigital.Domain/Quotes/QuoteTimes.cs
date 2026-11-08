@@ -16,8 +16,9 @@ public enum QuoteTime
 
 /// <summary>
 /// How long the customers of a trade waited for their quote after the visit they requested online (Fase 29S, ADR 0073): from
-/// the end of the visit until its quote was sent. One sent before the visit ended waited nothing. Only visits whose quote was
-/// sent count: one the trade never quoted says nothing, as a request not answered yet says nothing of its answer.
+/// the end of the visit until its quote was sent. One sent before the visit ended waited nothing. Since the Fase 29W (ADR
+/// 0077), a visit accepted that went <see cref="NeverQuotedAfterHours"/> past its end without its quote sent counts among
+/// the slowest when nothing came of it for its customer: a quote started and never sent, or neither a quote nor a charge.
 /// </summary>
 public static class QuoteTimes
 {
@@ -33,6 +34,12 @@ public static class QuoteTimes
     /// </summary>
     public static readonly IReadOnlyList<int> LimitHours = [24, 72, 168];
 
+    /// <summary>
+    /// How long after its end a visit without its quote sent counts among the slowest (Fase 29W): a week, the last limit, after
+    /// which a quote sent would count among them too.
+    /// </summary>
+    public static int NeverQuotedAfterHours => LimitHours[^1];
+
     /// <summary>Since when the quotes count at <paramref name="now"/>: those sent in the last <see cref="WindowDays"/> days.</summary>
     public static DateTimeOffset Since(DateTimeOffset now) => now.AddDays(-WindowDays);
 
@@ -47,4 +54,17 @@ public static class QuoteTimes
     /// <summary>What Explorar says of it: its <see cref="Typical"/> within a week, never <see cref="QuoteTime.Slower"/>.</summary>
     public static QuoteTime? Shown(QuoteTime? typical)
         => typical is QuoteTime.Slower ? null : typical;
+
+    /// <summary>
+    /// Its place in the order of Explorar (Fase 29W, ADR 0077), on the scale of <c>ResponseTimes.Order</c>: its first two
+    /// tramos with the first two of answering, within a week with the last of them (within a day), and a week or more with the
+    /// slowest. In the middle go those that say nothing yet.
+    /// </summary>
+    public static int Order(QuoteTime typical) => typical switch
+    {
+        QuoteTime.WithinADay => 0,
+        QuoteTime.WithinThreeDays => 1,
+        QuoteTime.WithinAWeek => 3,
+        _ => 4
+    };
 }

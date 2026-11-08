@@ -8,11 +8,15 @@ using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
+using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Quotes.Entities;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -115,6 +119,73 @@ public class QuoteTimeInExploreTests
     }
 
     [Fact]
+    public async Task AVisitAWeekPastItsEnd_WithoutItsQuoteSent_ShouldCountAmongTheSlowest_UnlessItsQuoteWasDiscarded_OrTheWorkCharged()
+    {
+        await using var fixture = Fixture();
+        // Quoted six customers at once. Each of these counts, a week past its end: a quote started and never sent, a visit
+        // that left nothing, one charged for the visit alone (charging it is the step before quoting), one whose work was
+        // charged but has a quote started, one charged in a sale later cancelled, a new quote started after the first was
+        // discarded, and one that ended 95 days ago, whose week was past within the 90 days. Six of thirteen within a day:
+        // with any of them less, half would be.
+        var (drafted, zone) = await TradeAsync(fixture, "borrador", "Plomería Borrador");
+        for (var n = 0; n < 6; n++)
+            await QuotedVisitAsync(fixture, drafted, zone, TimeSpan.FromHours(1));
+        foreach (var left in new[] { Left.Draft, Left.Nothing, Left.VisitCharged, Left.WorkChargedWithADraft, Left.WorkChargedThenCancelled, Left.DiscardedThenADraft })
+            await VisitLeftAsync(fixture, drafted, zone, left);
+        await VisitLeftAsync(fixture, drafted, zone, Left.Nothing, endedDaysAgo: 95);
+        // Quoted two customers at once. None of these counts: one whose work was charged at the visit, one whose quote was
+        // discarded, one six days past its end, one past the 90 days, and a request nobody accepted (it counts among the
+        // slowest to answer, and never took place). With any of them more, two of three would be within a day.
+        var (solved, otherZone) = await TradeAsync(fixture, "resuelto", "Plomería Resuelto");
+        await QuotedVisitAsync(fixture, solved, otherZone, TimeSpan.FromHours(1));
+        await QuotedVisitAsync(fixture, solved, otherZone, TimeSpan.FromHours(1));
+        await VisitLeftAsync(fixture, solved, otherZone, Left.WorkCharged);
+        await VisitLeftAsync(fixture, solved, otherZone, Left.Discarded);
+        await VisitLeftAsync(fixture, solved, otherZone, Left.Nothing, endedDaysAgo: 6);
+        await VisitLeftAsync(fixture, solved, otherZone, Left.Nothing, endedDaysAgo: 100);
+        await VisitLeftAsync(fixture, solved, otherZone, Left.Nothing, accepted: false);
+
+        var today = await SnapshotAsync(fixture);
+        Assert.Equal(QuoteTime.Slower, Entry(today, drafted).QuoteTime);
+        Assert.Null(Entry(today, solved).QuoteTime);
+
+        // Two days later the one six days past is a week past too: two of three within a day.
+        fixture.Clock.UtcNow = Now.AddDays(2);
+        Assert.Equal(QuoteTime.WithinADay, Entry(await SnapshotAsync(fixture), solved).QuoteTime);
+    }
+
+    [Fact]
+    public async Task ACustomer_ShouldCountOnce_ByTheVisitDecidedLast_ItsQuoteSentOrItsWeekPast()
+    {
+        await using var fixture = Fixture();
+        // Two customers whose visit of 30 days ago was never quoted (a week past it 23 days ago), and whose later visit was
+        // quoted an hour after it ended, 25 days ago: the one never quoted was decided last. With one other quoted at once,
+        // one of three within a day; by their last visit, or counting both, it would be at least half.
+        var (late, zone) = await TradeAsync(fixture, "tarde", "Plomería Tarde");
+        await QuotedVisitAsync(fixture, late, zone, TimeSpan.FromHours(1));
+        foreach (var phone in new[] { "5532100001", "5532100002" })
+        {
+            await VisitLeftAsync(fixture, late, zone, Left.Nothing, endedDaysAgo: 30, phone: phone);
+            await QuotedVisitAsync(fixture, late, zone, TimeSpan.FromHours(1), endedDaysAgo: 25, phone: phone);
+        }
+        // Two customers whose visit of 30 days ago was never quoted, and whose visit of 21 days ago was quoted an hour after it
+        // ended: the quote was decided last. With one other never quoted, two of three within a day; with the slow ones first,
+        // or counting both, it would be less than half.
+        var (recovered, otherZone) = await TradeAsync(fixture, "al-dia", "Plomería Al Día");
+        await VisitLeftAsync(fixture, recovered, otherZone, Left.Nothing);
+        foreach (var phone in new[] { "5532100001", "5532100002" })
+        {
+            await VisitLeftAsync(fixture, recovered, otherZone, Left.Nothing, endedDaysAgo: 30, phone: phone);
+            await QuotedVisitAsync(fixture, recovered, otherZone, TimeSpan.FromHours(1), endedDaysAgo: 21, phone: phone);
+        }
+
+        var today = await SnapshotAsync(fixture);
+
+        Assert.Equal(QuoteTime.Slower, Entry(today, late).QuoteTime);
+        Assert.Equal(QuoteTime.WithinADay, Entry(today, recovered).QuoteTime);
+    }
+
+    [Fact]
     public async Task TheLimits_ShouldLeaveOut_AWaitOfExactlyADay()
     {
         await using var fixture = Fixture();
@@ -205,6 +276,67 @@ public class QuoteTimeInExploreTests
         then?.Invoke(visit);
         fixture.Context.Appointments.Add(visit);
         await SendQuoteAsync(fixture, quotedBy ?? trade, visit, end + sentAfterTheEnd);
+    }
+
+    /// <summary>What came of a visit without its quote sent (Fase 29W).</summary>
+    private enum Left
+    {
+        Nothing,
+        Draft,
+        Discarded,
+        DiscardedThenADraft,
+        /// <summary>Charged in a sale of the visit's own service alone.</summary>
+        VisitCharged,
+        /// <summary>Charged in a sale with something else than the visit's service: the work was done at the visit.</summary>
+        WorkCharged,
+        WorkChargedWithADraft,
+        WorkChargedThenCancelled
+    }
+
+    /// <summary>
+    /// A visit a customer requested online that ended <paramref name="endedDaysAgo"/>, accepted half an hour after it arrived
+    /// unless said, without its quote sent.
+    /// </summary>
+    private static async Task VisitLeftAsync(
+        SalesTestFixture fixture, Tenant trade, DeliveryZone zone, Left left, int endedDaysAgo = 8, bool accepted = true,
+        string? phone = null)
+    {
+        var end = Now.AddDays(-endedDaysAgo);
+        var visitService = Guid.NewGuid();
+        var visit = Appointment.RequestHomeVisit(
+            trade.Id, "Valeria", phone ?? NewCustomerPhone(), visitService, HomeVisitRules.DefaultVisitName, end.AddHours(-1), end,
+            "Gotea el calentador", null, DeliveryAddress.ForVisit("72000", "Av. Juárez 123", null), zone,
+            HomeVisitChargePolicy.Charged, null, Guid.NewGuid(), Token());
+        visit.CreatedAt = end.AddDays(-2);
+        if (accepted)
+            visit.Accept(visit.CreatedAt.AddMinutes(30));
+        if (left is Left.VisitCharged or Left.WorkCharged or Left.WorkChargedWithADraft or Left.WorkChargedThenCancelled)
+        {
+            var sale = new Order(trade.Id, null, null, true, $"ORD-{Interlocked.Increment(ref _folio):000000}", BusinessType.Service,
+                OrderType.Service, "Valeria", null, null, null);
+            sale.AddItem(visitService, HomeVisitRules.DefaultVisitName, 1m, 200m);
+            if (left != Left.VisitCharged)
+                sale.AddItem(Guid.NewGuid(), "Cambio de empaque", 1m, 350m);
+            if (left == Left.WorkChargedThenCancelled)
+                sale.Cancel(new ServiceOrderStateMachine(), "Ana");
+            fixture.Context.Orders.Add(sale);
+            visit.RecordSale(sale.Id);
+        }
+
+        fixture.Context.Appointments.Add(visit);
+        if (left is Left.Draft or Left.Discarded or Left.DiscardedThenADraft or Left.WorkChargedWithADraft)
+        {
+            var quote = Quote.Start(trade.Id, Folios.QuoteNumber(Interlocked.Increment(ref _folio)),
+                new QuoteCustomer(null, "Valeria", visit.CustomerPhone, null), visit.Id, true, 15, end.AddHours(1));
+            if (left is Left.Discarded or Left.DiscardedThenADraft)
+                quote.Discard(end.AddHours(2));
+            fixture.Context.Quotes.Add(quote);
+            if (left == Left.DiscardedThenADraft)
+                fixture.Context.Quotes.Add(Quote.Start(trade.Id, Folios.QuoteNumber(Interlocked.Increment(ref _folio)),
+                    new QuoteCustomer(null, "Valeria", visit.CustomerPhone, null), visit.Id, true, 15, end.AddHours(3)));
+        }
+
+        await fixture.Context.SaveChangesAsync();
     }
 
     /// <summary>An appointment booked online, not a visit, quoted <paramref name="sentAfterTheEnd"/> after it ended.</summary>

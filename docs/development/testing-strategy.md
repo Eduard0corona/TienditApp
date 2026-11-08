@@ -2342,6 +2342,35 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas:** contra la línea base de `master` en `1a530f0` (810 escenas):
     - **802 iguales.**
     - **8 cambian**, como se esperaba: las siete de la Agenda con solicitudes (escritorio, teléfono, oscuro, el aviso, rechazar, a tiempo y la del equipo), con «Es falsa» en las de clientes y no en la del equipo, y «Cómo te ven» con la nota del dueño. Las ocho dieron la misma imagen en dos corridas seguidas.
+- Fase 29W, el orden de Explorar con todos sus tiempos y la visita que nunca se cotizó ([ADR 0077](../adr/0077-explore-order-with-every-time.md)):
+  - **Domain:** `QuoteTimeTests` y `OrderConfirmTimeTests` (+1 cada una): el lugar de cada tramo en la escala del orden.
+  - **Application:**
+    - `ExploreOrderTests` (2, nuevo): cómo se juntan los tiempos (el oficio por el más lento de sus pasos, solicitudes y pedidos por el más rápido, un tiempo que falta no cuenta, sin ninguno en medio); y la lista completa con cocinas, oficios y salones en ese orden.
+    - `QuoteTimeInExploreTests` (+2):
+      - cuentan, a la semana de terminar, la visita con la cotización empezada, la que no dejó nada, la cobrada solo por la visita, la del trabajo cobrado con una cotización empezada, la del trabajo cobrado en una venta cancelada, la que empezó otra cotización después de descartar la primera y la que terminó hace 95 días, cuya semana se cumplió dentro de los 90; no cuentan la del trabajo cobrado, la de cotización descartada, la de seis días, la de más de 90 días ni la solicitud que nadie aceptó. Cada oficio está armado para que una visita de más o de menos cambie lo que dice;
+      - un cliente cuenta por la visita que se decidió al último, sea la cotizada o la de la semana cumplida.
+  - **WebApi:**
+    - `CrossTenantDirectoryQuoteTimeSqlServerTests` (+1, SQL Server): lo mismo a través de la API, con el trabajo cobrado en una venta de mostrador; un oficio dice otra cosa si sobra o falta cualquiera de sus visitas.
+    - `TenantFilterBypassAllowlistTests`: Explorar suma dos lecturas entre negocios, las cotizaciones y la venta de cada visita, dentro de su negocio.
+  - **Cliente:** `responseTime.test.ts` (+1): la nota del dueño dice que cuenta la visita sin cotización a la semana, también cuando tarda una semana o más y cuando todavía no se cuenta.
+  - **Mutaciones** que hacen fallar al menos una prueba (13): quitar la visita sin cotizar, contar la que nadie aceptó, contar el borrador como mandado, ignorar si hay alguna cotización, ignorar la venta, su cancelación o su servicio, quitar la ventana de 90 días o la semana, contar desde los 90 días en lugar de los 97, contar cada visita en lugar de cada cliente, tomar la decisión más vieja y volver al orden por tiempo de responder.
+  - **Carga** (una prueba temporal, sin commit, sobre SQL Server local con un oficio y 3,000 teléfonos, la mitad de las visitas cotizadas):
+    - la versión final: unos 230 ms con 20,000 visitas, 400 ms con 40,000 y entre 650 y 850 ms con 80,000;
+    - la consulta anterior, que solo leía las cotizadas: unos 190 ms con 20,000 y entre 400 y 550 ms con 80,000;
+    - se descartaron una subconsulta por cliente (unos 9 s con 80,000) y unir cada visita con la última de su cliente (hasta 20 s con el plan que SQL Server elegía con 20,000 o 40,000).
+  - **.NET en total:** 4,822 pruebas en verde con SQL Server (Domain 1,423; Application 2,178; WebApi 507; Infrastructure 714). **Cliente en total:** 204 archivos y 1,563 pruebas.
+  - **Primera visita:** 182,060 B (`master` en `4df7b26`: 182,055 B): la nota del dueño se carga con Configuración, y los 5 B son del gzip con otros nombres de chunks. El presupuesto (182,100 B) no cambia. El CSS global, 63,077 B de 63,200 B.
+  - **Revisión independiente**, sin bloqueantes, con estos arreglos:
+    - la subconsulta por cliente se repetía por cada visita: la foto ahora lee cada visita una vez con la primera versión de su cotización y agrupa por cliente (ver **Carga**);
+    - cobrar la visita es el paso de antes de cotizar y la sacaba de la cuenta: ahora solo la saca el trabajo cobrado sin cotización empezada;
+    - la ADR y las reglas decían «por su última visita»: ahora dicen «la que se decidió al último»;
+    - la nota del dueño dice la regla también cuando tarda una semana o más;
+    - y pruebas del cobro, de la cotización vuelta a empezar y de un cliente con dos visitas.
+  - **Revisión automática:** sin bloqueantes; un menor, la visita del borde de la ventana, ya probada.
+  - **Escenas:** contra la línea base de `master` en `4df7b26` (810 escenas):
+    - **809 iguales.**
+    - **1 cambia**, como se esperaba: «Cómo te ven» de un oficio con su tiempo, con la nota nueva. Dio la misma imagen en dos corridas seguidas.
+    - «La tienda: botón del pedido» salió distinta en la primera comparación e igual en la segunda. Sola, con el build de `master`, da la misma imagen que con el de esta rama: depende de con qué escenas corre, no del cambio.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

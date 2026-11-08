@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Quotes;
 
 namespace FoodParkDigital.Domain.Tests;
@@ -39,6 +40,20 @@ public class QuoteTimeTests
 
         Assert.Equal([24, 72, 168], QuoteTimes.LimitHours);
         Assert.Equal(now.AddDays(-90), QuoteTimes.Since(now));
+    }
+
+    [Fact]
+    public void TheOrderOfExplorar_ShouldPutEachTramoOnTheScaleOfAnswering_AndAWeekPastItsEndWithTheSlowest()
+    {
+        // Within a day and three days, as within an hour and three hours; within a week, as within a day; slower, last.
+        Assert.Equal(
+            [0, 1, 3, 4],
+            new[] { QuoteTime.WithinADay, QuoteTime.WithinThreeDays, QuoteTime.WithinAWeek, QuoteTime.Slower }.Select(QuoteTimes.Order));
+        Assert.Equal(ResponseTimes.Order(ResponseTime.WithinADay), QuoteTimes.Order(QuoteTime.WithinAWeek));
+        // Those that say nothing yet go in the middle, between the second tramo and the last.
+        Assert.InRange(ResponseTimes.Order(null), QuoteTimes.Order(QuoteTime.WithinThreeDays) + 1, QuoteTimes.Order(QuoteTime.WithinAWeek) - 1);
+        // A visit with no quote sent counts among the slowest once a week passed since its end: the last limit.
+        Assert.Equal(168, QuoteTimes.NeverQuotedAfterHours);
     }
 
     [Fact]
