@@ -216,6 +216,24 @@ describe('useArrivalChime', () => {
     expect(window.localStorage.getItem('tienditapp:chime-volume')).toBe('100');
   });
 
+  it.each([
+    // Bell: two longer, brighter notes. Doorbell: three short ones. Soft: two low, slow ones.
+    ['bell', [1047, 1568], 'triangle', [[0, 0.02, 0.9, 0.92], [0.25, 0.27, 1.15, 1.17]]],
+    ['doorbell', [659, 831, 988], 'triangle', [[0, 0.02, 0.28, 0.3], [0.16, 0.18, 0.44, 0.46], [0.32, 0.34, 0.6, 0.62]]],
+    ['soft', [523, 659], 'sine', [[0, 0.02, 0.45, 0.47], [0.28, 0.3, 0.73, 0.75]]],
+  ] as const)('rings the %s tone with its own notes, wave and timing (Fase 29Z)', async (tone, notes, wave, expected) => {
+    chimeModule.saveChimeSettings({ tone });
+    const orders = renderHook(() => useArrivalChime('tienditapp:orders-sound'));
+    await act(async () => {
+      orders.result.current.toggle();
+    });
+    act(() => orders.result.current.play());
+
+    expect(played).toEqual(notes);
+    expect(waves).toEqual(notes.map(() => wave));
+    expect(timings.map((t) => [t.start, t.loudest, t.quiet, t.stop].map((s) => Math.round(s * 100) / 100))).toEqual(expected);
+  });
+
   it('keeps the sound as before with a tone or volume it does not know, and follows another tab that picks (Fase 29Z)', async () => {
     window.localStorage.setItem('tienditapp:chime-tone', 'sirena');
     window.localStorage.setItem('tienditapp:chime-volume', '55');
