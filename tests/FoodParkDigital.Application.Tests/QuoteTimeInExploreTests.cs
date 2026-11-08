@@ -122,15 +122,17 @@ public class QuoteTimeInExploreTests
     public async Task AVisitAWeekPastItsEnd_WithoutItsQuoteSent_ShouldCountAmongTheSlowest_UnlessItsQuoteWasDiscarded_OrTheWorkCharged()
     {
         await using var fixture = Fixture();
-        // Quoted five customers at once. Each of these counts, a week past its end: a quote started and never sent, a visit
+        // Quoted six customers at once. Each of these counts, a week past its end: a quote started and never sent, a visit
         // that left nothing, one charged for the visit alone (charging it is the step before quoting), one whose work was
-        // charged but has a quote started, one charged in a sale later cancelled, and a new quote started after the first
-        // was discarded. Five of eleven within a day: with any of them less, half would be.
+        // charged but has a quote started, one charged in a sale later cancelled, a new quote started after the first was
+        // discarded, and one that ended 95 days ago, whose week was past within the 90 days. Six of thirteen within a day:
+        // with any of them less, half would be.
         var (drafted, zone) = await TradeAsync(fixture, "borrador", "Plomería Borrador");
-        for (var n = 0; n < 5; n++)
+        for (var n = 0; n < 6; n++)
             await QuotedVisitAsync(fixture, drafted, zone, TimeSpan.FromHours(1));
         foreach (var left in new[] { Left.Draft, Left.Nothing, Left.VisitCharged, Left.WorkChargedWithADraft, Left.WorkChargedThenCancelled, Left.DiscardedThenADraft })
             await VisitLeftAsync(fixture, drafted, zone, left);
+        await VisitLeftAsync(fixture, drafted, zone, Left.Nothing, endedDaysAgo: 95);
         // Quoted two customers at once. None of these counts: one whose work was charged at the visit, one whose quote was
         // discarded, one six days past its end, one past the 90 days, and a request nobody accepted (it counts among the
         // slowest to answer, and never took place). With any of them more, two of three would be within a day.
