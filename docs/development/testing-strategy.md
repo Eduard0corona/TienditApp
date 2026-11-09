@@ -2557,6 +2557,16 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - el filtro `ChangedAt >= since` dejaba fuera la respuesta de un pedido aceptado solo justo al empezar los 90 días; ahora empieza media hora antes;
     - el resumen del método dice cómo cuentan los empates;
     - las ADR 0074 y 0082 marcan lo que cambió en la 30E.
+- Fase 30D, las respuestas simuladas de las escenas contra el contrato (sin ADR; [escenas visuales](../../client/visual/README.md)):
+  - **Chequeo:** `client/visual/mocks/contract.mjs` compara cada respuesta con cuerpo del servidor simulado con `openapi/openapi.json`, y `fixtures.ts` hace fallar la escena con una diferencia que no está en `contract-known.txt`. Probado a mano regla por regla:
+    - falla con una ruta que la API no tiene (también una más honda que `/orders/{id}`), un id de la ruta que no es uuid, un campo que falta o que sobra, un `null` donde la API no lo manda, un tipo o un uuid ajeno, una fecha laxa (`"1"`) o con hora donde va solo el día, un valor fuera de su enum, una combinación ajena de un `[Flags]` y un 204 con cuerpo;
+    - pasa con una respuesta correcta, un `null` en un campo opcional, una fecha con zona y siete decimales, un error 4xx, `/files/a/b/c.png` y una ruta que no declara esquema (forgot-password, que manda su mensaje).
+  - **Lista conocida:** 232 diferencias de una corrida completa con `VISUAL_CONTRACT_REPORT`, en 60 rutas: 123 campos requeridos que faltan, 102 ids que no son uuid en las respuestas y 7 en la ruta. Más 29 del pago registrado, que ninguna escena hace todavía.
+  - **Escenas:** contra las capturas de `master` en `eeeb806` tomadas con sus propios datos simulados (810 escenas). La línea base de `visual:baseline` usa los datos de la rama y no vería este cambio. Cambian solo las tres de movimientos de inventario (Entradas y salidas, registrar movimiento y detalle): ahora muestran el tipo y el motivo de cada movimiento. Las otras 807 pasan sin diferencias de imagen ni de contrato.
+  - **Revisión independiente:** sus hallazgos están corregidos:
+    - en el chequeo: la ruta comodín solo para `/files/{key}`, los ids de la ruta, las rutas sin esquema (salieron tres falsos positivos de la lista), las fechas, los `[Flags]`, `Object.hasOwn` y que se compare el JSON que recibe la página;
+    - en los datos: el faltante del conteo como salida, los totales requeridos del corte del día, el uuid del pago registrado y el objeto de impuesto 02.
+  - **Cliente:** lint de `visual`, `visual:typecheck` y build en verde. Primera visita: 180,232 B; CSS global: 63,077 B. Son los mismos que en `master`, porque `src` no cambia.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

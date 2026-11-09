@@ -193,7 +193,13 @@ const countRoutes: ExtraRoutes = (data, { ok, paginate }) => {
       if (q.get('inventoryLocationId')) rows = rows.filter((c) => c.inventoryLocationId === q.get('inventoryLocationId'));
       const search = (q.get('search') ?? '').toLowerCase();
       if (search) rows = rows.filter((c) => c.countNumber.toLowerCase().includes(search) || c.inventoryLocationName.toLowerCase().includes(search));
-      return ok(paginate(rows, q, 20));
+      // The list answers each count's summary (InventoryCountListItemDto), not its detail.
+      const summary = (c: Record<string, unknown>) => ({
+        id: c.id, countNumber: c.countNumber, inventoryLocationId: c.inventoryLocationId, inventoryLocationName: c.inventoryLocationName,
+        status: c.status, categoryName: c.categoryName, startedAt: c.startedAt, startedBy: c.startedBy, postedAt: c.postedAt,
+        cancelledAt: c.cancelledAt, lineCount: c.lineCount, countedLineCount: c.countedLineCount,
+      });
+      return ok(paginate(rows.map(summary), q, 20));
     }],
     ['GET', /^\/inventory\/counts\/([^/]+)$/, (m) => {
       const count = find(m[1]);

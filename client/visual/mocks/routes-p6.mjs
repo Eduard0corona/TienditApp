@@ -37,8 +37,6 @@ function stockDto(data, product) {
     reorderPoint: product.reorderPoint ?? 0,
     isLowStock: product.isLowStock,
     locations: product.tracksStock ? [{ inventoryLocationId: location.id, locationName: location.name, onHand: product.onHand }] : [],
-    capturedStockQuantity: product.stockQuantity ?? null,
-    capturedLowStockThreshold: product.lowStockThreshold ?? null,
   };
 }
 
