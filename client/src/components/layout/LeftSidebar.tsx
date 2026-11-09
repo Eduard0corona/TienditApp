@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -23,6 +24,20 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
   // On a short window the links go on below the edge: the faded edge says so.
   const linkCount = groups.reduce((count, group) => count + group.entries.length, 0);
   const { ref: scrollRef, fadeClass: scrollFadeClass } = useScrollFade<HTMLDivElement>(linkCount, 'y');
+  // The link just used, while it keeps the focus. Nothing moves the focus when the page changes: in the condensed menu
+  // a link the keyboard grew (shell.css) would stay grown over the new page, taking its clicks, until the focus left.
+  // Going to another window is not leaving it: back here the link has the focus again, and it would grow. That blur
+  // comes while the document has lost the focus, or while the link is still the active element.
+  const [usedLink, setUsedLink] = useState<string | null>(null);
+  // Marked only with the focus on it: a click does not focus a link in Safari or in Firefox on macOS, and no blur would
+  // take a mark away that the keyboard would find later.
+  const markUsed = (link: HTMLAnchorElement, label: string) => {
+    if (document.activeElement === link) setUsedLink(label);
+  };
+  const leaveLink = (link: HTMLAnchorElement, label: string) => {
+    if (!document.hasFocus() || document.activeElement === link) return;
+    setUsedLink((used) => (used === label ? null : used));
+  };
 
   return (
     <div className="ta-sidebar">
@@ -56,7 +71,14 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
                     const active = isNavEntryActive(entry, pathname);
                     return (
                       <li key={entry.label} className="ta-nav-item">
-                        <Link to={getNavEntryPath(entry)} className={`ta-nav-link ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined}>
+                        <Link
+                          to={getNavEntryPath(entry)}
+                          className={`ta-nav-link ${active ? 'active' : ''}`}
+                          aria-current={active ? 'page' : undefined}
+                          data-used={usedLink === entry.label ? '' : undefined}
+                          onClick={(event) => markUsed(event.currentTarget, entry.label)}
+                          onBlur={(event) => leaveLink(event.currentTarget, entry.label)}
+                        >
                           <i className={entry.icon} aria-hidden="true"></i>
                           <span>{entry.label}</span>
                         </Link>

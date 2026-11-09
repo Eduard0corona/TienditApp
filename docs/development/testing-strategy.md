@@ -2567,6 +2567,29 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - en el chequeo: la ruta comodín solo para `/files/{key}`, los ids de la ruta, las rutas sin esquema (salieron tres falsos positivos de la lista), las fechas, los `[Flags]`, `Object.hasOwn` y que se compare el JSON que recibe la página;
     - en los datos: el faltante del conteo como salida, los totales requeridos del corte del día, el uuid del pago registrado y el objeto de impuesto 02.
   - **Cliente:** lint de `visual`, `visual:typecheck` y build en verde. Primera visita: 180,232 B; CSS global: 63,077 B. Son los mismos que en `master`, porque `src` no cambia.
+- Fase 30F, colores AA, paginación deshabilitada y el menú condensado con nombres (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Cliente:** 209 archivos y 1,604 pruebas, lint y build en verde.
+    - `businessThemes.test.ts` (+2): el texto de error de un campo y el del código pasan AA en claro (blanco, la página y el relleno terciario) y en oscuro (sus superficies y un campo). El menú condensado no esconde el nombre con `visibility: hidden`, no deja que tome el puntero, lo muestra (`opacity: 1`) bajo el puntero y crece igual con el teclado que con el puntero, cada selector en su regla.
+    - `LeftSidebar.test.tsx` (nuevo, 3): el enlace recién usado queda marcado (`data-used`) mientras conserva el foco y deja de estarlo al salir. Dos casos los encontró claude-review: irse a otra ventana no lo desmarca, porque al volver el enlace recupera el foco; y un clic que no lo enfoca (Safari, Firefox en macOS) no lo marca, porque ningún `blur` quitaría la marca.
+    - **Mutaciones:** las 11 hacen fallar una prueba:
+      - el rojo de Hyper en el error;
+      - el cian de Hyper en el código oscuro;
+      - quitar `pointer-events: none`;
+      - volver a `visibility: hidden`;
+      - el nombre casi invisible con el teclado;
+      - crecer aunque se haya usado;
+      - quitar `onBlur`;
+      - quitar `onClick`;
+      - desmarcar aunque el foco se haya ido a otra ventana, sin cada una de sus dos señales (el documento sin foco, el enlace aún activo);
+      - marcar un enlace que el clic no enfocó.
+  - **Escenas:** las capturas de `master` (`e6f4517`) se tomaron con sus propias escenas, porque las de la rama buscan los enlaces del menú condensado por su nombre, que `master` no tiene. Cambian 57 de 810, cada una por un arreglo:
+    - **30 listas**, por «Anterior» atenuado en la primera página: Pedidos, Productos, Inventario, Clientes, Caja, Auditoría y la Agenda, en sus tamaños y modos;
+    - **6** por el texto de error de un campo: cerrar caja, precios en apps y CFDI por revisar;
+    - **5** por el código: WhatsApp y las plantillas de aviso;
+    - **16 del muestrario:** el estilo calculado del error en los 8 temas y los dos modos, y su imagen.
+  - **Escenas nuevas:** el foco del teclado en el menú condensado, en claro y en oscuro. «Pedidos» crece con su nombre y, ya usado, vuelve al ícono con su anillo. Las 7 escenas del menú condensado pasan dos corridas seguidas. Las que pasan el puntero sobre el menú no cambian.
+  - **Primera visita:** 180,333 B (`master` en `e6f4517`: 180,232 B, +101 B por el estado de `LeftSidebar`, que va en la entrada con el menú). El presupuesto sube de 180,300 a 180,400 B. CSS global: 63,144 B (+67 B), dentro de su presupuesto.
+  - **Revisión independiente:** encontró que un enlace usado con el teclado se quedaba crecido sobre la página nueva tomando sus clics, porque nada mueve el foco al navegar. También que los puntos entre páginas, atenuados, quedaban a 2.7:1, y que una prueba pasaba sin las reglas que muestran el nombre. Los tres están corregidos.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

@@ -488,7 +488,7 @@ html[data-bs-theme='dark']:not([data-ta-sidenav='condensed']) .ta-nav-link:not(.
   padding-top: 8px;
 }
 
-/* Condensed menu: icons only; a link under the pointer grows to show its name. */
+/* Condensed menu: icons only; a link under the pointer or the keyboard grows to show its name. */
 html[data-ta-sidenav='condensed'] .ta-topbar {
   z-index: 1005;
   margin-left: var(--ta-sidebar-width-sm);
@@ -544,8 +544,13 @@ html[data-ta-sidenav='condensed'] .ta-nav-link {
   transition: none;
 }
 
+/*
+ * The name is not drawn, but it is still the link's name for a screen reader (visibility: hidden took it away, and the
+ * menu read as a list of unnamed links). Nor does it take the pointer: past the narrow menu it lies over the page.
+ */
 html[data-ta-sidenav='condensed'] .ta-nav-link span {
-  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 html[data-ta-sidenav='condensed'] .ta-nav-link i {
@@ -553,7 +558,13 @@ html[data-ta-sidenav='condensed'] .ta-nav-link i {
   min-width: calc(var(--ta-sidebar-width-sm) - var(--ta-menu-item-padding-x) * 2);
 }
 
-/* Under the pointer a link grows to show its name on the accent; the focus ring on it takes the text's color. */
+/*
+ * Under the pointer a link grows to show its name on the accent; the focus ring on it takes the text's color. The
+ * keyboard grows it too, so whoever tabs through the icons reads where each goes, until the link is used (data-used,
+ * LeftSidebar): the focus stays on it when the page changes, and grown it would lie over the new page. Each in its own
+ * rule: Safari before 15.4 drops a whole selector list that names :focus-visible. A touch screen grows none, as its
+ * menu scrolls and would cut the name (see above); there the name is still the link's for a screen reader.
+ */
 @media (hover: hover) {
   html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link {
     --ta-focus-ring: var(--ta-menu-condensed-link-color);
@@ -563,11 +574,27 @@ html[data-ta-sidenav='condensed'] .ta-nav-link i {
     color: var(--ta-menu-condensed-link-color);
   }
 
+  html[data-ta-sidenav='condensed'] .ta-nav-link:focus-visible:not([data-used]) {
+    --ta-focus-ring: var(--ta-menu-condensed-link-color);
+    position: relative;
+    width: var(--ta-sidebar-width);
+    background: var(--ta-menu-condensed-link-bg);
+    color: var(--ta-menu-condensed-link-color);
+  }
+
   html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span {
-    visibility: visible;
+    opacity: 1;
+  }
+
+  html[data-ta-sidenav='condensed'] .ta-nav-link:focus-visible:not([data-used]) span {
+    opacity: 1;
   }
 
   html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span:not(.badge) {
+    margin-left: var(--ta-menu-item-padding-x);
+  }
+
+  html[data-ta-sidenav='condensed'] .ta-nav-link:focus-visible:not([data-used]) span:not(.badge) {
     margin-left: var(--ta-menu-item-padding-x);
   }
 }

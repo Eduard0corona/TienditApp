@@ -134,6 +134,21 @@ describe('theme.css', () => {
     }
   });
 
+  it('writes a field\'s error message and code in the color of their state, with WCAG AA contrast (Fase 30F)', () => {
+    // Hyper's red and cyan stayed there, at 3.1 and 2.6:1 on white. A var() is read from the same block.
+    const resolve = (mode: Record<string, string>, value: string) => value.replace(/^var\((--[\w-]+)\)$/, (_, name: string) => mode[name]);
+    expect(light['--ct-form-invalid-color']).toBe('var(--ct-danger)');
+    expect(light['--ct-code-color']).toBe('var(--ct-info)');
+    for (const name of ['--ct-form-invalid-color', '--ct-code-color']) {
+      for (const surface of ['#ffffff', '#fafbfe', '#f6f7fb']) {
+        expect(contrastRatio(resolve(light, light[name]), surface), `${name} on ${surface}`).toBeGreaterThanOrEqual(AA);
+      }
+      for (const surface of [...DARK_SURFACES, '#404954']) {
+        expect(contrastRatio(resolve(dark, dark[name]), surface), `${name} on ${surface} (dark)`).toBeGreaterThanOrEqual(AA);
+      }
+    }
+  });
+
   it('writes text with WCAG AA contrast on every dark surface, a selected option included', () => {
     // Besides the page, a card and a raised row: the side menu and top bar (#3a444e, shell.css), a field (#404954) and
     // the light fill (#464f5b: a light button or badge, a table header, the search box), from _additions.scss.
@@ -170,5 +185,23 @@ describe('shell.css', () => {
       '--ta-menu-condensed-link-color': 'var(--tt-dark-on-accent)',
     });
     expect(shellCss).toMatch(/\.ta-nav-item:hover \.ta-nav-link \{[^}]*color: var\(--ta-menu-condensed-link-color\);/);
+  });
+
+  it('keeps the name of a condensed menu link for a screen reader and grows it for the keyboard too (Fase 30F)', () => {
+    // visibility: hidden took the name out of the link: a screen reader met a list of unnamed links.
+    const hidden = shellCss.match(/html\[data-ta-sidenav='condensed'\] \.ta-nav-link span \{([^}]*)\}/);
+    expect(hidden?.[1]).toContain('opacity: 0;');
+    expect(hidden?.[1]).toContain('pointer-events: none;');
+    expect(shellCss).not.toMatch(/condensed'\] [^{]*\.ta-nav-link[^{]*\{[^}]*visibility: hidden/);
+    // What the pointer grows, the keyboard grows (until the link is used: data-used, LeftSidebar), each selector in its
+    // own rule, and the name shows.
+    const grown = (selector: string) => shellCss.match(new RegExp(`html\\[data-ta-sidenav='condensed'\\] ${selector} \\{([^}]*)\\}`))?.[1];
+    const keyboard = '\\.ta-nav-link:focus-visible:not\\(\\[data-used\\]\\)';
+    expect(grown('\\.ta-nav-item:hover \\.ta-nav-link')).toContain('width: var(--ta-sidebar-width);');
+    expect(grown('\\.ta-nav-item:hover \\.ta-nav-link span')).toContain('opacity: 1;');
+    expect(grown('\\.ta-nav-item:hover \\.ta-nav-link span:not\\(\\.badge\\)')).toContain('margin-left:');
+    expect(grown(keyboard)).toBe(grown('\\.ta-nav-item:hover \\.ta-nav-link'));
+    expect(grown(`${keyboard} span`)).toBe(grown('\\.ta-nav-item:hover \\.ta-nav-link span'));
+    expect(grown(`${keyboard} span:not\\(\\.badge\\)`)).toBe(grown('\\.ta-nav-item:hover \\.ta-nav-link span:not\\(\\.badge\\)'));
   });
 });

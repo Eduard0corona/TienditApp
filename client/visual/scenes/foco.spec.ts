@@ -79,5 +79,19 @@ for (const colorMode of ['light', 'dark'] as const) {
       const tabs = page.getByRole('navigation', { name: 'Accesos rápidos' });
       await snapRing(page, tabs.getByRole('link', { name: 'Inicio', exact: true }), `foco-pestanas-${colorMode}`);
     });
+
+    // Fase 30F: on a tablet the keyboard grows a link of the condensed menu to its name, as the pointer does.
+    test(`foco en el menú condensado ${colorMode}`, async ({ page }) => {
+      await page.setViewportSize(SIZES.tablet);
+      await open(page, '/dashboard');
+      await page.keyboard.press('Tab');
+      const menu = page.getByRole('navigation', { name: 'Menú principal' });
+      const orders = menu.getByRole('link', { name: 'Pedidos', exact: true });
+      await snapRing(page, orders, `foco-menu-condensado-${colorMode}`);
+      // Used, it shrinks back: the focus stays on it on the new page, and grown it would lie over the page.
+      await page.keyboard.press('Enter');
+      await page.getByRole('heading', { name: 'Pedidos', level: 4, exact: true }).waitFor();
+      await snapRing(page, orders, `foco-menu-condensado-usado-${colorMode}`);
+    });
   });
 }
