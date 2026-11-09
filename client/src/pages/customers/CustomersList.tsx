@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Modal } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
@@ -43,11 +43,9 @@ export default function CustomersList() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  // What the dialog could not save: shown inside it, where it can be seen, and apart from the errors of the list.
+  // What the dialog could not save: shown inside it, where it can be seen, and apart from the errors of the list. The
+  // dialog stays open while what it sent is on its way, so the answer always reaches the dialog that sent it.
   const [saveError, setSaveError] = useState('');
-  // Each opening or closing of the dialog is a new attempt: an answer of the server for an earlier one (it may arrive with
-  // another dialog already open) neither shows its error nor closes the dialog that is open now.
-  const attempt = useRef(0);
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<CustomerDto | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -106,7 +104,6 @@ export default function CustomersList() {
   }, [loadCustomers]);
 
   const openCreateModal = () => {
-    attempt.current += 1;
     setSaveError('');
     setEditingCustomer(null);
     reset({ name: '', phone: '', email: '', notes: '' });
@@ -114,7 +111,6 @@ export default function CustomersList() {
   };
 
   const openEditModal = (customer: CustomerDto) => {
-    attempt.current += 1;
     setSaveError('');
     setEditingCustomer(customer);
     reset({
@@ -127,7 +123,6 @@ export default function CustomersList() {
   };
 
   const closeModal = () => {
-    attempt.current += 1;
     setSaveError('');
     setShowModal(false);
     setEditingCustomer(null);
@@ -141,7 +136,6 @@ export default function CustomersList() {
       return;
     }
 
-    const sent = attempt.current;
     try {
       if (editingCustomer) {
         await customersApi.update(editingCustomer.id, {
@@ -158,11 +152,12 @@ export default function CustomersList() {
         });
       }
 
-      // The list shows what was saved either way; only the dialog that sent it is closed.
-      if (attempt.current === sent) closeModal();
-      await loadCustomers();
+      closeModal();
+      // Not awaited: the dialog is done once it is saved. Awaiting the list would keep this submit going, and when it
+      // ended it would let go of the next dialog's «Guardando...» while that one is still on its way.
+      void loadCustomers();
     } catch (err: unknown) {
-      if (attempt.current === sent) setSaveError(getApiErrorMessage(err, 'Error al guardar cliente.'));
+      setSaveError(getApiErrorMessage(err, 'Error al guardar cliente.'));
     }
   };
 
@@ -343,8 +338,8 @@ export default function CustomersList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={closeModal} centered aria-labelledby={titleId}>
-        <Modal.Header closeButton>
+      <Modal show={showModal} onHide={() => !isSubmitting && closeModal()} centered aria-labelledby={titleId}>
+        <Modal.Header closeButton={!isSubmitting}>
           <Modal.Title id={titleId}>{editingCustomer ? 'Editar cliente' : 'Nuevo cliente'}</Modal.Title>
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -420,7 +415,7 @@ export default function CustomersList() {
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-secondary"
-                  disabled={isDirty}
+                  disabled={isDirty || isSubmitting}
                   onClick={() => {
                     const customer = editingCustomer;
                     closeModal();
@@ -434,10 +429,12 @@ export default function CustomersList() {
             )}
           </Modal.Body>
           <Modal.Footer>
-            <button type="button" className="btn btn-light" onClick={closeModal}>
+            <button type="button" className="btn btn-light" onClick={closeModal} disabled={isSubmitting}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+            {/* Also while it fades out after saving: what is still written is not sent again by a double click or Enter
+                (with its submit button disabled, Enter does not send the form either). */}
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting || !showModal}>
               {isSubmitting ? 'Guardando...' : editingCustomer ? 'Guardar cambios' : 'Crear cliente'}
             </button>
           </Modal.Footer>

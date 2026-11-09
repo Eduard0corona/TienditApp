@@ -350,6 +350,54 @@ describe('AppointmentsList', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  it('books an appointment once, even with a double click when the server and the list answer at once', async () => {
+    const user = userEvent.setup();
+    vi.mocked(appointmentsApi.create).mockResolvedValue({ data: appointment({}) } as never);
+    renderAgenda([]);
+
+    await user.click(await screen.findByRole('button', { name: 'Nueva cita' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Nueva cita' });
+    const form = within(dialog);
+    await user.type(form.getByLabelText('Cliente *'), 'Ana Ruiz');
+    await user.type(form.getByLabelText('Teléfono *'), '5512345678');
+    await user.selectOptions(form.getByLabelText('Servicio *'), 'Otro (escribirlo)');
+    await user.type(form.getByRole('textbox', { name: 'Nombre del servicio' }), 'Corte');
+    fireEvent.change(form.getByLabelText('Inicio *'), { target: { value: '2026-10-14T10:00' } });
+    // The second click lands while the dialog fades out, after the list was read again.
+    await user.dblClick(form.getByRole('button', { name: 'Registrar cita' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(appointmentsApi.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the next appointment be booked while the list is still being read after the one before', async () => {
+    const user = userEvent.setup();
+    vi.mocked(appointmentsApi.create).mockResolvedValue({ data: appointment({}) } as never);
+    renderAgenda([]);
+    await screen.findByRole('button', { name: 'Nueva cita' });
+    // The list read after the first one is booked does not arrive.
+    vi.mocked(appointmentsApi.getAll).mockImplementation(() => new Promise(() => undefined) as never);
+
+    const book = async (name: string) => {
+      await user.click(screen.getByRole('button', { name: 'Nueva cita' }));
+      const form = within(await screen.findByRole('dialog', { name: 'Nueva cita' }));
+      await user.type(form.getByLabelText('Cliente *'), name);
+      await user.type(form.getByLabelText('Teléfono *'), '5512345678');
+      await user.selectOptions(form.getByLabelText('Servicio *'), 'Otro (escribirlo)');
+      await user.type(form.getByRole('textbox', { name: 'Nombre del servicio' }), 'Corte');
+      fireEvent.change(form.getByLabelText('Inicio *'), { target: { value: '2026-10-14T10:00' } });
+      return form;
+    };
+
+    await user.click((await book('Ana Ruiz')).getByRole('button', { name: 'Registrar cita' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // «Guardando…» was the first one's: the second can be booked without waiting for the list.
+    const second = await book('Luis Peña');
+    expect(second.getByRole('button', { name: 'Registrar cita' })).toBeEnabled();
+    await user.click(second.getByRole('button', { name: 'Registrar cita' }));
+    await waitFor(() => expect(appointmentsApi.create).toHaveBeenCalledTimes(2));
+  });
+
   it('keeps what was agreed at the same address, and says the customer hears of a new place', async () => {
     const user = userEvent.setup();
     vi.mocked(quoteVisit).mockResolvedValue({ postalCode: '72005', zoneName: 'Sur', fee: 95 } as never);
@@ -477,6 +525,8 @@ describe('AppointmentsList', () => {
   it('says the limit passed while the agenda stays open (Fase 29L)', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(new Date('2026-10-14T16:00:00Z'));
+    // The clock of the business, not the device's: 10:00 in Mexico City ("de las 10:00"; at 1:00 it would read "de la").
+    setBusinessTimeZone('America/Mexico_City');
     try {
       renderAgenda([appointment({
         id: 'r1', customerName: 'Valeria', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online, answerBy: '2026-10-14T16:00:30Z',
@@ -490,6 +540,7 @@ describe('AppointmentsList', () => {
       expect(within(row).getByText('Ya pasó el límite para responder a tiempo')).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
+      setBusinessTimeZone(null);
     }
   });
 

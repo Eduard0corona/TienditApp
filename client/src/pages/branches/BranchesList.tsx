@@ -305,7 +305,8 @@ export default function BranchesList() {
         toast.success('Sucursal creada.');
       }
       close();
-      await refresh();
+      // Not awaited: the form is done once it is saved, and «Guardando…» belongs to it, not to the list.
+      void refresh();
     } catch (err: unknown) {
       setFormError(getApiErrorMessage(err, 'No se pudo guardar la sucursal.'));
     } finally {
@@ -440,10 +441,11 @@ export default function BranchesList() {
         </div>
       </div>
 
-      <Modal show={form !== null} onHide={close} size="lg" centered aria-labelledby={titleId}>
+      {/* It stays open while what it sent is on its way, so the answer always reaches the form that sent it. */}
+      <Modal show={form !== null} onHide={() => !saving && close()} size="lg" centered aria-labelledby={titleId}>
         {form && (
           <form onSubmit={(event) => void save(event)}>
-            <Modal.Header closeButton>
+            <Modal.Header closeButton={!saving}>
               <Modal.Title id={titleId}>{editing ? `Editar ${editing.name}` : 'Nueva sucursal'}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -524,10 +526,10 @@ export default function BranchesList() {
                   Si el negocio usa inventario, la sucursal tendrá su propio almacén y sus ventas descontarán de él.
                 </p>
               )}
-              {formError && <div className="alert alert-danger mt-3 mb-0">{formError}</div>}
+              {formError && <div className="alert alert-danger mt-3 mb-0" role="alert">{formError}</div>}
             </Modal.Body>
             <Modal.Footer>
-              <button type="button" className="btn btn-light" onClick={close}>Cancelar</button>
+              <button type="button" className="btn btn-light" onClick={close} disabled={saving}>Cancelar</button>
               <button type="submit" className="btn btn-primary" disabled={saving}>
                 {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear sucursal'}
               </button>

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { categoriesApi } from '../../api/categoriesApi';
@@ -215,6 +215,81 @@ describe('ServicesList', () => {
     // Opened again, it starts without it.
     await user.click(within(await row('Mantenimiento de cafetera')).getByRole('button', { name: 'Editar Mantenimiento de cafetera' }));
     expect(within(await screen.findByRole('dialog', { name: 'Editar servicio' })).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps the dialog open while it is saved, and says there why the server did not save', async () => {
+    const user = userEvent.setup();
+    let refuse: (reason: unknown) => void = () => undefined;
+    vi.mocked(productsApi.update).mockReturnValueOnce(new Promise((_, reject) => { refuse = reject; }) as never);
+    render(<ServicesList />);
+
+    await user.click(within(await row('Mantenimiento de cafetera')).getByRole('button', { name: 'Editar Mantenimiento de cafetera' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Editar servicio' });
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+
+    // Neither its buttons, the X nor Escape close it while it is on its way.
+    expect(await within(dialog).findByRole('button', { name: 'Guardando...' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(dialog).toHaveClass('show');
+
+    await act(async () => refuse({ isAxiosError: true, response: { status: 409, data: { code: 'conflict', detail: 'Ya existe un servicio con ese nombre.', error: 'Ya existe un servicio con ese nombre.' } } }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Ya existe un servicio con ese nombre.');
+    expect(within(dialog).getByRole('button', { name: 'Guardar cambios' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
+  it('holds the next dialog while it saves, even when the list read after the one before arrives meanwhile', async () => {
+    const user = userEvent.setup();
+    let listed: (value: unknown) => void = () => undefined;
+    let created: (value: unknown) => void = () => undefined;
+    render(<ServicesList />);
+    await row('Mantenimiento de cafetera');
+    // The list read after the maintenance is saved, and the new service's save, both arrive late.
+    vi.mocked(productsApi.getAll).mockReturnValue(new Promise((resolve) => { listed = resolve; }) as never);
+    vi.mocked(productsApi.update).mockResolvedValueOnce({ data: {} } as never);
+    vi.mocked(productsApi.create).mockReturnValueOnce(new Promise((resolve) => { created = resolve; }) as never);
+
+    await user.click(within(await row('Mantenimiento de cafetera')).getByRole('button', { name: 'Editar Mantenimiento de cafetera' }));
+    await user.click(within(await screen.findByRole('dialog', { name: 'Editar servicio' })).getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar servicio' })).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Nuevo servicio' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Nuevo servicio' });
+    await user.type(within(dialog).getByLabelText(/^Nombre/), 'Reparación de molino');
+    await user.selectOptions(within(dialog).getByLabelText(/^Categoría/), 'repairs');
+    await user.clear(within(dialog).getByLabelText(/^Precio/));
+    await user.type(within(dialog).getByLabelText(/^Precio/), '380');
+    await user.click(within(dialog).getByRole('button', { name: 'Crear servicio' }));
+    await waitFor(() => expect(productsApi.create).toHaveBeenCalledTimes(1));
+    listed(listPage([maintenance, workshop, service({ id: 'curso', name: 'Curso de latte art' })]));
+
+    // Its «Guardando...» stays until its own answer arrives: a second click cannot create the service twice.
+    await row('Curso de latte art');
+    expect(within(dialog).getByRole('button', { name: 'Guardando...' })).toBeDisabled();
+    await act(async () => created({ data: {} }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nuevo servicio' })).not.toBeInTheDocument());
+    expect(productsApi.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates a service once, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    vi.mocked(productsApi.create).mockResolvedValue({ data: {} } as never);
+    render(<ServicesList />);
+    await row('Mantenimiento de cafetera');
+
+    await user.click(screen.getByRole('button', { name: 'Nuevo servicio' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Nuevo servicio' });
+    await user.type(within(dialog).getByLabelText(/^Nombre/), 'Reparación de molino');
+    await user.selectOptions(within(dialog).getByLabelText(/^Categoría/), 'repairs');
+    await user.clear(within(dialog).getByLabelText(/^Precio/));
+    await user.type(within(dialog).getByLabelText(/^Precio/), '380');
+    // The second click lands while the dialog fades out.
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Crear servicio' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nuevo servicio' })).not.toBeInTheDocument());
+    expect(productsApi.create).toHaveBeenCalledTimes(1);
   });
 
   it('deletes a service only once confirmed, and reads the list again', async () => {

@@ -431,7 +431,8 @@ export default function AppointmentsList() {
         toast.success('Cita registrada.');
       }
       setShowModal(false);
-      await loadData();
+      // Not awaited: the dialog is done once it is saved, and «Guardando…» belongs to it, not to the list.
+      void loadData();
     } catch (err: unknown) {
       setFormError(getApiErrorMessage(err, 'No se pudo guardar la cita.'));
     } finally {
@@ -964,7 +965,8 @@ export default function AppointmentsList() {
         </Modal.Body>
         <Modal.Footer>
           <button type="button" className="btn btn-light" onClick={() => setShowModal(false)} disabled={saving}>Cancelar</button>
-          <button type="button" className="btn btn-primary" onClick={() => void submit()} disabled={saving}>
+          {/* Also while it fades out after saving, so a double click does not book it twice. */}
+          <button type="button" className="btn btn-primary" onClick={() => void submit()} disabled={saving || !showModal}>
             {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Registrar cita'}
           </button>
         </Modal.Footer>

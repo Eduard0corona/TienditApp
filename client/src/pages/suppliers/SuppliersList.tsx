@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -51,11 +51,9 @@ export default function SuppliersList() {
   const [pageSize, setPageSize] = useState(10);
   const [activeFilter, setActiveFilter] = useState('');
   const [error, setError] = useState('');
-  // What the dialog could not save: shown inside it, where it can be seen, and apart from the errors of the list.
+  // What the dialog could not save: shown inside it, where it can be seen, and apart from the errors of the list. The
+  // dialog stays open while what it sent is on its way, so the answer always reaches the dialog that sent it.
   const [saveError, setSaveError] = useState('');
-  // Each opening or closing of the dialog is a new attempt: an answer of the server for an earlier one (it may arrive with
-  // another dialog already open) neither shows its error nor closes the dialog that is open now.
-  const attempt = useRef(0);
   const [success, setSuccess] = useState('');
 
   const [showModal, setShowModal] = useState(false);
@@ -89,7 +87,6 @@ export default function SuppliersList() {
   }, [loadData]);
 
   const openCreate = () => {
-    attempt.current += 1;
     setSaveError('');
     setEditing(null);
     setForm(buildEmptyForm());
@@ -97,7 +94,6 @@ export default function SuppliersList() {
   };
 
   const openEdit = (supplier: SupplierDto) => {
-    attempt.current += 1;
     setSaveError('');
     setEditing(supplier);
     setForm({
@@ -113,7 +109,6 @@ export default function SuppliersList() {
   };
 
   const closeModal = () => {
-    attempt.current += 1;
     setSaveError('');
     setShowModal(false);
   };
@@ -136,23 +131,20 @@ export default function SuppliersList() {
       notes: form.notes.trim() || undefined,
     };
 
-    const sent = attempt.current;
+    setSaving(true);
     try {
-      setSaving(true);
       if (editing) {
         const updatePayload: UpdateSupplierRequest = { ...payload, id: editing.id };
         await suppliersApi.update(editing.id, updatePayload);
       } else {
         await suppliersApi.create(payload);
       }
-      // The list shows what was saved either way; only the dialog that sent it is closed, with its notice.
-      if (attempt.current === sent) {
-        setSuccess(editing ? 'Proveedor actualizado.' : 'Proveedor creado.');
-        closeModal();
-      }
-      await loadData();
+      setSuccess(editing ? 'Proveedor actualizado.' : 'Proveedor creado.');
+      closeModal();
+      // Not awaited: the dialog is done once it is saved, and «Guardando...» belongs to it, not to the list.
+      void loadData();
     } catch (err: unknown) {
-      if (attempt.current === sent) setSaveError(getApiErrorMessage(err, 'No se pudo guardar el proveedor.'));
+      setSaveError(getApiErrorMessage(err, 'No se pudo guardar el proveedor.'));
     } finally {
       setSaving(false);
     }
@@ -270,8 +262,8 @@ export default function SuppliersList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={closeModal} centered aria-labelledby={titleId}>
-        <Modal.Header closeButton>
+      <Modal show={showModal} onHide={() => !saving && closeModal()} centered aria-labelledby={titleId}>
+        <Modal.Header closeButton={!saving}>
           <Modal.Title id={titleId}>{editing ? 'Editar proveedor' : 'Nuevo proveedor'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -337,8 +329,9 @@ export default function SuppliersList() {
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <button className="btn btn-light" onClick={closeModal}>Cancelar</button>
-          <button className="btn btn-primary" onClick={submit} disabled={saving}>
+          <button type="button" className="btn btn-light" onClick={closeModal} disabled={saving}>Cancelar</button>
+          {/* Also while it fades out after saving, so a double click does not send it again. */}
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={saving || !showModal}>
             {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear proveedor'}
           </button>
         </Modal.Footer>
