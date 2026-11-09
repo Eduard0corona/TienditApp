@@ -2718,6 +2718,34 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Mutaciones:** de 57, fallan las pruebas en 55. Sobreviven dos que dan lo mismo con lo que manda el servidor, que no da minutos para la fecha prometida a una pieza atrasada: contar como «por vencer» una atrasada, y mostrar «Entrega en» en una atrasada.
   - **Revisión independiente:** corrió las suites en cinco zonas horarias con tres órdenes aleatorios, y 32 mutaciones propias. Encontró que el primer arreglo de Servicios borraba el error de la lista al abrir el diálogo (ahora el diálogo tiene su propio error), que la prueba del Taller fijaba «Tomar servicio» en piezas cerradas, que las prioridades del fixture no eran las que se guardan (1, 3 y 5), el objeto de impuesto que no se comprobaba y dos filtros que se activaban juntos. Quedaron corregidos.
   - **Cliente:** 218 archivos y 1,686 pruebas, lint y build en verde.
+- Fase 30N, pruebas de Productos (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Qué cambia:** la lista de productos (`ProductsList`) y su formulario (`ProductForm`) no tenían pruebas propias; los precios por plataforma y la tarjeta de existencias ya las tenían. Ahora se prueban montados, con la API simulada. Quedan corregidas dos fallas del formulario que ya existían y un nombre que faltaba:
+    - si al crear un producto sus opciones no se guardaban, el formulario seguía en «Crear producto» y al reintentar se creaba otra vez. Ahora el producto creado sigue adelante, como cuando falla su foto, con un aviso para revisar las opciones desde Editar; al editar, el formulario se queda con el error para reintentar;
+    - si no se podía leer el producto, el formulario se mostraba vacío y «Guardar cambios» lo habría guardado así encima del producto. Ahora solo dice el error y lleva de vuelta a Productos;
+    - el interruptor de disponibilidad de cada producto dice «Disponible: <producto>» a un lector de pantalla, y la imagen del formulario se llama «Imagen del producto» (decía «preview»). Su campo de archivo, oculto detrás del botón «Subir imagen», también tiene nombre, que usan las pruebas.
+  - **`ProductsList.test.tsx` (6, nuevo):**
+    - cada producto, columna por columna: su foto (o la genérica), su SKU, su categoría (o «-» si ya no existe), el precio anterior tachado solo mientras está en oferta, la existencia con su unidad, su color y su título (agotado, poca o suficiente; «-» si no controla existencias) y su horario;
+    - los enlaces a su formulario y al de un producto nuevo;
+    - los filtros por categoría y disponibilidad y la búsqueda van al servidor y regresan a la primera página;
+    - prender o apagar un producto vuelve a leer la lista, y avisa si no se puede;
+    - eliminar solo tras confirmar, y el motivo del servidor si lo rechaza;
+    - un error al leer los productos.
+  - **`ProductForm.test.tsx` (13, nuevo):**
+    - crear un producto: los números, horarios, IVA (como `taxRate` e `isTaxExempt`, nunca la opción del formulario), objeto de impuesto y claves del SAT que toma la API; sin tocar sus opciones no se reescriben; luego vuelve a la lista con su aviso;
+    - los números opcionales vacíos se mandan como nada;
+    - lo que falta antes de mandar (nombre, categoría y un precio mayor a 0);
+    - editar un producto desde lo que tiene (su foto, su IVA, su unidad, su horario y sus opciones) y mandar otra vez todo lo que tenía, campo por campo, sin reescribir sus opciones;
+    - «Sin unidad» le quita la unidad;
+    - las opciones, una vez tocadas, se guardan recortadas en el producto recién creado;
+    - si sus opciones fallan, el producto creado no se crea dos veces; al editar, el formulario se queda para reintentar;
+    - lo que está mal en las opciones se dice antes de guardar nada;
+    - la foto elegida se sube después de guardar el producto; si falla, el producto queda guardado con un aviso;
+    - el motivo del servidor cuando no guarda, sin salir del formulario;
+    - ajustar la existencia solo para quien maneja el inventario;
+    - si el producto no se puede leer, no hay formulario que guardar.
+  - **Mutaciones:** de 53, fallan las pruebas en 52. Sobrevive mostrar la existencia de un producto que no la controla, que da lo mismo: el servidor no le manda existencia (`ProductStockReader`).
+  - **Revisión independiente:** corrió las suites en cinco zonas horarias con tres órdenes aleatorios, y 29 mutaciones propias. Encontró los campos que editar podía vaciar sin que fallara una prueba (ahora se compara todo lo que se manda), el objeto de impuesto que no se comprobaba, los colores de la existencia, y las dos fallas del formulario, que quedaron corregidas.
+  - **Cliente:** 220 archivos y 1,705 pruebas, lint y build en verde.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
