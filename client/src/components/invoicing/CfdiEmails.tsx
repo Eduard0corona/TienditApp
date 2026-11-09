@@ -7,6 +7,7 @@ import { useToast } from '../../hooks/useToast';
 import { CfdiEmailDocument, CfdiEmailFailure, CfdiEmailKind } from '../../types';
 import { cfdiEmailLabel, isPlainEmail } from '../../utils/cfdi';
 import { endSentence, formatDateTime } from '../../utils/dates';
+import { useChangingOrderInvoicing } from './changingOrderInvoicing';
 
 const FAILURES: Record<CfdiEmailFailure, string> = {
   [CfdiEmailFailure.Rejected]: 'el servidor de correo lo rechazó. Revisa la dirección con el cliente.',
@@ -128,8 +129,10 @@ interface SendCfdiEmailButtonProps {
 /** «Enviar por correo» a stamped CFDI of the order's invoice: to the address typed, out from the queue. */
 export function SendCfdiEmailButton({ orderId, document, cfdiId, number, invoiceEmail, latestEmail, proposedEmail }: SendCfdiEmailButtonProps) {
   const [open, setOpen] = useState(false);
-  // While the order's invoicing is read again (after a send, too), it waits: it proposes what the invoice keeps now.
+  // While the order's invoicing is read again (after a send, too), it waits: it proposes what the invoice keeps now. While
+  // a change of it is on its way, nothing else is sent from its dialog.
   const reading = useIsFetching({ queryKey: orderInvoicingKey(orderId) }) > 0;
+  const changing = useChangingOrderInvoicing(orderId);
   const label = cfdiEmailLabel(document, number);
   return (
     <>
@@ -137,7 +140,7 @@ export function SendCfdiEmailButton({ orderId, document, cfdiId, number, invoice
         type="button"
         className="btn btn-sm btn-outline-secondary"
         aria-label={`Enviar por correo ${label}`}
-        disabled={reading}
+        disabled={changing || reading}
         onClick={() => setOpen(true)}
       >
         Enviar por correo

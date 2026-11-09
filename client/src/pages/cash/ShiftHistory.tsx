@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import CashCutTicket from '../../components/cash/CashCutTicket';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -73,7 +73,10 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
   const [closeError, setCloseError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Only the latest read shows: one that arrives late (after a filter or the page changed) does not overwrite the newer one.
+  const latestRead = useRef(0);
   const load = useCallback(async () => {
+    const read = ++latestRead.current;
     setLoading(true);
     try {
       const { data: page } = await cashApi.getSessions({
@@ -84,12 +87,14 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
         pageNumber,
         pageSize,
       });
+      if (read !== latestRead.current) return;
       setData(page);
       setError('');
     } catch (err: unknown) {
+      if (read !== latestRead.current) return;
       setError(getApiErrorMessage(err, 'No se pudo cargar el historial de turnos.'));
     } finally {
-      setLoading(false);
+      if (read === latestRead.current) setLoading(false);
     }
   }, [branchId, fromDate, onlyWithDifference, pageNumber, pageSize, toDate]);
 

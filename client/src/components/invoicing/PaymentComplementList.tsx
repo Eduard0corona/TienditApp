@@ -27,6 +27,7 @@ import { formatMoney } from '../../utils/money';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
 import { CfdiWhatsAppStatus, SendCfdiWhatsAppButton } from './CfdiWhatsApps';
 import StuckStampNote from './StuckStampNote';
+import { useChangingOrderInvoicing } from './changingOrderInvoicing';
 
 interface PaymentComplementListProps {
   orderId: string;
@@ -71,8 +72,10 @@ export default function PaymentComplementList({
   const issue = useIssuePaymentComplement(orderId);
   const retry = useRetryPaymentComplement(orderId);
   const [cancelling, setCancelling] = useState<PaymentComplement | null>(null);
-  // While the order's invoicing is read again (after a cancellation, too), it is not offered from what it said before.
+  // While the order's invoicing is read again (after any change, which does not wait for it), nothing is offered from what
+  // it said before; while a change of it is on its way (from here or from a dialog opened before), nothing else is sent.
   const reading = useIsFetching({ queryKey: orderInvoicingKey(orderId) }) > 0;
+  const changing = useChangingOrderInvoicing(orderId);
   const [downloading, setDownloading] = useState<string | null>(null);
   const today = getBusinessToday();
 
@@ -125,7 +128,8 @@ export default function PaymentComplementList({
             && complement.status !== OrderInvoiceStatus.Cancelled);
           const overdue = !live && inInstallments && payment.dueBy < today;
           const dueBy = formatCalendarDate(payment.dueBy);
-          const issuing = issue.isPending && issue.variables === payment.orderPaymentId;
+          // «Emitiendo…» until the invoicing says how it went.
+          const issuing = issue.variables === payment.orderPaymentId && (issue.isPending || (issue.isSuccess && reading));
           const issueLabel = payment.complements.length === 0 ? 'Emitir ahora' : 'Emitir otra vez';
           return (
             <li key={payment.orderPaymentId} className="border rounded p-2 mb-2">
@@ -229,7 +233,7 @@ export default function PaymentComplementList({
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-secondary"
-                            disabled={retry.isPending}
+                            disabled={changing || reading}
                             aria-label={`Volver a pedir el timbre del complemento ${complement.number}`}
                             onClick={() => void askAgain(complement)}
                           >
@@ -241,7 +245,7 @@ export default function PaymentComplementList({
                             type="button"
                             className="btn btn-sm btn-outline-danger"
                             aria-label={`Cancelar complemento ${complement.number}`}
-                            disabled={reading}
+                            disabled={changing || reading}
                             onClick={() => setCancelling(complement)}
                           >
                             Cancelar complemento
@@ -257,7 +261,7 @@ export default function PaymentComplementList({
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-secondary mt-2"
-                  disabled={issue.isPending}
+                  disabled={changing || reading}
                   aria-label={`${issuing ? 'Emitiendo' : issueLabel} el complemento del cobro del ${paidAt}`}
                   onClick={() => void issueFor(payment)}
                 >

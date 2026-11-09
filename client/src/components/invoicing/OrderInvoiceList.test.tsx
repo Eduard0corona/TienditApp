@@ -128,6 +128,98 @@ describe('OrderInvoiceList', () => {
     ));
   });
 
+  it.each([
+    ['asks the PAC again', [{
+      ...F7, id: 'inv-8', number: 'F-8', status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, hasXml: false, hasPdf: false,
+      stampWindowEndsAt: '2999-01-01T00:00:00Z',
+    }], 'Volver a pedir el timbre de la factura F-8', 'Factura F-8 timbrada.'],
+    ['cancels with relation', [
+      { ...F7, id: 'inv-8', number: 'F-8', replacesInvoiceId: 'inv-7', replacesNumber: 'F-7' },
+      { ...F7, replacedByInvoiceId: 'inv-8', replacedByNumber: 'F-8', awaitsReplacedCancellation: true },
+    ], 'Cancelar con relación la factura F-7', 'Factura F-7 cancelada.'],
+  ] as [string, Invoice[], string, string][])('%s with the answer, and offers it again only once the invoicing is read again', async (_, invoices, name, said) => {
+    vi.mocked(apiRequest).mockReset();
+    toast.success.mockReset();
+    vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) => Promise.resolve(path.endsWith('/retry')
+      ? { ...invoices[0], status: OrderInvoiceStatus.Stamped }
+      : { ...F7, status: OrderInvoiceStatus.Cancelled })) as unknown as typeof apiRequest);
+    let reread: (value: unknown) => void = () => undefined;
+    const invoicing = vi.fn().mockResolvedValueOnce({}).mockReturnValue(new Promise((resolve) => { reread = resolve; }));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <OrderInvoiceList orderId="o-1" invoices={invoices} canCancel />
+        </MemoryRouter>
+        <InvoicingOnScreen read={invoicing} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(invoicing).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole('button', { name }));
+
+    // The answer arrives although the invoicing does not come back; until it does, what it said before is not offered.
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(said));
+    expect(invoicing).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name })).toBeDisabled();
+    reread({});
+    await waitFor(() => expect(screen.getByRole('button', { name })).toBeEnabled());
+  });
+
+  it.each<[string, Invoice[], string]>([
+    ['the PAC is asked again for one', [{
+      ...F7, id: 'inv-8', number: 'F-8', status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, hasXml: false, hasPdf: false,
+      stampWindowEndsAt: '2999-01-01T00:00:00Z',
+    }], 'Volver a pedir el timbre de la factura F-8'],
+    ['one is cancelled with relation', [
+      { ...F7, id: 'inv-8', number: 'F-8', replacesInvoiceId: 'inv-7', replacesNumber: 'F-7' },
+      { ...F7, replacedByInvoiceId: 'inv-8', replacedByNumber: 'F-8', awaitsReplacedCancellation: true },
+    ], 'Cancelar con relación la factura F-7'],
+  ])('offers nothing from a list opened again while %s', async (_, invoices, name) => {
+    vi.mocked(apiRequest).mockReset();
+    vi.mocked(apiRequest).mockReturnValue(new Promise(() => undefined) as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = (open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{open && <OrderInvoiceList orderId="o-1" invoices={invoices} canCancel />}</MemoryRouter>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(true));
+    await userEvent.click(screen.getByRole('button', { name }));
+
+    rerender(view(false));
+    rerender(view(true));
+
+    expect(screen.getByRole('button', { name })).toBeDisabled();
+    expect(apiRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers neither another cancellation nor a send while one is cancelled with relation', async () => {
+    vi.mocked(apiRequest).mockReset();
+    vi.mocked(apiRequest).mockReturnValue(new Promise(() => undefined) as never);
+    // Past the 72 hours, the replaced one offers to be cancelled with relation and without it.
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <OrderInvoiceList
+            orderId="o-1"
+            canCancel
+            whatsAppConnected
+            invoices={[
+              { ...F7, id: 'inv-8', number: 'F-8', replacesInvoiceId: 'inv-7', replacesNumber: 'F-7' },
+              { ...F7, replacedByInvoiceId: 'inv-8', replacedByNumber: 'F-8', awaitsReplacedCancellation: false },
+            ]}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Cancelar factura F-7' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar con relación la factura F-7' }));
+
+    expect(screen.getByRole('button', { name: 'Cancelar factura F-7' })).toBeDisabled();
+    for (const send of screen.getAllByRole('button', { name: /^Enviar por (correo|WhatsApp)/ })) expect(send).toBeDisabled();
+  });
+
   it('stays open while the cancellation is on its way, and closes with the answer before the invoicing is read again', async () => {
     const user = userEvent.setup();
     let cancelled: (value: unknown) => void = () => undefined;

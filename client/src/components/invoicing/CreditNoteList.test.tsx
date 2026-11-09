@@ -284,6 +284,70 @@ describe('CreditNoteList', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('La nota de crédito NC-2 de esta condonación se está timbrando.'));
   });
 
+  it.each<[string, Adjustment[], RegExp, string, RegExp]>([
+    ['issues a credit note', [WRITE_OFF], /^(Emitir ahora|Emitiendo) la nota de crédito de la condonación de \$50\.00 del/,
+      'Nota de crédito NC-2 timbrada.', /^Emitiendo la nota de crédito de la condonación de \$50\.00 del/],
+    ['asks the PAC again', [{ ...REFUND, creditNotes: [{ ...NC1, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null }] }],
+      /^Volver a pedir el timbre de la nota de crédito NC-1$/, 'Nota de crédito NC-1 timbrada.', /^Volver a pedir el timbre de la nota de crédito NC-1$/],
+  ])('%s with the answer, and offers it again only once the invoicing is read again', async (_, adjustments, name, said, whileReading) => {
+    answer((_method, path) => Promise.resolve(path.endsWith('/retry') ? NC1 : { ...NC1, id: 'nc-2', number: 'NC-2' }));
+    let reread: (value: unknown) => void = () => undefined;
+    const invoicing = vi.fn().mockResolvedValueOnce({}).mockReturnValue(new Promise((resolve) => { reread = resolve; }));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CreditNoteList orderId="o-1" adjustments={adjustments} invoices={[F3]} canCancel={false} />
+        <InvoicingOnScreen read={invoicing} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(invoicing).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole('button', { name }));
+
+    // The answer arrives although the invoicing does not come back; until it does, what it said before is not offered.
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(said));
+    expect(invoicing).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: whileReading })).toBeDisabled();
+    reread({});
+    await waitFor(() => expect(screen.getByRole('button', { name })).toBeEnabled());
+  });
+
+  it.each<[string, Adjustment[], RegExp]>([
+    ['issued', [WRITE_OFF], /^Emitir ahora la nota de crédito de la condonación de \$50\.00 del/],
+    ['asked of the PAC again', [{ ...REFUND, creditNotes: [{ ...NC1, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null }] }],
+      /^Volver a pedir el timbre de la nota de crédito NC-1$/],
+  ])('offers nothing from a list opened again while a credit note is %s', async (_, adjustments, name) => {
+    answer(() => new Promise(() => undefined));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = (open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        {open && <CreditNoteList orderId="o-1" adjustments={adjustments} invoices={[F3]} canCancel={false} />}
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(true));
+    await userEvent.click(screen.getByRole('button', { name }));
+
+    rerender(view(false));
+    rerender(view(true));
+
+    expect(screen.getByRole('button', { name })).toBeDisabled();
+    expect(apiRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers neither a cancellation nor a send while a credit note is issued', async () => {
+    answer(() => new Promise(() => undefined));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CreditNoteList orderId="o-1" adjustments={[REFUND, WRITE_OFF]} invoices={[F3]} canCancel whatsAppConnected />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-1' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Emitir ahora la nota de crédito de la condonación/ }));
+
+    expect(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-1' })).toBeDisabled();
+    for (const send of screen.getAllByRole('button', { name: /^Enviar por (correo|WhatsApp)/ })) expect(send).toBeDisabled();
+  });
+
   it('stays open while the cancellation is on its way, and closes with the answer before the invoicing is read again', async () => {
     const user = userEvent.setup();
     let cancelled: (value: unknown) => void = () => undefined;

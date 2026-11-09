@@ -222,6 +222,70 @@ describe('PaymentComplementList', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('El complemento P-2 de este cobro se está timbrando.'));
   });
 
+  it.each<[string, Payment[], RegExp, string, RegExp]>([
+    ['issues a complement', [SECOND], /^(Emitir ahora|Emitiendo) el complemento del cobro del/, 'Complemento P-2 timbrado.',
+      /^Emitiendo el complemento del cobro del/],
+    ['asks the PAC again', [{ ...FIRST, complements: [{ ...P1, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null }] }],
+      /^Volver a pedir el timbre del complemento P-1$/, 'Complemento P-1 timbrado.', /^Volver a pedir el timbre del complemento P-1$/],
+  ])('%s with the answer, and offers it again only once the invoicing is read again', async (_, payments, name, said, whileReading) => {
+    answer((_method, path) => Promise.resolve(path.endsWith('/retry') ? P1 : { ...P1, id: 'pc-2', orderPaymentId: 'pay-2', number: 'P-2' }));
+    let reread: (value: unknown) => void = () => undefined;
+    const invoicing = vi.fn().mockResolvedValueOnce({}).mockReturnValue(new Promise((resolve) => { reread = resolve; }));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <PaymentComplementList orderId="o-1" payments={payments} inInstallments canCancel={false} />
+        <InvoicingOnScreen read={invoicing} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(invoicing).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole('button', { name }));
+
+    // The answer arrives although the invoicing does not come back; until it does, what it said before is not offered.
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(said));
+    expect(invoicing).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: whileReading })).toBeDisabled();
+    reread({});
+    await waitFor(() => expect(screen.getByRole('button', { name })).toBeEnabled());
+  });
+
+  it.each<[string, Payment[], RegExp]>([
+    ['issued', [SECOND], /^Emitir ahora el complemento del cobro del/],
+    ['asked of the PAC again', [{ ...FIRST, complements: [{ ...P1, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null }] }],
+      /^Volver a pedir el timbre del complemento P-1$/],
+  ])('offers nothing from a list opened again while a complement is %s', async (_, payments, name) => {
+    answer(() => new Promise(() => undefined));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = (open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        {open && <PaymentComplementList orderId="o-1" payments={payments} inInstallments canCancel={false} />}
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(true));
+    await userEvent.click(screen.getByRole('button', { name }));
+
+    rerender(view(false));
+    rerender(view(true));
+
+    expect(screen.getByRole('button', { name })).toBeDisabled();
+    expect(apiRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers neither a cancellation nor a send while a complement is issued', async () => {
+    answer(() => new Promise(() => undefined));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <PaymentComplementList orderId="o-1" payments={[FIRST, SECOND]} inInstallments canCancel whatsAppConnected />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Cancelar complemento P-1' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Emitir ahora el complemento del cobro del/ }));
+
+    expect(screen.getByRole('button', { name: 'Cancelar complemento P-1' })).toBeDisabled();
+    for (const send of screen.getAllByRole('button', { name: /^Enviar por (correo|WhatsApp)/ })) expect(send).toBeDisabled();
+  });
+
   it('stays open while the cancellation is on its way, and closes with the answer before the invoicing is read again', async () => {
     const user = userEvent.setup();
     let cancelled: (value: unknown) => void = () => undefined;
