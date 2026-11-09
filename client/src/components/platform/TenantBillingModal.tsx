@@ -55,6 +55,17 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
   const monthsNumber = Math.max(1, Number(months) || 1);
   const suggestedAmount = plan ? plan.monthlyPrice * monthsNumber : 0;
 
+  // Whether it is suspended (or cancelled), as the business says once read again. Without a plan only the list says it, and
+  // a filter of the console may leave the business out once changed: what the dialog itself left counts until the list
+  // says something else, and from then on the list does.
+  const [withoutPlan, setWithoutPlan] = useState<{ listed: number; now: number } | null>(null);
+  const kept = withoutPlan?.listed === tenant.tenantStatus ? withoutPlan : null;
+  if (withoutPlan && !kept) setWithoutPlan(null);
+  const suspended = data?.hasPlan
+    ? data.suspendedByPlatform || data.status === SubscriptionStatusValue.Suspended || data.status === SubscriptionStatusValue.Cancelled
+    : (kept ? kept.now : tenant.tenantStatus) !== 0;
+
+  /** Whether it was done. */
   const run = async (action: () => Promise<unknown>, done: string) => {
     setBusy(true);
     try {
@@ -62,11 +73,17 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
       toast.success(done);
       // Not awaited: the dialog does not wait for the lists; its actions wait for the business and the list read again.
       void queryClient.invalidateQueries({ queryKey: ['platform'] });
+      return true;
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo completar la acción.'));
+      return false;
     } finally {
       setBusy(false);
     }
+  };
+  /** A business without a plan is suspended or active as the dialog left it, until the list says otherwise. */
+  const leaveWithoutPlan = (now: number) => {
+    if (!data?.hasPlan) setWithoutPlan({ listed: tenant.tenantStatus, now });
   };
 
   const assign = () => run(
@@ -86,8 +103,8 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
   }, 'Pago registrado.');
 
   const suspendOrReactivate = async () => {
-    if (data?.suspendedByPlatform || tenant.tenantStatus !== 0) {
-      await run(() => platformApi.reactivate(tenant.tenantId), 'Suspensión quitada.');
+    if (suspended) {
+      if (await run(() => platformApi.reactivate(tenant.tenantId), 'Suspensión quitada.')) leaveWithoutPlan(0);
       return;
     }
     if (!reason.trim()) {
@@ -99,7 +116,7 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
       message: 'Nadie del negocio podrá usar la aplicación hasta que quites la suspensión.',
       confirmLabel: 'Suspender',
     });
-    if (accepted) await run(() => platformApi.suspend(tenant.tenantId, reason.trim()), 'Negocio suspendido.');
+    if (accepted && await run(() => platformApi.suspend(tenant.tenantId, reason.trim()), 'Negocio suspendido.')) leaveWithoutPlan(2);
   };
 
   const cancelSubscription = async () => {
@@ -170,7 +187,7 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
                   </div>
                 )}
                 <div className="col-6 col-md-3">
-                  <button type="button" className="btn btn-sm btn-primary w-100" disabled={working || !planId || planId === tenant.planId}
+                  <button type="button" className="btn btn-sm btn-primary w-100" disabled={working || !planId || planId === plan?.id}
                     onClick={() => void assign()}>
                     {data.hasPlan ? 'Cambiar plan' : 'Asignar plan'}
                   </button>
@@ -239,7 +256,7 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
                 onChange={(event) => setReason(event.target.value)} />
               <div className="d-flex flex-wrap gap-2">
                 <button type="button" className="btn btn-sm btn-outline-danger" disabled={working} onClick={() => void suspendOrReactivate()}>
-                  {data.suspendedByPlatform || tenant.tenantStatus !== 0 ? 'Quitar suspensión' : 'Suspender'}
+                  {suspended ? 'Quitar suspensión' : 'Suspender'}
                 </button>
                 {data.hasPlan && data.status !== SubscriptionStatusValue.Cancelled && (
                   <button type="button" className="btn btn-sm btn-outline-secondary" disabled={working} onClick={() => void cancelSubscription()}>

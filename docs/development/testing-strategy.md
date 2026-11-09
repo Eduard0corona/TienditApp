@@ -2871,7 +2871,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 - Fase 30T, la convención en los diálogos que listó la revisión de la 30S (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
   - **Qué cambia:**
     - **Borrador del CFDI** (`CfdiDraftModal`): «Cerrar», la X y Escape funcionaban mientras decía «Timbrando…». Al abrirlo otra vez, el timbrado en camino no se veía y se podía pedir el timbre otra vez. Ahora timbrar y sustituir viven en el diálogo, que no se cierra mientras van en camino. Con la respuesta se puede cerrar: las facturas del pedido se vuelven a leer detrás (`behind`), y el botón de timbrar espera a que lleguen, para no timbrar dos veces la misma.
-    - **Cobranza de un negocio en Plataforma** (`TenantBillingModal`): se podía cerrar mientras registraba un pago, cambiaba el plan, suspendía o cancelaba; al abrirlo otra vez con lo de antes, un pago se podía registrar dos veces. Ahora no se cierra mientras va en camino. Al terminar no espera las listas; sus acciones esperan al negocio y a la lista de negocios leídos otra vez, porque de la lista salen su plan y si está suspendido.
+    - **Cobranza de un negocio en Plataforma** (`TenantBillingModal`): se podía cerrar mientras registraba un pago, cambiaba el plan, suspendía o cancelaba; al abrirlo otra vez con lo de antes, un pago se podía registrar dos veces. Ahora no se cierra mientras va en camino. Al terminar no espera las listas; sus acciones esperan al negocio y a la lista de negocios leídos otra vez. El plan y si está suspendido salen del negocio leído otra vez, no de la fila de la lista: con un filtro de la consola, la fila puede salir de la lista al cambiar, y el diálogo se quedaba con la de antes. Sin plan solo la lista dice si está suspendido, así que cuenta lo que el diálogo dejó hasta que la lista dice otra cosa.
     - **Hojas públicas** (pedir en el menú, agendar una cita, solicitar una visita): se cerraban mientras enviaban. Ahora esperan la respuesta, que se muestra en ellas. El carrito tampoco deja «Agregar más productos» ni cambiar cantidades mientras manda el pedido: la respuesta vaciaba el carrito y borraba lo agregado. Si la cita o la visita se rechaza, la hoja se puede cerrar mientras se vuelven a leer los horarios, y no se manda otra vez hasta que llegan.
     - **Cerrar la caja de otra persona en Turnos** (`ShiftHistory`) ya no espera la lista. Si se cambiaba un filtro mientras se volvía a leer, se podía abrir otra caja, y su cierre empezaba en «Cerrando…».
     - Sin cambio, con su razón:
@@ -2880,12 +2880,12 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Pruebas:**
     - En cada diálogo y hoja, no se cierra mientras va en camino: sin la X, Escape no hace nada y, donde lo hay, «Cerrar» está deshabilitado.
     - En el CFDI, timbrar y sustituir se pueden cerrar con la respuesta aunque las facturas no vuelvan, y el timbre no se ofrece otra vez hasta que llegan, aunque el borrador llegue antes.
-    - En la cobranza, registrado el pago el diálogo se puede cerrar, y sus cinco acciones esperan al negocio y a la lista, en cualquier orden.
+    - En la cobranza, registrado el pago el diálogo se puede cerrar, y sus cinco acciones esperan al negocio y a la lista, en cualquier orden. Con la fila fuera de la lista, no ofrece cambiar al plan que ya tiene, ofrece suspender una vez quitada la suspensión (también sin plan) y vuelve a la lista cuando esta dice otra cosa.
     - En el carrito, ni otro producto ni otra cantidad mientras se envía.
     - En la cita y la visita, rechazada la solicitud, la hoja se cierra mientras se leen los horarios, no se manda otra vez y después vuelve lista para mandarla.
     - En Turnos, la caja que se abre con otro filtro no empieza en «Cerrando…».
     - `TenantBillingModal.test.tsx` es nuevo. Las pruebas fallan con el código anterior.
-  - **Mutaciones:** de 33, fallan las pruebas en las 33.
+  - **Mutaciones:** de 42, fallan las pruebas en las 42.
   - **Revisión independiente:**
     - Con pruebas sonda y mutaciones encontró dos hallazgos mayores:
       - el borrador del CFDI no se podía cerrar mientras se volvían a leer sus facturas, porque los hooks de timbrar y sustituir las esperaban;
@@ -2898,7 +2898,8 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - También encontró pruebas que no comprobaban las otras acciones de la cobranza ni la guardia de sustituir. Todo quedó corregido con pruebas que fallan sin el arreglo.
     - Listó para la fase siguiente los otros timbrados del mismo diálogo del CFDI, que todavía se pueden cerrar mientras van en camino: «Emitir ahora» del complemento, las notas de crédito, «Volver a pedir el timbre» y «Cancelar con relación».
     - Dejó sin comprobar si en Turnos una lectura que llega tarde pisa la del filtro nuevo.
-  - **Cliente:** 231 archivos y 1,855 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati. Primera visita: 180,377 B de 180,400 B.
+  - **claude-review** encontró, como menor, que la cobranza seguía mandando otra vez «Cambiar plan» o «Quitar suspensión» cuando un filtro de la consola dejaba fuera la fila del negocio. Quedó corregido con pruebas que fallan sin el arreglo.
+  - **Cliente:** 231 archivos y 1,861 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati. Primera visita: 180,392 B de 180,400 B.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
