@@ -1,8 +1,9 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
+import { orderInvoicingKey } from '../../api/invoicing';
 import { apiRequest, type Schemas } from '../../api/typedClient';
 import { CfdiCancellationMotive, OrderInvoiceStatus } from '../../types';
 import OrderInvoiceList from './OrderInvoiceList';
@@ -28,6 +29,13 @@ function renderList(invoices: Invoice[]) {
       <OrderInvoiceList orderId="o-1" invoices={invoices} canCancel />
     </QueryClientProvider>,
   );
+}
+
+
+/** The order's invoicing on screen: read once, and read again after a change, when it does not come back. */
+function InvoicingOnScreen({ read }: { read: () => Promise<unknown> }) {
+  useQuery({ queryKey: orderInvoicingKey('o-1'), queryFn: read });
+  return null;
 }
 
 describe('OrderInvoiceList', () => {
@@ -118,6 +126,37 @@ describe('OrderInvoiceList', () => {
       'post', '/api/v1/invoicing/invoices/{invoiceId}/cancel',
       { path: { invoiceId: 'inv-7' }, body: { motive: CfdiCancellationMotive.ErrorsWithoutReplacement } },
     ));
+  });
+
+  it('stays open while the cancellation is on its way, and closes with the answer before the invoicing is read again', async () => {
+    const user = userEvent.setup();
+    let cancelled: (value: unknown) => void = () => undefined;
+    vi.mocked(apiRequest).mockReturnValue(new Promise((resolve) => { cancelled = resolve; }) as never);
+    const invoicing = vi.fn().mockResolvedValueOnce({}).mockReturnValue(new Promise(() => undefined));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <OrderInvoiceList orderId="o-1" invoices={[F7]} canCancel />
+        <InvoicingOnScreen read={invoicing} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(invoicing).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole('button', { name: 'Cancelar factura F-7' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Cancelar la factura F-7' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar factura' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Cancelando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Volver' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Cancelar la factura F-7' })).toBeInTheDocument();
+
+    cancelled({ ...F7, status: OrderInvoiceStatus.Cancelling });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Cancelación de F-7 pedida: el SAT espera la respuesta del cliente.');
+    expect(invoicing).toHaveBeenCalledTimes(2);
+    // Until the invoicing comes back, it is not offered from what it said before.
+    expect(screen.getByRole('button', { name: 'Cancelar factura F-7' })).toBeDisabled();
   });
 });
 

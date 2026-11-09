@@ -85,9 +85,10 @@ export default function CourierSettlementModal({ courier, owed, truncated, onClo
   };
 
   return (
-    <Modal show onHide={onClose} centered size="lg" aria-labelledby={`${id}-title`}>
+    // It stays open while what it sent is on its way, so the answer reaches it and not a dialog opened after it.
+    <Modal show onHide={() => !create.isPending && onClose()} centered size="lg" aria-labelledby={`${id}-title`}>
       <form onSubmit={(event) => void save(event)} noValidate>
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!create.isPending}>
           <Modal.Title id={`${id}-title`} as="h2" className="h5">Liquidar a {courierName}</Modal.Title>
         </Modal.Header>
         <Modal.Body>

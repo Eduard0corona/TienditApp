@@ -103,4 +103,41 @@ describe('PlatformReviewsPage', () => {
     await waitFor(() => expect(api.restore).toHaveBeenCalledWith('r1'));
     expect(screen.queryByRole('button', { name: /Ocultar la reseña/ })).not.toBeInTheDocument();
   });
+
+  it('waits for the hidden ones read again before offering to restore another time', async () => {
+    const user = userEvent.setup();
+    const hidden = review({ status: ReviewStatus.Hidden, reportedAt: null, reportReason: undefined, hiddenReason: ReviewConcern.Offensive, moderatedAt: '2026-10-12T10:00:00Z' });
+    api.getPlatformReviews.mockResolvedValue(page([hidden]));
+    api.restore.mockResolvedValue(undefined as never);
+
+    renderPage();
+
+    await user.selectOptions(await screen.findByLabelText('Mostrar'), 'Ocultas');
+    const restore = await screen.findByRole('button', { name: 'Restaurar la reseña de Mariana O. en Café Luna' });
+    await waitFor(() => expect(restore).toBeEnabled());
+    api.getPlatformReviews.mockReturnValue(new Promise(() => undefined));
+    await user.click(restore);
+    await user.click(within(await screen.findByRole('dialog', { name: 'Restaurar reseña' })).getByRole('button', { name: 'Restaurar' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('La reseña volvió a publicarse.'));
+    expect(screen.getByRole('button', { name: 'Restaurar la reseña de Mariana O. en Café Luna' })).toBeDisabled();
+  });
+  it('closes the hiding with the answer, before the list is read again', async () => {
+    const user = userEvent.setup();
+    api.getPlatformReviews.mockResolvedValue(page([review()]));
+    api.hide.mockResolvedValue(undefined as never);
+
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Ocultar la reseña de Mariana O. en Café Luna' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ocultar la reseña de Mariana O.' });
+    api.getPlatformReviews.mockReturnValue(new Promise(() => undefined));
+    await user.click(within(dialog).getByRole('button', { name: 'Ocultar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Ocultaste la reseña.');
+    expect(api.getPlatformReviews).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: 'Ocultar la reseña de Mariana O. en Café Luna' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Mantener la reseña de Mariana O. en Café Luna' })).toBeDisabled();
+  });
 });

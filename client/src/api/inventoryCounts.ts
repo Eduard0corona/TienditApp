@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import { getApiErrorStatus } from './errors';
 import type { InventoryCountStatus } from './generated/enums';
@@ -99,6 +99,14 @@ export function useInventoryCountLines(id: string, filter: InventoryCountLinesFi
   });
 }
 
+/**
+ * The count the server answered, unless the one shown is already newer: an answer that arrives late (a save of what was
+ * counted crossed it) does not take the count back to a revision before it.
+ */
+function keepNewer(client: QueryClient, id: string, count: InventoryCount) {
+  client.setQueryData<InventoryCount>(countKeys.count(id), (cached) => (cached && cached.revision > count.revision ? cached : count));
+}
+
 function useRefreshCounts() {
   const client = useQueryClient();
   return () => client.invalidateQueries({ queryKey: countKeys.all });
@@ -162,13 +170,20 @@ export function useSavingInventoryCount(id: string) {
   );
 }
 
-/** Adds what turned up on the shelf; an item the count already has stays as it is. */
+/**
+ * Adds what turned up on the shelf; an item the count already has stays as it is. The count shows what the server
+ * answered, and its dialog closes with it: the counts are read again behind it.
+ */
 export function useAddInventoryCountItems(id: string) {
+  const client = useQueryClient();
   const refresh = useRefreshCounts();
   return useMutation({
     mutationFn: (supplyItemIds: string[]) =>
       apiRequest('post', '/api/v1/inventory/counts/{id}/items', { path: { id }, body: { supplyItemIds } }),
-    onSuccess: refresh,
+    onSuccess: (count) => {
+      keepNewer(client, id, count);
+      void refresh();
+    },
   });
 }
 
@@ -183,12 +198,17 @@ export function usePostInventoryCount(id: string) {
   });
 }
 
-/** Cancels an open count: nothing moves. */
+/**
+ * Cancels an open count: nothing moves. The count shows what the server answered, and its dialog closes with it: the
+ * counts are read again behind it (also when it is refused, so a count that changed shows how it is).
+ */
 export function useCancelInventoryCount(id: string) {
+  const client = useQueryClient();
   const refresh = useRefreshCounts();
   return useMutation({
     mutationFn: (reason: string) =>
       apiRequest('post', '/api/v1/inventory/counts/{id}/cancel', { path: { id }, body: { reason: reason || null } }),
-    onSettled: refresh,
+    onSuccess: (count) => keepNewer(client, id, count),
+    onSettled: () => { void refresh(); },
   });
 }

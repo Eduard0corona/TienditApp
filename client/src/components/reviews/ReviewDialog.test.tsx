@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders } from 'axios';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReviewConcern } from '../../api/generated/enums';
 import { reviewsApi, type MyReview } from '../../api/reviewsApi';
@@ -42,6 +43,25 @@ function renderDialog(onClose = vi.fn(), queryClient = new QueryClient({ default
     </QueryClientProvider>,
   );
   return onClose;
+}
+
+/** As Mis pedidos does: «Calificar» opens it, and saving, deleting or closing closes it. */
+function Harness() {
+  const [business, setBusiness] = useState<typeof CAFE | null>(null);
+  return (
+    <>
+      <button type="button" onClick={() => setBusiness(CAFE)}>Calificar</button>
+      <ReviewDialog business={business} onClose={() => setBusiness(null)} />
+    </>
+  );
+}
+
+function renderHarness() {
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <Harness />
+    </QueryClientProvider>,
+  );
 }
 
 describe('ReviewDialog', () => {
@@ -136,5 +156,99 @@ describe('ReviewDialog', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Tu reseña no puede llevar enlaces, correos ni teléfonos.');
     expect(within(dialog).getByLabelText('Cuéntanos cómo te fue (opcional)')).toHaveValue('Escríbeme a www.ofertas.com');
     expect(onClose).not.toHaveBeenCalled();
+  });
+  it('stays open while the review is saved', async () => {
+    const user = userEvent.setup();
+    api.getMyReview.mockResolvedValue({ canReview: true, review: null });
+    let saved: (value: unknown) => void = () => undefined;
+    api.saveMyReview.mockReturnValue(new Promise((resolve) => { saved = resolve; }) as never);
+
+    const onClose = renderDialog();
+
+    const dialog = await screen.findByRole('dialog', { name: 'Califica a Café Luna' });
+    await user.click(await within(dialog).findByRole('radio', { name: '5 estrellas' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Publicar' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+
+    saved(review({ rating: 5 }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(toast.success).toHaveBeenCalledWith('Publicamos tu reseña de Café Luna.');
+  });
+
+  it('publishes a review once, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    api.getMyReview.mockResolvedValue({ canReview: true, review: null });
+    api.saveMyReview.mockResolvedValue(review({ rating: 5 }));
+
+    renderHarness();
+
+    await user.click(screen.getByRole('button', { name: 'Calificar' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Califica a Café Luna' });
+    await user.click(await within(dialog).findByRole('radio', { name: '5 estrellas' }));
+    // The second click lands while the dialog fades out.
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Publicar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(api.saveMyReview).toHaveBeenCalledTimes(1);
+  });
+
+  it('deletes a review once, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    api.getMyReview.mockResolvedValue({ canReview: true, review: review() });
+    api.deleteMyReview.mockResolvedValue(undefined as never);
+
+    renderHarness();
+
+    await user.click(screen.getByRole('button', { name: 'Calificar' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tu reseña de Café Luna' });
+    await user.click(await within(dialog).findByRole('button', { name: 'Borrar reseña' }));
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Borrar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(api.deleteMyReview).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens again without the error of the last time', async () => {
+    const user = userEvent.setup();
+    api.getMyReview.mockResolvedValue({ canReview: true, review: null });
+    api.saveMyReview.mockImplementation(() => Promise.reject(problem('Tu reseña no puede llevar enlaces, correos ni teléfonos.')));
+
+    renderHarness();
+
+    await user.click(screen.getByRole('button', { name: 'Calificar' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Califica a Café Luna' });
+    await user.click(await within(dialog).findByRole('radio', { name: '1 estrella' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Publicar' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Tu reseña no puede llevar enlaces');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Calificar' }));
+    const again = await screen.findByRole('dialog', { name: 'Califica a Café Luna' });
+    expect(within(again).queryByRole('alert')).not.toBeInTheDocument();
+  });
+  it('opens again without the error of a delete that failed', async () => {
+    const user = userEvent.setup();
+    api.getMyReview.mockResolvedValue({ canReview: true, review: review() });
+    api.deleteMyReview.mockImplementation(() => Promise.reject(problem('La reseña ya no existe.')));
+
+    renderHarness();
+
+    await user.click(screen.getByRole('button', { name: 'Calificar' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tu reseña de Café Luna' });
+    await user.click(await within(dialog).findByRole('button', { name: 'Borrar reseña' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Borrar' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('La reseña ya no existe.');
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Calificar' }));
+    const again = await screen.findByRole('dialog', { name: 'Tu reseña de Café Luna' });
+    expect(within(again).queryByRole('alert')).not.toBeInTheDocument();
   });
 });

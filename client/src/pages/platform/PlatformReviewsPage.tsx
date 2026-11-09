@@ -34,6 +34,8 @@ export default function PlatformReviewsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [hiding, setHiding] = useState<PlatformReview | null>(null);
+  // While the reviews are read again (after reporting, answering or hiding one, too), their rows wait: they would offer
+  // what a review no longer is.
   const reviews = useQuery({
     queryKey: ['platform', 'reviews', filter, page, pageSize],
     queryFn: ({ signal }) => reviewsApi.getPlatformReviews(filter, page, pageSize, signal),
@@ -138,6 +140,7 @@ export default function PlatformReviewsPage() {
                           type="button"
                           className="btn btn-sm btn-light text-danger me-1"
                           onClick={() => setHiding(review)}
+                          disabled={reviews.isFetching}
                           aria-label={`Ocultar la reseña de ${review.authorName} en ${review.businessName}`}
                         >
                           Ocultar
@@ -146,6 +149,7 @@ export default function PlatformReviewsPage() {
                           type="button"
                           className="btn btn-sm btn-light"
                           onClick={() => void decide(review, true)}
+                          disabled={reviews.isFetching}
                           aria-label={`Mantener la reseña de ${review.authorName} en ${review.businessName}`}
                         >
                           Mantener
@@ -156,6 +160,7 @@ export default function PlatformReviewsPage() {
                         type="button"
                         className="btn btn-sm btn-light"
                         onClick={() => void decide(review, false)}
+                        disabled={reviews.isFetching}
                         aria-label={`Restaurar la reseña de ${review.authorName} en ${review.businessName}`}
                       >
                         Restaurar
@@ -179,8 +184,9 @@ export default function PlatformReviewsPage() {
         onSubmit={async (reason) => {
           if (!hiding) return;
           await reviewsApi.hide(hiding.id, reason);
-          await refresh();
           toast.success('Ocultaste la reseña.');
+          // The dialog closes with the answer; the list is read again behind it.
+          void refresh();
         }}
         onClose={() => setHiding(null)}
       />

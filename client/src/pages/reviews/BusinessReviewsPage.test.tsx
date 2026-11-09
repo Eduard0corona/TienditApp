@@ -131,4 +131,104 @@ describe('BusinessReviewsPage', () => {
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Quitar respuesta' })).getByRole('button', { name: 'Quitar respuesta' }));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
   });
+  it('keeps the answer open while it is published, and closes it before the list is read again', async () => {
+    const user = userEvent.setup();
+    answer([review()]);
+    let published: (value: unknown) => void = () => undefined;
+    api.reply.mockReturnValue(new Promise((resolve) => { published = resolve; }) as never);
+
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Responder a Mariana O.' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Responder a Mariana O.' });
+    await user.type(within(dialog).getByLabelText('Tu respuesta'), 'Lo sentimos.');
+    await user.click(within(dialog).getByRole('button', { name: 'Publicar respuesta' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Publicando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Responder a Mariana O.' })).toHaveClass('show');
+
+    // The list read after it does not come back: the dialog does not wait for it.
+    api.getBusinessReviews.mockReturnValue(new Promise(() => undefined));
+    published(review({ reply: 'Lo sentimos.' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Publicamos tu respuesta.');
+    expect(api.getBusinessReviews).toHaveBeenCalledTimes(2);
+    // Until the list comes back, the row does not offer to answer again from what it said before.
+    expect(screen.getByRole('button', { name: 'Responder a Mariana O.' })).toBeDisabled();
+  });
+
+  it('publishes an answer once, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    answer([review()]);
+    api.reply.mockResolvedValue(review({ reply: 'Lo sentimos.' }));
+
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Responder a Mariana O.' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Responder a Mariana O.' });
+    await user.type(within(dialog).getByLabelText('Tu respuesta'), 'Lo sentimos.');
+    // The second click lands while the dialog fades out.
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Publicar respuesta' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(api.reply).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('says why an answer was not published, and opens again without it', async () => {
+    const user = userEvent.setup();
+    answer([review()]);
+    api.reply.mockImplementation(() => Promise.reject(new Error('sin red')));
+
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Responder a Mariana O.' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Responder a Mariana O.' });
+    await user.type(within(dialog).getByLabelText('Tu respuesta'), 'Lo sentimos.');
+    await user.click(within(dialog).getByRole('button', { name: 'Publicar respuesta' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('No se pudo publicar tu respuesta.');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Responder a Mariana O.' }));
+    const again = await screen.findByRole('dialog', { name: 'Responder a Mariana O.' });
+    expect(within(again).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('closes the report with the answer, before the list is read again', async () => {
+    const user = userEvent.setup();
+    answer([review()]);
+    api.report.mockResolvedValue(review({ reportedAt: '2026-10-13T10:00:00Z', reportReason: ReviewConcern.Spam }));
+
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Reportar la reseña de Mariana O.' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Reportar la reseña de Mariana O.' });
+    await user.click(within(dialog).getByRole('radio', { name: 'Publicidad o nada que ver con el negocio' }));
+    api.getBusinessReviews.mockReturnValue(new Promise(() => undefined));
+    await user.click(within(dialog).getByRole('button', { name: 'Reportar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Reportaste la reseña: la plataforma la va a revisar.');
+    expect(api.getBusinessReviews).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: 'Reportar la reseña de Mariana O.' })).toBeDisabled();
+  });
+  it('waits for the list read again before offering to take an answer down once more', async () => {
+    const user = userEvent.setup();
+    answer([review({ reply: 'Lo sentimos.', repliedAt: '2026-10-11T10:00:00Z' })]);
+    api.removeReply.mockResolvedValue(review());
+
+    renderPage();
+
+    const remove = await screen.findByRole('button', { name: 'Quitar respuesta a Mariana O.' });
+    api.getBusinessReviews.mockReturnValue(new Promise(() => undefined));
+    await user.click(remove);
+    await user.click(within(await screen.findByRole('dialog', { name: 'Quitar respuesta' })).getByRole('button', { name: 'Quitar respuesta' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Quitaste tu respuesta.'));
+    expect(screen.getByRole('button', { name: 'Quitar respuesta a Mariana O.' })).toBeDisabled();
+  });
 });

@@ -1,6 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ordersApi } from '../../api/ordersApi';
@@ -14,7 +14,7 @@ vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('../../api/ordersApi', () => ({
-  ordersApi: { getById: vi.fn(), cancelTabItem: vi.fn(), markRoundServed: vi.fn() },
+  ordersApi: { getById: vi.fn(), cancelTabItem: vi.fn(), markRoundServed: vi.fn(), closeTab: vi.fn(), moveTab: vi.fn() },
 }));
 
 const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() };
@@ -41,15 +41,23 @@ function tab(overrides: Partial<OrderDto> = {}): OrderDto {
   } as OrderDto;
 }
 
-function renderPanel() {
+/** The tables of Mesas behind the tab: read once, and read again after a change. */
+function TablesOnScreen({ read }: { read: () => Promise<unknown> }) {
+  useQuery({ queryKey: ['tables'], queryFn: read });
+  return null;
+}
+
+function renderPanel(onClose = vi.fn(), tables?: () => Promise<unknown>) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <TabPanel orderId="tab1" freeTables={[]} businessName="Fonda Lupita" onClose={vi.fn()} />
+        {tables && <TablesOnScreen read={tables} />}
+        <TabPanel orderId="tab1" freeTables={[]} businessName="Fonda Lupita" onClose={onClose} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return onClose;
 }
 
 describe('TabPanel', () => {
@@ -115,5 +123,102 @@ describe('TabPanel', () => {
 
     expect(await screen.findByText('En preparación')).toBeInTheDocument();
     expect(screen.queryByText('Preparando')).not.toBeInTheDocument();
+  });
+  it('stays open while a round is marked served, and waits for the tab before offering it again', async () => {
+    const user = userEvent.setup();
+    // A waiter who also charges: «Cobrar» is on the tab.
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', role: 'Employee', permissions: ['ManageOrders', 'ChargeOrders'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    const ready = tab({ kitchenTickets: [{ id: 'k1', round: 1, status: KitchenTicketStatus.Ready, sentAt: '2026-10-08T20:00:00Z' }] });
+    const served = tab({ kitchenTickets: [{ id: 'k1', round: 1, status: KitchenTicketStatus.Served, sentAt: '2026-10-08T20:00:00Z' }] });
+    let reread: (value: unknown) => void = () => undefined;
+    vi.mocked(ordersApi.getById)
+      .mockResolvedValueOnce({ data: ready } as never)
+      .mockReturnValueOnce(new Promise((resolve) => { reread = resolve; }) as never);
+    let marked: (value: unknown) => void = () => undefined;
+    vi.mocked(ordersApi.markRoundServed).mockReturnValue(new Promise((resolve) => { marked = resolve; }) as never);
+    const onClose = renderPanel();
+
+    await user.click(await screen.findByRole('button', { name: 'Servida' }));
+    expect(screen.getByRole('button', { name: 'Servida' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    // Nothing else leaves the tab or starts another change meanwhile.
+    expect(screen.getByRole('button', { name: 'Agregar ronda' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Ver cuenta' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cobrar $75.00' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+
+    marked({});
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Ronda 1 servida.'));
+    // The answer brings no tab: the button waits for the tab read again, which says the round was served.
+    await waitFor(() => expect(ordersApi.getById).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('button', { name: 'Servida' })).toBeDisabled();
+    reread({ data: served });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Servida' })).not.toBeInTheDocument());
+    expect(ordersApi.markRoundServed).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a paid tab with the answer, before the tab and the tables are read again', async () => {
+    const user = userEvent.setup();
+    const paid = tab({ paidAmount: 75, balance: 0 });
+    let reads = 0;
+    vi.mocked(ordersApi.getById).mockImplementation(() => (++reads === 1 ? Promise.resolve({ data: paid }) : new Promise(() => undefined)) as never);
+    vi.mocked(ordersApi.closeTab).mockResolvedValue({ data: { ...paid, isOpenTab: false } } as never);
+    const tables = vi.fn().mockResolvedValueOnce({ tables: [] }).mockReturnValue(new Promise(() => undefined));
+    const onClose = renderPanel(vi.fn(), tables);
+
+    await user.click(await screen.findByRole('button', { name: 'Cerrar cuenta' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(toast.success).toHaveBeenCalledWith('Cuenta cerrada. La mesa quedó libre.');
+    expect(tables).toHaveBeenCalledTimes(2);
+    // The tab is read again behind it, too.
+    expect(reads).toBe(2);
+  });
+
+  it('reads the tab again when what it sent fails, and says why', async () => {
+    const user = userEvent.setup();
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: tab() } as never);
+    vi.mocked(ordersApi.cancelTabItem).mockImplementation(() => Promise.reject(new Error('sin red')));
+    renderPanel();
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar Tacos al pastor' }));
+    await user.click(screen.getByRole('button', { name: 'El cliente ya no lo quiso' }));
+    await user.click(screen.getByRole('button', { name: 'Cancelar platillo' }));
+
+    expect(await screen.findByText('No se pudo completar la acción.')).toBeInTheDocument();
+    await waitFor(() => expect(ordersApi.getById).toHaveBeenCalledTimes(2));
+  });
+  it('moves the tab, and waits for the tables read again before offering another move', async () => {
+    const user = userEvent.setup();
+    const atFour = tab({ diningTableId: 'm4' });
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: atFour } as never);
+    let moved: (value: unknown) => void = () => undefined;
+    vi.mocked(ordersApi.moveTab).mockReturnValue(new Promise((resolve) => { moved = resolve; }) as never);
+    let reread: (value: unknown) => void = () => undefined;
+    const tables = vi.fn().mockResolvedValueOnce({ tables: [] }).mockReturnValueOnce(new Promise((resolve) => { reread = resolve; }));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <TablesOnScreen read={tables} />
+          <TabPanel orderId="tab1" freeTables={[{ id: 'm5', name: 'Mesa 5' } as never]} businessName="Fonda Lupita" onClose={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cambiar de mesa' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Cambiar de mesa' }));
+    await user.click(screen.getByRole('button', { name: 'Mesa 5' }));
+    // While it moves, it does not go back to the tab as it was.
+    expect(screen.getByRole('button', { name: 'Volver' })).toBeDisabled();
+    moved({ data: { ...atFour, diningTableId: 'm5', tableNumber: 'Mesa 5' } });
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('La cuenta pasó a Mesa 5.'));
+    // The free tables still say Mesa 5 is free: the move waits for them.
+    expect(screen.getByRole('button', { name: 'Cambiar de mesa' })).toBeDisabled();
+    reread({ tables: [] });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cambiar de mesa' })).toBeEnabled());
   });
 });

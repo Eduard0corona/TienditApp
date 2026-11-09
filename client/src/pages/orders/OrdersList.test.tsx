@@ -54,10 +54,12 @@ vi.mock('../../hooks/useOrderSignalR', () => {
   };
 });
 vi.mock('../../api/ordersApi', () => ({ ordersApi: { getAll: vi.fn(), getById: vi.fn(), cancel: vi.fn(), setPlatformOrderId: vi.fn(), refund: vi.fn(), addPayment: vi.fn() } }));
-// The refund's own form has its tests: here it only hands the order its refund.
+// The refund's own form has its tests: here it only hands the order its refund, and says while it is being saved.
 vi.mock('../../components/orders/RefundOrderModal', () => ({
-  default: ({ onSubmit }: { onSubmit: (data: unknown) => void }) => (
-    <button type="button" onClick={() => onSubmit({ amount: 100, method: 0, reason: 'No se hizo una parte', items: [] })}>Registrar el reembolso</button>
+  default: ({ submitting, onSubmit }: { submitting: boolean; onSubmit: (data: unknown) => void }) => (
+    <button type="button" disabled={submitting} onClick={() => onSubmit({ amount: 100, method: 0, reason: 'No se hizo una parte', items: [] })}>
+      {submitting ? 'Guardando…' : 'Registrar el reembolso'}
+    </button>
   ),
 }));
 // Where the business receives orders (GET /orders/channels, Fase 29Q) comes through the typed client.
@@ -741,5 +743,88 @@ describe('OrdersList', () => {
 
     await waitFor(() => expect(vi.mocked(ordersApi.getAll).mock.calls.length).toBeGreaterThan(reads), { timeout: 3000 });
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+  it('lets another refund be registered while the list is read again after one', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ViewOrders', 'ManageOrders', 'ProcessRefunds'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    const sale = order({
+      total: 500, paidAmount: 500, refundedAmount: 0, balance: 0,
+      items: [], taxBreakdown: [], statusHistory: [], servicePieces: [], allowedTransitions: [], refunds: [], payments: [],
+    } as Partial<OrderDto>);
+    renderOrders(TenantCapability.Food, [sale]);
+    vi.mocked(ordersApi.refund).mockResolvedValue({ data: { ...sale, refundedAmount: 100 } } as never);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    // Read again after the refund, the list does not come back.
+    vi.mocked(ordersApi.getAll).mockReturnValue(new Promise(() => undefined));
+    await user.click(within(detail).getByRole('button', { name: 'Reembolsar' }));
+    await user.click(screen.getByRole('button', { name: 'Registrar el reembolso' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Registrar el reembolso|Guardando…/ })).not.toBeInTheDocument());
+
+    await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000001' })).getByRole('button', { name: 'Reembolsar' }));
+    expect(screen.getByRole('button', { name: 'Registrar el reembolso' })).toBeEnabled();
+  });
+
+  it('lets the rest of an order be charged while the list is read again after a part of it', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ViewOrders', 'ManageOrders', 'ChargeOrders'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    const owed = order({
+      id: 'c1', orderNumber: 'ORD-000125', customerName: 'Lupita', total: 80, balance: 80, paidAmount: 0, payments: [], items: [],
+      taxBreakdown: [], statusHistory: [], servicePieces: [], allowedTransitions: [], refunds: [],
+    } as Partial<OrderDto>);
+    vi.mocked(ordersApi.addPayment).mockResolvedValue({ data: { ...owed, balance: 30, paidAmount: 50 } } as never);
+    renderOrders(TenantCapability.Food, [owed]);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000125' }));
+    // Read again after the charge, the list does not come back.
+    vi.mocked(ordersApi.getAll).mockReturnValue(new Promise(() => undefined));
+    await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000125' })).getByRole('button', { name: 'Cobrar $80.00' }));
+    const charge = await screen.findByRole('dialog', { name: /Cobrar ORD-000125/ });
+    await user.type(within(charge).getByLabelText('Efectivo recibido'), '50');
+    await user.click(within(charge).getByRole('button', { name: /^Registrar/ }));
+    const receipt = await screen.findByRole('dialog', { name: 'Pago registrado en ORD-000125' });
+    await user.click(within(receipt).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pago registrado en ORD-000125' })).not.toBeInTheDocument());
+
+    await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000125' })).getByRole('button', { name: 'Cobrar $30.00' }));
+    const rest = await screen.findByRole('dialog', { name: /Cobrar ORD-000125/ });
+    expect(within(rest).queryByRole('button', { name: 'Cobrando…' })).not.toBeInTheDocument();
+    expect(within(rest).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+  it('shows the order as it is after a mixed charge fails half way, without waiting for the list', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ManageOrders', 'ChargeOrders'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    const owed = order({
+      id: 'c1', orderNumber: 'ORD-000125', customerName: 'Lupita', total: 80, balance: 80, paidAmount: 0, payments: [], items: [], taxBreakdown: [],
+    });
+    vi.mocked(ordersApi.addPayment)
+      .mockResolvedValueOnce({ data: { ...owed, balance: 30, paidAmount: 50 } } as never)
+      .mockImplementationOnce(() => Promise.reject(new Error('sin red')));
+    renderOrders(TenantCapability.Food, [owed]);
+
+    const row = (await screen.findByText('ORD-000125')).closest('tr') as HTMLElement;
+    // Read again after the charge, the list does not come back.
+    vi.mocked(ordersApi.getAll).mockReturnValue(new Promise(() => undefined));
+    await user.click(within(row).getByRole('button', { name: 'Cobrar' }));
+    const charge = await screen.findByRole('dialog', { name: /Cobrar ORD-000125/ });
+    await user.click(within(charge).getByRole('radio', { name: /Transferencia/ }));
+    await user.type(within(charge).getByLabelText('Monto'), '50');
+    await user.click(within(charge).getByRole('button', { name: 'Agregar otro pago' }));
+    await user.click(within(charge).getByRole('button', { name: /^Registrar/ }));
+
+    expect(await within(charge).findByText('No se pudo registrar el pago.')).toBeInTheDocument();
+    expect(ordersApi.addPayment).toHaveBeenCalledTimes(2);
+    // The charge now is of the order as the first payment left it.
+    expect(charge).toHaveTextContent('Total $30.00');
+    // What was saved shows, and the charge of the rest is not left in «Cobrando…» until the list comes.
+    expect(within(charge).queryByRole('button', { name: 'Cobrando…' })).not.toBeInTheDocument();
+    expect(within(charge).getByRole('button', { name: 'Close' })).toBeInTheDocument();
   });
 });

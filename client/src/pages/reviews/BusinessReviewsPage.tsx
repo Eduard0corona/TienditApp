@@ -31,42 +31,71 @@ const PAGE_SIZES = [20, 50];
 /** The business answers a review once; answering again changes its answer. */
 function ReplyDialog({ review, onClose }: { review: BusinessReview | null; onClose: () => void }) {
   const titleId = useId();
+  const toast = useToast();
+  const queryClient = useQueryClient();
   // While it fades out it keeps showing the review it was opened for.
   const [shown, setShown] = useState(review);
   if (review && review !== shown) setShown(review);
   const current = review ?? shown;
+  // Here and not in the form: the dialog does not close while the answer is on its way, so it reaches this dialog and not
+  // one opened after it. Once published it closes, and the list is read again behind it.
+  const save = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) => reviewsApi.reply(id, text),
+    onSuccess: () => {
+      // Not «a Mariana O.»: the name already ends in a period.
+      toast.success('Publicamos tu respuesta.');
+      onClose();
+      void queryClient.invalidateQueries({ queryKey: ['business-reviews'] });
+    },
+  });
+  const close = () => {
+    if (save.isPending) return;
+    // The next one starts without the error of this one.
+    save.reset();
+    onClose();
+  };
+
   return (
-    <Modal show={review !== null} onHide={onClose} centered fullscreen="sm-down" aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    <Modal show={review !== null} onHide={close} centered fullscreen="sm-down" aria-labelledby={titleId}>
+      <Modal.Header closeButton={!save.isPending}>
         <Modal.Title id={titleId} as="h2" className="h5">
           {current?.reply ? 'Cambiar respuesta' : 'Responder'} a {current?.authorName}
         </Modal.Title>
       </Modal.Header>
-      {current && <ReplyForm key={current.id} review={current} onClose={onClose} />}
+      {current && (
+        <ReplyForm
+          key={current.id}
+          review={current}
+          open={review !== null}
+          saving={save.isPending}
+          error={save.error}
+          onSave={(text) => save.mutate({ id: current.id, text })}
+          onCancel={close}
+        />
+      )}
     </Modal>
   );
 }
 
-function ReplyForm({ review, onClose }: { review: BusinessReview; onClose: () => void }) {
+interface ReplyFormProps {
+  review: BusinessReview;
+  /** False while it fades out: its answer was published, so it sends nothing else. */
+  open: boolean;
+  saving: boolean;
+  error: unknown;
+  onSave: (text: string) => void;
+  onCancel: () => void;
+}
+
+function ReplyForm({ review, open, saving, error, onSave, onCancel }: ReplyFormProps) {
   const ids = useId();
-  const toast = useToast();
-  const queryClient = useQueryClient();
   const [text, setText] = useState(review.reply ?? '');
-  const save = useMutation({
-    mutationFn: () => reviewsApi.reply(review.id, text.trim()),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['business-reviews'] });
-      // Not «a Mariana O.»: the name already ends in a period.
-      toast.success('Publicamos tu respuesta.');
-      onClose();
-    },
-  });
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (text.trim() !== '' && !save.isPending) save.mutate();
+        if (text.trim() !== '' && !saving) onSave(text.trim());
       }}
     >
       <Modal.Body>
@@ -86,12 +115,12 @@ function ReplyForm({ review, onClose }: { review: BusinessReview; onClose: () =>
           <span>Se publica en tu tienda bajo la reseña. Sin enlaces, correos ni teléfonos.</span>
           <span className="ta-money text-nowrap">{text.length}/{REVIEW_TEXT_MAX_LENGTH}</span>
         </div>
-        {save.isError && <div className="alert alert-danger mt-3 mb-0" role="alert">{getApiErrorMessage(save.error, 'No se pudo publicar tu respuesta.')}</div>}
+        {error != null && <div className="alert alert-danger mt-3 mb-0" role="alert">{getApiErrorMessage(error, 'No se pudo publicar tu respuesta.')}</div>}
       </Modal.Body>
       <Modal.Footer>
-        <button type="button" className="btn btn-light" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn btn-primary" disabled={text.trim() === '' || save.isPending}>
-          {save.isPending ? 'Publicando…' : 'Publicar respuesta'}
+        <button type="button" className="btn btn-light" onClick={onCancel} disabled={saving}>Cancelar</button>
+        <button type="submit" className="btn btn-primary" disabled={text.trim() === '' || saving || !open}>
+          {saving ? 'Publicando…' : 'Publicar respuesta'}
         </button>
       </Modal.Footer>
     </form>
@@ -112,6 +141,8 @@ export default function BusinessReviewsPage() {
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [replying, setReplying] = useState<BusinessReview | null>(null);
   const [reporting, setReporting] = useState<BusinessReview | null>(null);
+  // While the reviews are read again (after reporting, answering or hiding one, too), their rows wait: they would offer
+  // what a review no longer is.
   const reviews = useQuery({
     queryKey: ['business-reviews', filter, page, pageSize],
     queryFn: ({ signal }) => reviewsApi.getBusinessReviews(filter, page, pageSize, signal),
@@ -225,6 +256,7 @@ export default function BusinessReviewsPage() {
                         type="button"
                         className="btn btn-sm btn-light me-1"
                         onClick={() => setReplying(review)}
+                        disabled={reviews.isFetching}
                         aria-label={`${review.reply ? 'Cambiar respuesta' : 'Responder'} a ${review.authorName}`}
                       >
                         {review.reply ? 'Cambiar respuesta' : 'Responder'}
@@ -235,6 +267,7 @@ export default function BusinessReviewsPage() {
                         type="button"
                         className="btn btn-sm btn-light me-1"
                         onClick={() => void removeReply(review)}
+                        disabled={reviews.isFetching}
                         aria-label={`Quitar respuesta a ${review.authorName}`}
                       >
                         Quitar respuesta
@@ -245,6 +278,7 @@ export default function BusinessReviewsPage() {
                         type="button"
                         className="btn btn-sm btn-light text-danger"
                         onClick={() => setReporting(review)}
+                        disabled={reviews.isFetching}
                         aria-label={`Reportar la reseña de ${review.authorName}`}
                       >
                         Reportar
@@ -266,8 +300,9 @@ export default function BusinessReviewsPage() {
         onSubmit={async (reason) => {
           if (!reporting) return;
           await reviewsApi.report(reporting.id, reason);
-          await refresh();
           toast.success('Reportaste la reseña: la plataforma la va a revisar.');
+          // The dialog closes with the answer; the list is read again behind it.
+          void refresh();
         }}
         onClose={() => setReporting(null)}
       />

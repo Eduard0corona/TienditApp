@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InventoryCount, InventoryCountLine } from '../../api/inventoryCounts';
 import { apiRequest } from '../../api/typedClient';
 import { useConfirm } from '../../hooks/useConfirm';
-import { InventoryCountStatus, UnitType } from '../../types';
+import { InventoryCountStatus, UnitType, type SupplyItemDto } from '../../types';
 import CountDetail from './CountDetail';
 
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
@@ -43,13 +43,14 @@ function renderDetail(handlers: {
   onPosted?: (message: string) => void;
   onOpenMovement?: (id: string) => void;
   onMessage?: (message: string) => void;
+  supplyOptions?: SupplyItemDto[];
 } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <CountDetail
         countId="c1"
-        supplyOptions={[]}
+        supplyOptions={handlers.supplyOptions ?? []}
         onBack={vi.fn()}
         onOpenMovement={handlers.onOpenMovement ?? vi.fn()}
         onPosted={handlers.onPosted ?? vi.fn()}
@@ -241,5 +242,65 @@ describe('CountDetail', () => {
     expect(await screen.findByText('Cancelado sin mover existencias: Se contó la ubicación equivocada')).toBeInTheDocument();
     expect(screen.queryByText('Faltante')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Aplicar conteo' })).not.toBeInTheDocument();
+  });
+  it('keeps «Agregar artículos» open while what it adds is on its way, and closes with the answer before the count is read again', async () => {
+    const user = userEvent.setup();
+    let answer: (value: unknown) => void = () => undefined;
+    const reads = request.getMockImplementation()!;
+    request.mockImplementation((method, path, options) => {
+      if (method === 'post' && path === '/api/v1/inventory/counts/{id}/items') return new Promise((resolve) => { answer = resolve; }) as never;
+      return reads(method, path, options);
+    });
+    const onMessage = vi.fn();
+    renderDetail({ onMessage, supplyOptions: [{ id: 's9', name: 'Servilletas' } as SupplyItemDto] });
+
+    await user.click(await screen.findByRole('button', { name: 'Agregar artículos' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Agregar artículos al conteo' });
+    await user.click(within(dialog).getByLabelText('Servilletas'));
+    await user.click(within(dialog).getByRole('button', { name: 'Agregar' }));
+
+    expect(await within(dialog).findByRole('button', { name: 'Agregando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Agregar artículos al conteo' })).toBeInTheDocument();
+
+    // Read again after it, the count does not come back: the dialog does not wait for it.
+    request.mockImplementation((method, path, options) => (method === 'get' ? new Promise(() => undefined) : reads(method, path, options)) as never);
+    answer({ ...OPEN, lineCount: 4 });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Agregar artículos al conteo' })).not.toBeInTheDocument());
+    expect(onMessage).toHaveBeenCalledWith('Se agregó 1 artículo al conteo.');
+    // The count shows what the server answered: one item more.
+    await user.click(screen.getByRole('button', { name: 'Revisar diferencias' }));
+    expect(await screen.findByText('2 de 4')).toBeInTheDocument();
+  });
+
+  it('keeps «Cancelar conteo» open while the cancellation is on its way, and shows the count cancelled with the answer', async () => {
+    const user = userEvent.setup();
+    let answer: (value: unknown) => void = () => undefined;
+    const reads = request.getMockImplementation()!;
+    request.mockImplementation((method, path, options) => {
+      if (method === 'post' && path === '/api/v1/inventory/counts/{id}/cancel') return new Promise((resolve) => { answer = resolve; }) as never;
+      return reads(method, path, options);
+    });
+    const onMessage = vi.fn();
+    renderDetail({ onMessage });
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar conteo' }));
+    const dialog = await screen.findByRole('dialog', { name: `Cancelar el conteo ${OPEN.countNumber}` });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar conteo' }));
+
+    expect(await within(dialog).findByRole('button', { name: 'Cancelando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Volver' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: `Cancelar el conteo ${OPEN.countNumber}` })).toBeInTheDocument();
+
+    // Read again after it, the count does not come back: it shows what the server answered.
+    request.mockImplementation((method, path, options) => (method === 'get' ? new Promise(() => undefined) : reads(method, path, options)) as never);
+    answer({ ...OPEN, status: InventoryCountStatus.Cancelled, cancelledBy: 'dueno', cancelledAt: '2026-10-21T19:00:00Z' });
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith(`Conteo ${OPEN.countNumber} cancelado.`));
+    expect(screen.queryByRole('dialog', { name: `Cancelar el conteo ${OPEN.countNumber}` })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancelar conteo' })).not.toBeInTheDocument();
   });
 });

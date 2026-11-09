@@ -232,8 +232,9 @@ export default function IssuedCfdis() {
             accountantEmail={settings.data?.accountantEmail}
             sendsMonthToAccountant={settings.data?.sendsMonthToAccountant ?? false}
             current={!isBefore(period, today)}
-            // The dialog proposes the accountant's address: it opens once that is read (or could not be).
-            disabled={monthCount === 0 || settings.isPending || accountantEmails.isPending}
+            // The dialog proposes the accountant's address: it opens once that is read (or could not be), and waits while it is
+            // read again (after a send, which keeps the address typed as the accountant's).
+            disabled={monthCount === 0 || settings.isPending || accountantEmails.isPending || settings.isFetching}
           />
         </div>
       </div>

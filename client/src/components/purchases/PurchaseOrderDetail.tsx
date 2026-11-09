@@ -172,8 +172,16 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
   };
 
   return (
-    <Offcanvas show={orderId !== null} onHide={onHide} placement="end" style={{ width: 'min(640px, 100vw)' }} aria-labelledby={titleId}>
-      <Offcanvas.Header closeButton>
+    // It stays open while what it sent is on its way: the answer (a reception that returns to «view» and empties what was
+    // typed) reaches this purchase and not one opened after it.
+    <Offcanvas
+      show={orderId !== null}
+      onHide={() => !busy && onHide()}
+      placement="end"
+      style={{ width: 'min(640px, 100vw)' }}
+      aria-labelledby={titleId}
+    >
+      <Offcanvas.Header closeButton={!busy}>
         <Offcanvas.Title id={titleId} as="h2" className="h5 mb-0">
           {order ? order.orderNumber : 'Compra'}
           {order && (

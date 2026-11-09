@@ -28,6 +28,8 @@ vi.mock('../../api/publicMenuApi', () => ({
 vi.mock('../../utils/externalNavigation', () => ({ goToExternalPage: vi.fn() }));
 
 vi.mock('../../api/reviewsApi', () => ({ reviewsApi: { getStoreReviews: vi.fn(), getMyReview: vi.fn() } }));
+// The review dialog says what it saved with a toast; the app gives it its provider.
+vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }) }));
 
 vi.mock('../../api/accountApi', () => ({
   MAX_ACCOUNT_ADDRESSES: 10,

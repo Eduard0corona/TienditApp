@@ -1,7 +1,8 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { orderInvoicingKey } from '../../api/invoicing';
 import { apiRequest, type Schemas } from '../../api/typedClient';
 import { CfdiCancellationMotive, OrderInvoiceStatus, OrderPaymentMethod } from '../../types';
 import { getBusinessToday } from '../../utils/dates';
@@ -42,6 +43,13 @@ function renderList(payments: Payment[], canCancel = false, inInstallments = tru
 
 function answer(write: (method: string, path: string, options?: { path?: Record<string, string>; body?: unknown }) => Promise<unknown>) {
   vi.mocked(apiRequest).mockImplementation(write as unknown as typeof apiRequest);
+}
+
+
+/** The order's invoicing on screen: read once, and read again after a change, when it does not come back. */
+function InvoicingOnScreen({ read }: { read: () => Promise<unknown> }) {
+  useQuery({ queryKey: orderInvoicingKey('o-1'), queryFn: read });
+  return null;
 }
 
 describe('PaymentComplementList', () => {
@@ -212,6 +220,37 @@ describe('PaymentComplementList', () => {
     await userEvent.click(screen.getByRole('button', { name: /^Emitir ahora/ }));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('El complemento P-2 de este cobro se está timbrando.'));
+  });
+
+  it('stays open while the cancellation is on its way, and closes with the answer before the invoicing is read again', async () => {
+    const user = userEvent.setup();
+    let cancelled: (value: unknown) => void = () => undefined;
+    vi.mocked(apiRequest).mockReturnValue(new Promise((resolve) => { cancelled = resolve; }) as never);
+    const invoicing = vi.fn().mockResolvedValueOnce({}).mockReturnValue(new Promise(() => undefined));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <PaymentComplementList orderId="o-1" payments={[FIRST]} inInstallments={false} canCancel />
+        <InvoicingOnScreen read={invoicing} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(invoicing).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole('button', { name: 'Cancelar complemento P-1' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Cancelar el complemento P-1' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar complemento' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Cancelando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Volver' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Cancelar el complemento P-1' })).toBeInTheDocument();
+
+    cancelled({ ...P1, status: OrderInvoiceStatus.Cancelled });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Complemento P-1 cancelado.');
+    expect(invoicing).toHaveBeenCalledTimes(2);
+    // Until the invoicing comes back, it is not offered from what it said before.
+    expect(screen.getByRole('button', { name: 'Cancelar complemento P-1' })).toBeDisabled();
   });
 });
 
