@@ -111,7 +111,9 @@ export default function DeliveryZones() {
   const probed = isPostalCode(probe) ? checkPostalCode(list, probe) : null;
   const anyActive = list.some((zone) => zone.isActive);
   // One change at a time: a second click with the same revision would be refused as someone else's change.
-  const busy = save.isPending || remove.isPending;
+  // Also while the list is read again after a change: until it arrives, a row still has the revision it was read with, and
+  // changing or opening it would answer that someone else changed it. The dialog that saved is not held by this.
+  const busy = save.isPending || remove.isPending || zones.isFetching;
 
   const openCreate = () => {
     setEditing(null);

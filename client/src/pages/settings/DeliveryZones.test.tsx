@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
@@ -259,6 +259,29 @@ describe('DeliveryZones', () => {
     await user.click(within(screen.getByRole('dialog', { name: 'Editar Centro' })).getByRole('button', { name: 'Guardar cambios' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar Centro' })).not.toBeInTheDocument());
     expect(toast.success).toHaveBeenCalledWith('Zona guardada.');
+    // Until the list arrives, the rows keep the revision they were read with: they wait, so nothing answers 409.
+    expect(screen.getByRole('button', { name: 'Editar Centro' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Activar Norte' })).toBeDisabled();
+  });
+
+  it('lets the rows be changed again once the list read after a change arrives, with its new revisions', async () => {
+    const user = userEvent.setup();
+    let listed: (zones: Zone[]) => void = () => undefined;
+    serve([CENTRO, NORTE]);
+    renderPage();
+    await screen.findByRole('button', { name: 'Activar Norte' });
+    vi.mocked(apiRequest).mockImplementation(((method: string, path: string) => {
+      if (method === 'get' && path === '/api/v1/delivery-zones') return new Promise((resolve) => { listed = resolve; });
+      if (method === 'get' && path === '/api/v1/delivery-zones/home-visits') return Promise.resolve({ travelMinutes: 30 });
+      return Promise.resolve({ ...NORTE, isActive: true, revision: 2 });
+    }) as unknown as typeof apiRequest);
+
+    await user.click(screen.getByRole('button', { name: 'Activar Norte' }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(screen.getByRole('button', { name: 'Activar Norte' })).toBeDisabled();
+
+    await act(async () => listed([CENTRO, { ...NORTE, isActive: true, revision: 2 }]));
+    expect(await screen.findByRole('button', { name: 'Desactivar Norte' })).toBeEnabled();
   });
 
   it('does not open a new zone while a zone is changed from its row', async () => {

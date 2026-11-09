@@ -120,6 +120,8 @@ export default function PurchaseOrdersList() {
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
+    // A failure of the previous read stops being true once this one is asked for.
+    setError('');
     try {
       const params: { status?: PurchaseOrderStatus; search?: string; pageNumber: number; pageSize: number } = {
         pageNumber,

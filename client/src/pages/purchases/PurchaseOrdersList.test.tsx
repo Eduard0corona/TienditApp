@@ -149,4 +149,19 @@ describe('PurchaseOrdersList new purchase dialog', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Registrar compra' }));
     expect(await screen.findByText('Detalle de la compra po1')).toBeInTheDocument();
   });
+  it('stops saying the list could not be read once it is read again after registering a purchase', async () => {
+    const user = userEvent.setup();
+    vi.mocked(purchaseOrdersApi.getAll).mockReset();
+    vi.mocked(purchaseOrdersApi.getAll)
+      .mockImplementationOnce(() => Promise.reject(new Error('Network Error')))
+      .mockResolvedValue({ data: page([]) } as never);
+    vi.mocked(purchaseOrdersApi.create).mockResolvedValue({ data: { id: 'po1' } } as never);
+    const dialog = await open(user);
+    expect(screen.getByText('No se pudieron cargar las compras.')).toBeInTheDocument();
+
+    await fill(user, dialog);
+    await user.click(within(dialog).getByRole('button', { name: 'Registrar compra' }));
+    expect(await screen.findByText('Compra registrada.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('No se pudieron cargar las compras.')).not.toBeInTheDocument());
+  });
 });
