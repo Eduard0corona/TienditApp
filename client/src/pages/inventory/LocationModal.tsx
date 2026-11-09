@@ -53,8 +53,9 @@ export default function LocationModal({ show, location, onHide, onSaved }: Locat
   };
 
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    // It stays open while what it sent is on its way: a late answer must not close the dialog opened after it.
+    <Modal show={show} onHide={() => !saving && onHide()} size="lg" centered aria-labelledby={titleId}>
+      <Modal.Header closeButton={!saving}>
         <Modal.Title id={titleId}>{location ? 'Editar ubicación' : 'Nueva ubicación'}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -179,10 +180,11 @@ export default function LocationModal({ show, location, onHide, onSaved }: Locat
         </div>
       </Modal.Body>
       <Modal.Footer>
-        <button type="button" className="btn btn-light" onClick={onHide}>
+        <button type="button" className="btn btn-light" onClick={onHide} disabled={saving}>
           Cancelar
         </button>
-        <button type="button" className="btn btn-primary" onClick={submit} disabled={saving}>
+        {/* Also while it fades out after saving, so a double click does not send it twice. */}
+        <button type="button" className="btn btn-primary" onClick={submit} disabled={saving || !show}>
           {saving ? 'Guardando...' : location ? 'Guardar cambios' : 'Crear ubicación'}
         </button>
       </Modal.Footer>

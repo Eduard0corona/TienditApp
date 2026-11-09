@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -75,6 +75,58 @@ describe('AccountPage', () => {
 
     expect(api.saveAddress).toHaveBeenCalledWith({ label: 'Oficina', postalCode: '72160', addressLine: 'Calle 5 de Mayo 8', references: null });
     expect(await screen.findByText('Calle 5 de Mayo 8 · CP 72160')).toBeInTheDocument();
+  });
+
+  it('keeps an address open while it is saved, so it cannot be saved twice nor the first answer close another one', async () => {
+    const user = userEvent.setup();
+    api.getAddresses.mockResolvedValue([casa]);
+    api.saveAddress.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Agregar dirección' }));
+    const dialog = screen.getByRole('dialog', { name: 'Agregar una dirección' });
+    await user.type(within(dialog).getByLabelText('Código postal'), '72160');
+    await user.type(within(dialog).getByLabelText('Dirección'), 'Calle 5 de Mayo 8');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(dialog).toHaveClass('show');
+    expect(api.saveAddress).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes an address once it is saved, without waiting for the list to be read again', async () => {
+    const user = userEvent.setup();
+    api.getAddresses.mockResolvedValueOnce([casa]).mockReturnValue(new Promise(() => undefined));
+    api.saveAddress.mockResolvedValue({ id: 'a2', label: 'Oficina', postalCode: '72160', addressLine: 'Calle 5 de Mayo 8', references: null, lastUsedAt: null });
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Agregar dirección' }));
+    const dialog = screen.getByRole('dialog', { name: 'Agregar una dirección' });
+    await user.type(within(dialog).getByLabelText('Código postal'), '72160');
+    await user.type(within(dialog).getByLabelText('Dirección'), 'Calle 5 de Mayo 8');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Agregar una dirección' })).not.toBeInTheDocument());
+    expect(await screen.findByText('Oficina: guardada.')).toBeInTheDocument();
+  });
+
+  it('saves an address once, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    api.getAddresses.mockResolvedValue([casa]);
+    api.saveAddress.mockResolvedValue({ id: 'a2', label: 'Oficina', postalCode: '72160', addressLine: 'Calle 5 de Mayo 8', references: null, lastUsedAt: null });
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Agregar dirección' }));
+    const dialog = screen.getByRole('dialog', { name: 'Agregar una dirección' });
+    await user.type(within(dialog).getByLabelText('Código postal'), '72160');
+    await user.type(within(dialog).getByLabelText('Dirección'), 'Calle 5 de Mayo 8');
+    // The second click lands while the dialog fades out.
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Agregar una dirección' })).not.toBeInTheDocument());
+    expect(api.saveAddress).toHaveBeenCalledTimes(1);
   });
 
   it('changes an address and deletes another after asking', async () => {

@@ -559,11 +559,12 @@ export function useUpdateCustomerFiscalData(customerId: string) {
         path: { id: customerId },
         body: fiscalData ? { fiscalData, invoiceEmail } : {},
       }),
-    // The invoice of their orders proposes it.
-    onSuccess: () => Promise.all([
-      client.invalidateQueries({ queryKey: ['customers'] }),
-      client.invalidateQueries({ queryKey: ['invoicing', 'orders'] }),
-    ]),
+    // The invoice of their orders proposes it. Read again behind the dialog, which does not close while the change is on
+    // its way and so does not wait for them either.
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['customers'] });
+      void client.invalidateQueries({ queryKey: ['invoicing', 'orders'] });
+    },
   });
 }
 

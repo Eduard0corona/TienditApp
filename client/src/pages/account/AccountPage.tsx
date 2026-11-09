@@ -39,16 +39,21 @@ function AddressDialog({ address, onClose }: { address: AccountAddress | 'new' |
   }
   const save = useMutation({
     mutationFn: (body: AccountAddressInput) => (editing ? accountApi.updateAddress(editing.id, body) : accountApi.saveAddress(body)),
-    onSuccess: async (saved) => {
-      await queryClient.invalidateQueries({ queryKey: ['me', 'addresses'] });
+    // Saved, the dialog closes; the list is read again without waiting for it, so «Guardando…» does not stay on a dialog
+    // that cannot be closed meanwhile.
+    onSuccess: (saved) => {
       toast.success(`${saved.label}: guardada.`);
       onClose();
+      void queryClient.invalidateQueries({ queryKey: ['me', 'addresses'] });
     },
   });
   const postalCodeProblem = form.postalCode && !isPostalCode(form.postalCode) ? 'El código postal lleva 5 dígitos.' : '';
   const ready = isPostalCode(form.postalCode) && form.addressLine.trim() !== '';
-  // The dialog stays mounted: an error of a save that failed does not come back the next time it opens.
+  // The dialog stays mounted: an error of a save that failed does not come back the next time it opens. While a save is on
+  // its way it stays open: resetting it then would let the dialog open again and save twice, and the first answer would
+  // close the second.
   const close = () => {
+    if (save.isPending) return;
     save.reset();
     onClose();
   };
@@ -67,7 +72,7 @@ function AddressDialog({ address, onClose }: { address: AccountAddress | 'new' |
           });
         }}
       >
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!save.isPending}>
           <Modal.Title id={titleId} as="h2" className="h5">{editing ? `Cambiar ${editing.label}` : 'Agregar una dirección'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -124,10 +129,11 @@ function AddressDialog({ address, onClose }: { address: AccountAddress | 'new' |
               />
             </div>
           </div>
-          {save.isError && <div className="alert alert-danger mt-3 mb-0">{getApiErrorMessage(save.error, 'No se pudo guardar la dirección.')}</div>}
+          {save.isError && <div className="alert alert-danger mt-3 mb-0" role="alert">{getApiErrorMessage(save.error, 'No se pudo guardar la dirección.')}</div>}
         </Modal.Body>
         <Modal.Footer>
-          <button type="button" className="btn btn-light" onClick={close}>Cancelar</button>
+          <button type="button" className="btn btn-light" onClick={close} disabled={save.isPending}>Cancelar</button>
+          {/* Closing empties the form (see shownFor), so it is not ready while it fades out: a double click sends nothing. */}
           <button type="submit" className="btn btn-primary" disabled={!ready || save.isPending}>
             {save.isPending ? 'Guardando…' : 'Guardar'}
           </button>

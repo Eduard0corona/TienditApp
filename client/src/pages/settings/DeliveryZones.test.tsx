@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
@@ -225,6 +225,71 @@ describe('DeliveryZones', () => {
 
     expect(within(dialog).getByText('Ya tienes una zona llamada «centro». Ponle otro nombre.')).toBeInTheDocument();
     expect(writes()).toHaveLength(0);
+  });
+
+  it('keeps the zone open while it is saved, so a late answer cannot close another one', async () => {
+    const user = userEvent.setup();
+    serve([CENTRO, NORTE], () => new Promise(() => {}));
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Editar Centro' }));
+    const dialog = screen.getByRole('dialog', { name: 'Editar Centro' });
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(dialog).toHaveClass('show');
+    expect(writes()).toHaveLength(1);
+  });
+
+  it('closes a zone once it is saved, without waiting for the list to be read again', async () => {
+    const user = userEvent.setup();
+    serve([CENTRO, NORTE]);
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Editar Centro' }));
+    // The list read after saving does not arrive.
+    vi.mocked(apiRequest).mockImplementation(((method: string, path: string) => {
+      if (method === 'get' && path === '/api/v1/delivery-zones') return new Promise(() => undefined);
+      if (method === 'get' && path === '/api/v1/delivery-zones/home-visits') return Promise.resolve({ travelMinutes: 30 });
+      return Promise.resolve(CENTRO);
+    }) as unknown as typeof apiRequest);
+
+    await user.click(within(screen.getByRole('dialog', { name: 'Editar Centro' })).getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar Centro' })).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Zona guardada.');
+    // Until the list arrives, the rows keep the revision they were read with: they wait, so nothing answers 409.
+    expect(screen.getByRole('button', { name: 'Editar Centro' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Activar Norte' })).toBeDisabled();
+  });
+
+  it('lets the rows be changed again once the list read after a change arrives, with its new revisions', async () => {
+    const user = userEvent.setup();
+    let listed: (zones: Zone[]) => void = () => undefined;
+    serve([CENTRO, NORTE]);
+    renderPage();
+    await screen.findByRole('button', { name: 'Activar Norte' });
+    vi.mocked(apiRequest).mockImplementation(((method: string, path: string) => {
+      if (method === 'get' && path === '/api/v1/delivery-zones') return new Promise((resolve) => { listed = resolve; });
+      if (method === 'get' && path === '/api/v1/delivery-zones/home-visits') return Promise.resolve({ travelMinutes: 30 });
+      return Promise.resolve({ ...NORTE, isActive: true, revision: 2 });
+    }) as unknown as typeof apiRequest);
+
+    await user.click(screen.getByRole('button', { name: 'Activar Norte' }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(screen.getByRole('button', { name: 'Activar Norte' })).toBeDisabled();
+
+    await act(async () => listed([CENTRO, { ...NORTE, isActive: true, revision: 2 }]));
+    expect(await screen.findByRole('button', { name: 'Desactivar Norte' })).toBeEnabled();
+  });
+
+  it('does not open a new zone while a zone is changed from its row', async () => {
+    serve([CENTRO, NORTE], () => new Promise(() => {}));
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Activar Norte' }));
+    expect(screen.getByRole('button', { name: /Nueva zona/ })).toBeDisabled();
   });
 
   it('keeps the actions of every zone off while a change is being saved', async () => {

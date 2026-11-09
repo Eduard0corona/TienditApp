@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../../api/typedClient';
@@ -104,5 +104,41 @@ describe('CustomerFiscalDataModal', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('El RFC del cliente no tiene un formato válido.'));
     expect(onClose).not.toHaveBeenCalled();
+  });
+  it('cannot be closed while the change is on its way, so a late answer cannot close the dialog of another customer', async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiRequest).mockReturnValue(new Promise(() => undefined));
+    const onClose = renderModal(KARLA);
+    const dialog = screen.getByRole('dialog');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+    expect(within(dialog).getByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+  it('closes with the answer, before the customers are read again', async () => {
+    const user = userEvent.setup();
+    // The list of customers is on screen; read again after the change, it does not come back.
+    const list = vi.fn().mockResolvedValueOnce([]).mockReturnValue(new Promise(() => undefined));
+    function CustomersList() {
+      useQuery({ queryKey: ['customers', 'list'], queryFn: list });
+      return null;
+    }
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CustomersList />
+        <CustomerFiscalDataModal customer={{ id: 'c-1', name: 'Karla', fiscalData: KARLA, invoiceEmail: null }} onClose={onClose} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
+    expect(toast.success).toHaveBeenCalledWith('Datos fiscales de Karla guardados.');
+    expect(list).toHaveBeenCalledTimes(2);
   });
 });

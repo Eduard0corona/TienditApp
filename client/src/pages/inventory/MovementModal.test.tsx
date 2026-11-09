@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { inventoryApi } from '../../api/inventoryApi';
@@ -112,20 +113,43 @@ describe('MovementModal', () => {
     }));
   });
 
-  it('cannot be sent twice while it is being saved', async () => {
+  it('cannot be sent twice nor closed while it is being saved', async () => {
     const user = userEvent.setup();
     let answer: (value: unknown) => void = () => undefined;
     vi.mocked(inventoryApi.createMovement).mockReturnValue(new Promise((resolve) => { answer = resolve; }) as never);
-    const { dialog, onSaved } = renderModal();
+    const { dialog, onSaved, onHide } = renderModal();
 
     await fillLine(user, dialog, 0, { supply: 'milk', location: 'bar', quantity: '1' });
     await user.click(within(dialog).getByRole('button', { name: 'Registrar movimiento' }));
     expect(within(dialog).getByRole('button', { name: 'Guardando...' })).toBeDisabled();
     await user.click(within(dialog).getByRole('button', { name: 'Guardando...' }));
     expect(inventoryApi.createMovement).toHaveBeenCalledTimes(1);
+    // Nor closed: an answer that arrived late would close the dialog opened after it.
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(onHide).not.toHaveBeenCalled();
 
     answer({ data: {} });
     await vi.waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+  });
+
+  it('registers a movement once, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    vi.mocked(inventoryApi.createMovement).mockResolvedValue({ data: {} } as never);
+    // As Inventario does: saving closes the dialog.
+    function Harness() {
+      const [show, setShow] = useState(true);
+      return <MovementModal show={show} supplyOptions={supplies} activeLocations={locations} onHide={() => setShow(false)} onSaved={() => setShow(false)} />;
+    }
+    render(<Harness />);
+    const dialog = screen.getByRole('dialog', { name: 'Registrar movimiento de inventario' });
+
+    await fillLine(user, dialog, 0, { supply: 'milk', location: 'bar', quantity: '1' });
+    // The second click lands while the dialog fades out.
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Registrar movimiento' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(inventoryApi.createMovement).toHaveBeenCalledTimes(1);
   });
 
   it('removes the line asked for and keeps what the others say', async () => {
