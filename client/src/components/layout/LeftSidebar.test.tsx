@@ -54,6 +54,15 @@ describe('LeftSidebar', () => {
     expect(second).not.toHaveAttribute('data-used');
   });
 
+  it('does not mark a link a click did not focus (Safari, Firefox on macOS), as no blur would take the mark away', () => {
+    const menu = renderMenu();
+    const second = menu.querySelectorAll('a.ta-nav-link')[1] as HTMLAnchorElement;
+
+    fireEvent.click(second);
+    expect(second).not.toHaveFocus();
+    expect(second).not.toHaveAttribute('data-used');
+  });
+
   it('keeps the mark while the focus is in another window, where the link gets it back', async () => {
     const menu = renderMenu();
     const first = menu.querySelector('a.ta-nav-link') as HTMLAnchorElement;

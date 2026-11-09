@@ -29,6 +29,11 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
   // Going to another window is not leaving it: back here the link has the focus again, and it would grow. That blur
   // comes while the document has lost the focus, or while the link is still the active element.
   const [usedLink, setUsedLink] = useState<string | null>(null);
+  // Marked only with the focus on it: a click does not focus a link in Safari or in Firefox on macOS, and no blur would
+  // take a mark away that the keyboard would find later.
+  const markUsed = (link: HTMLAnchorElement, label: string) => {
+    if (document.activeElement === link) setUsedLink(label);
+  };
   const leaveLink = (link: HTMLAnchorElement, label: string) => {
     if (!document.hasFocus() || document.activeElement === link) return;
     setUsedLink((used) => (used === label ? null : used));
@@ -71,7 +76,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
                           className={`ta-nav-link ${active ? 'active' : ''}`}
                           aria-current={active ? 'page' : undefined}
                           data-used={usedLink === entry.label ? '' : undefined}
-                          onClick={() => setUsedLink(entry.label)}
+                          onClick={(event) => markUsed(event.currentTarget, entry.label)}
                           onBlur={(event) => leaveLink(event.currentTarget, entry.label)}
                         >
                           <i className={entry.icon} aria-hidden="true"></i>
