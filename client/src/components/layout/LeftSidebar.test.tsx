@@ -1,7 +1,7 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LeftSidebar from './LeftSidebar';
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ user: { role: 'TENANT_ADMIN' } }) }));
@@ -24,6 +24,15 @@ function renderMenu() {
 }
 
 describe('LeftSidebar', () => {
+  // jsdom's window never has the focus: as in a browser, this one does unless a test says otherwise.
+  beforeEach(() => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   // Fase 30F: in the condensed menu the keyboard grows a link to its name (shell.css). Nothing moves the focus when the
   // page changes, so the link just used says so and stops growing until the focus leaves it.
   it('marks the link just used while it keeps the focus', async () => {
@@ -43,5 +52,21 @@ describe('LeftSidebar', () => {
     expect(second).toHaveFocus();
     expect(first).not.toHaveAttribute('data-used');
     expect(second).not.toHaveAttribute('data-used');
+  });
+
+  it('keeps the mark while the focus is in another window, where the link gets it back', async () => {
+    const menu = renderMenu();
+    const first = menu.querySelector('a.ta-nav-link') as HTMLAnchorElement;
+    act(() => first.focus());
+    await userEvent.keyboard('{Enter}');
+    expect(first).toHaveAttribute('data-used');
+
+    // Another app takes the focus: the link gets a blur, but it is still the active element...
+    fireEvent.blur(first);
+    expect(first).toHaveAttribute('data-used');
+    // ...or the document no longer has the focus (how each browser shows it).
+    vi.mocked(document.hasFocus).mockReturnValue(false);
+    act(() => first.blur());
+    expect(first).toHaveAttribute('data-used');
   });
 });

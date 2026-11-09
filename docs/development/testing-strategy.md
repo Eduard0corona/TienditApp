@@ -2568,10 +2568,10 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - en los datos: el faltante del conteo como salida, los totales requeridos del corte del día, el uuid del pago registrado y el objeto de impuesto 02.
   - **Cliente:** lint de `visual`, `visual:typecheck` y build en verde. Primera visita: 180,232 B; CSS global: 63,077 B. Son los mismos que en `master`, porque `src` no cambia.
 - Fase 30F, colores AA, paginación deshabilitada y el menú condensado con nombres (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
-  - **Cliente:** 209 archivos y 1,602 pruebas, lint y build en verde.
+  - **Cliente:** 209 archivos y 1,603 pruebas, lint y build en verde.
     - `businessThemes.test.ts` (+2): el texto de error de un campo y el del código pasan AA en claro (blanco, la página y el relleno terciario) y en oscuro (sus superficies y un campo). El menú condensado no esconde el nombre con `visibility: hidden`, no deja que tome el puntero, lo muestra (`opacity: 1`) bajo el puntero y crece igual con el teclado que con el puntero, cada selector en su regla.
-    - `LeftSidebar.test.tsx` (nuevo): el enlace recién usado queda marcado (`data-used`) mientras conserva el foco y deja de estarlo al salir.
-    - **Mutaciones:** las 8 hacen fallar una prueba:
+    - `LeftSidebar.test.tsx` (nuevo, 2): el enlace recién usado queda marcado (`data-used`) mientras conserva el foco y deja de estarlo al salir; irse a otra ventana no lo desmarca, porque al volver el enlace recupera el foco (lo encontró claude-review).
+    - **Mutaciones:** las 10 hacen fallar una prueba:
       - el rojo de Hyper en el error;
       - el cian de Hyper en el código oscuro;
       - quitar `pointer-events: none`;
@@ -2579,7 +2579,8 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - el nombre casi invisible con el teclado;
       - crecer aunque se haya usado;
       - quitar `onBlur`;
-      - quitar `onClick`.
+      - quitar `onClick`;
+      - desmarcar aunque el foco se haya ido a otra ventana, sin cada una de sus dos señales (el documento sin foco, el enlace aún activo).
   - **Escenas:** las capturas de `master` (`e6f4517`) se tomaron con sus propias escenas, porque las de la rama buscan los enlaces del menú condensado por su nombre, que `master` no tiene. Cambian 57 de 810, cada una por un arreglo:
     - **30 listas**, por «Anterior» atenuado en la primera página: Pedidos, Productos, Inventario, Clientes, Caja, Auditoría y la Agenda, en sus tamaños y modos;
     - **6** por el texto de error de un campo: cerrar caja, precios en apps y CFDI por revisar;
