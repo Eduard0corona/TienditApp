@@ -1,128 +1,37 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Modal } from 'react-bootstrap';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import ChimeSettingsButton from '../../components/common/ChimeSettingsButton';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import ChannelBadge from '../../components/common/ChannelBadge';
-import StatusChip from '../../components/common/StatusChip';
-import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
-import SaleTicket from '../../components/sales/SaleTicket';
+import type { ChargeResult } from '../../components/sales/ChargePanel';
 import RefundOrderModal from '../../components/orders/RefundOrderModal';
 import CfdiDraftModal from '../../components/orders/CfdiDraftModal';
-import OrderDeliveryPanel from '../../components/orders/OrderDeliveryPanel';
-import PlatformOrderIdEditor from '../../components/orders/PlatformOrderIdEditor';
-import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
 import { useRefreshCustomerCredit } from '../../api/customerCredit';
-import { useOrderSelfInvoice } from '../../api/invoicing';
 import { queryKeys } from '../../api/queries';
 import { useOrderChannels } from './useOrderChannels';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
-import { getServicePriorityLabel, parseChecklist } from '../../utils/serviceDetail';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import type { OrderDto, OrderStatus, OrderType, PaginatedList, RefundOrderRequest, VoidOrderRequest } from '../../types';
-import {
-  OrderChannel,
-  OrderPaymentMethod,
-  OrderStatus as OrderStatusConst,
-  OrderType as OrderTypeConst,
-  PlatformCollectedBy,
-  TenantCapability,
-} from '../../types';
-import { toPrivateFilePath } from '../../utils/privateFiles';
-import PrivateFileLink from '../../components/common/PrivateFileLink';
-import ServicePhotosPanel from '../../components/services/ServicePhotosPanel';
+import { OrderChannel, OrderStatus as OrderStatusConst } from '../../types';
 import { getAccess } from '../../utils/access';
-import { hasAnyCapability, hasCapability } from '../../utils/tenantCapabilities';
 import { formatMoney } from '../../utils/money';
-import { getVatLabel } from '../../utils/orderTotals';
-import { buildTicketText, buildWhatsAppTicketUrl, formatCancelled, printTicket } from '../../utils/ticket';
 import { isDeliveryPlatform } from '../../utils/deliveryPlatforms';
-import {
-  ORDER_CHANNEL_LABELS,
-  ORDER_TYPE_LABELS,
-  SERVICE_PIECE_STATUS_LABELS,
-  getChannelLabel,
-  getCollectedByLabel,
-  getOrderStatusLabel,
-  getPaymentMethodLabel,
-} from '../../utils/labels';
-import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
-import { describeOnlineDispute, describeOnlineRefund, isDisputeRefund } from '../../utils/onlineRefunds';
+import { ORDER_TYPE_LABELS, getChannelLabel, getOrderStatusLabel } from '../../utils/labels';
 import { getApiErrorMessage } from '../../api/errors';
-import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
-import { confirmInTimeLabel } from '../../utils/orderConfirmInTime';
+import { businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 import { ORDERS_SOUND_KEY } from '../../hooks/useOnlineOrdersWaiting';
-import { quoteFolio } from '../../utils/quotes';
-import WorkAppointmentList from '../../components/appointments/WorkAppointmentList';
-
-const ALL_STATUSES: OrderStatus[] = [0, 1, 2, 3, 4, 5, 6, 7, 99];
-
-const toStatusOptions = (statuses: OrderStatus[]) =>
-  statuses.map((value) => ({ value, label: getOrderStatusLabel(value) }));
-
-const STATUS_OPTIONS = toStatusOptions(ALL_STATUSES);
-
-const ORDER_TYPE_STATUS_OPTIONS: Record<OrderType, Array<{ value: OrderStatus; label: string }>> = {
-  [OrderTypeConst.Retail]: toStatusOptions([0, 1, 2, 3, 6, 99]),
-  [OrderTypeConst.Service]: toStatusOptions([0, 4, 5, 7, 99]),
-};
-
-// Where the order came from; the counter is the usual one and carries no badge in the list. The API says where the
-// business receives orders (Fase 29Q): a paused channel stays, so its orders are still found.
-function getChannelOptions(channels: OrderChannel[]) {
-  return channels.map((value) => ({ value, label: ORDER_CHANNEL_LABELS[value] }));
-}
-
-/** The platform charged the order in its app: nothing is left to collect from the courier. */
-/**
- * What a charge, refund or void answers does not say which quote the order came from (Fase 29E); it never changes, so the
- * order keeps the one it had.
- */
-function withItsQuote(updated: OrderDto, previous: OrderDto): OrderDto {
-  return updated.quote ? updated : { ...updated, quote: previous.quote, workAppointments: previous.workAppointments };
-}
-
-function chargedByPlatform(order: OrderDto): boolean {
-  return isDeliveryPlatform(order.channel) && order.platformOrder?.collectedBy === PlatformCollectedBy.Platform;
-}
-
-/** Sent out with the courier and not delivered yet (Fase 22D). */
-function isOnTheWay(order: OrderDto): boolean {
-  return !!order.delivery?.dispatchedAt
-    && order.status !== OrderStatusConst.Delivered
-    && order.status !== OrderStatusConst.Completed
-    && order.status !== OrderStatusConst.Cancelled;
-}
-
-/** A payment's method; what a platform charged reads with the folio of its app: «Plataforma · BC953». */
-function getPaymentMethodText(order: OrderDto, payment: OrderDto['payments'][number]): string {
-  const label = getPaymentMethodLabel(payment.method);
-  if (payment.method !== OrderPaymentMethod.Platform) return label;
-  const folio = order.platformOrder?.externalOrderNumber ?? payment.reference;
-  return folio ? `${label} · ${folio}` : label;
-}
-
-/** The kinds of order of the business, by the rule the server lists them with: sales (products or food), services or both (both while unknown). */
-function getOrderTypes(capabilities: number | null): OrderType[] {
-  const sells = hasAnyCapability(capabilities, TenantCapability.Retail | TenantCapability.Food);
-  const serves = hasCapability(capabilities, TenantCapability.Service);
-  if (sells && !serves) return [OrderTypeConst.Retail];
-  if (serves && !sells) return [OrderTypeConst.Service];
-  return [OrderTypeConst.Retail, OrderTypeConst.Service];
-}
-
-const SERVICE_PIECE_STATUS_OPTIONS = ([0, 1, 2, 99] as const).map((value) => ({
-  value,
-  label: SERVICE_PIECE_STATUS_LABELS[value],
-}));
+import OrderRowCells from './OrderRowCells';
+import OrderDetailModal from './OrderDetailModal';
+import OrderPaymentModal from './OrderPaymentModal';
+import PaidReceiptModal from './PaidReceiptModal';
+import { ORDER_TYPE_STATUS_OPTIONS, STATUS_OPTIONS, getChannelOptions, getOrderTypes, withItsQuote } from './ordersListModel';
 
 const COLUMNS = [
   { header: 'Orden' },
@@ -134,44 +43,13 @@ const COLUMNS = [
   { header: 'Acciones', className: 'text-center' },
 ];
 
-function toLocalDateTime(date: string) {
-  return formatInBusinessZone(date, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function getStatusLabel(status: OrderStatus): string {
-  return getOrderStatusLabel(status);
-}
-
 // Several realtime events usually arrive together; one reload covers all of them.
 const EVENT_RELOAD_DELAY_MS = 400;
 
 /** The link of the bell's online orders to confirm (Fase 29X). */
 const TO_CONFIRM_LINK = 'por-confirmar';
 
-/**
- * By when an order of the online menu still waiting is confirmed in time (Fase 29X); it reads the clock every minute, so it
- * says the half hour passed with Pedidos open.
- */
-function ConfirmInTime({ confirmBy }: { confirmBy: string }) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const { text, late } = confirmInTimeLabel(confirmBy, now);
-  return <small className={`d-block ${late ? 'text-danger' : 'text-muted'}`}>{text}</small>;
-}
-
 export default function OrdersList() {
-  const detailTitleId = useId();
-  const paymentTitleId = useId();
-  const receiptTitleId = useId();
   const queryClient = useQueryClient();
   const today = getBusinessToday();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -228,8 +106,6 @@ export default function OrdersList() {
   const [paymentError, setPaymentError] = useState('');
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [paidReceipt, setPaidReceipt] = useState<{ order: OrderDto; change: number } | null>(null);
-  // Its ticket carries the folio and code to invoice it online while self-invoicing is on (Fase 28F).
-  const { selfInvoice: receiptSelfInvoice, preparing: preparingReceipt } = useOrderSelfInvoice(paidReceipt?.order);
   const [realtimeMessage, setRealtimeMessage] = useState('');
   const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [statusError, setStatusError] = useState('');
@@ -246,16 +122,15 @@ export default function OrdersList() {
     playChimeRef.current = chime.play;
   }, [chime.play]);
   const { user } = useAuth();
-  const { tenant, capabilities } = useTenant();
+  const { capabilities } = useTenant();
   const { confirm, prompt } = useConfirm();
   const toast = useToast();
   const refreshCredit = useRefreshCustomerCredit();
   // Selling, charging, changing status and cancelling are counter actions (OrdersController); kitchen
   // roles can read orders but move food orders from the kitchen board. Refunds also need ProcessRefunds.
+  // The list only charges; the detail says which of the others the person may use.
   const access = getAccess(user, capabilities);
-  const canSell = access.sell;
   const canCharge = access.charge;
-  const canRefund = access.refunds;
   const orderChannels = useOrderChannels(access.orders);
   const channelOptions = useMemo(() => getChannelOptions(orderChannels.data?.channels ?? []), [orderChannels.data]);
   // Filtering by channel only says something when the business receives orders by more than one.
@@ -274,29 +149,6 @@ export default function OrdersList() {
     : (mixesOrderTypes ? null : orderTypes[0]);
   const statusOptions = statusOrderType === null ? STATUS_OPTIONS : ORDER_TYPE_STATUS_OPTIONS[statusOrderType];
 
-  // Transitions come from the server's state machine; cancellation has its own action (it needs a reason
-  // and is blocked while the order has payments).
-  const selectedOrderStatusActions = useMemo(
-    () => selectedOrder?.allowedTransitions.filter((status) => status !== OrderStatusConst.Cancelled) ?? [],
-    [selectedOrder],
-  );
-
-  const selectedNetPaid = selectedOrder ? (selectedOrder.netPaidAmount ?? selectedOrder.paidAmount) : 0;
-  const selectedPlatform = selectedOrder && isDeliveryPlatform(selectedOrder.channel) ? selectedOrder.channel : null;
-  const canRefundSelected = canRefund && selectedNetPaid > 0;
-  const selectedOrderTotalItems = useMemo(
-    // A weighed line counts as one article.
-    () => selectedOrder?.items.reduce((acc, item) => acc + (allowsFractions(item.unit) ? 1 : item.quantity), 0) ?? 0,
-    [selectedOrder],
-  );
-  const selectedOrderChecklist = useMemo(
-    () => selectedOrder?.servicePieces.filter((piece) => piece.isTrackable) ?? [],
-    [selectedOrder],
-  );
-  const selectedOrderIntakeChecklist = useMemo(
-    () => parseChecklist(selectedOrder?.serviceDetail?.intakeChecklistJson),
-    [selectedOrder],
-  );
   // A silent reload (realtime event, reconnection) keeps the table on screen: no spinner, no lost scroll.
   const loadOrders = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     const requestId = ++latestRequestRef.current;
@@ -538,14 +390,6 @@ export default function OrdersList() {
     }
   };
 
-  const getPieceAllowedTransitions = (status: number): number[] => {
-    switch (status) {
-      case 0: return [1, 99];
-      case 1: return [2, 99];
-      default: return [];
-    }
-  };
-
   const handleServicePieceStatusChange = async (orderId: string, pieceId: string, newStatus: string) => {
     if (!newStatus) return;
 
@@ -721,112 +565,13 @@ export default function OrdersList() {
                   },
                 }}
                 renderRow={(order) => (
-                  <>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn-link p-0 fw-semibold text-decoration-none text-nowrap"
-                        onClick={() => openOrder(order)}
-                      >
-                        {order.orderNumber}
-                      </button>
-                      {order.channel === OrderChannel.WhatsApp && (
-                        <div>
-                          <span className="badge mt-1 bg-success-subtle text-success-emphasis">
-                            <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>WhatsApp
-                          </span>
-                        </div>
-                      )}
-                      {order.channel === OrderChannel.Online && (
-                        <div>
-                          <span className="badge mt-1 bg-primary-subtle text-primary-emphasis">En línea</span>
-                        </div>
-                      )}
-                      {order.delivery && (
-                        <div>
-                          <span className="badge mt-1 text-bg-light border">
-                            <i className="ri-e-bike-2-line me-1" aria-hidden="true"></i>A domicilio
-                          </span>
-                          {isOnTheWay(order) && <span className="badge mt-1 ms-1 text-bg-info">En camino</span>}
-                        </div>
-                      )}
-                      {order.soldOnCredit && (
-                        <div>
-                          <span className="badge mt-1 bg-warning-subtle text-warning-emphasis">
-                            <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>Fiado
-                          </span>
-                        </div>
-                      )}
-                      {isDeliveryPlatform(order.channel) && (
-                        <div>
-                          <ChannelBadge channel={order.channel} className="mt-1" />
-                          {order.platformOrder && (
-                            <small className="d-block text-muted">Folio {order.platformOrder.externalOrderNumber}</small>
-                          )}
-                          {order.platformOrder?.externalOrderId && (
-                            <small className="d-block text-muted text-break">ID {order.platformOrder.externalOrderId}</small>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    {showTypeColumn && (
-                      <td className="text-center">
-                        <span className={`badge ${order.orderType === OrderTypeConst.Service ? 'bg-info' : 'bg-secondary'}`}>
-                          {ORDER_TYPE_LABELS[order.orderType]}
-                        </span>
-                      </td>
-                    )}
-                    <td>
-                      <div>{order.customerName}</div>
-                      {order.customerPhone && <small className="text-muted">{order.customerPhone}</small>}
-                    </td>
-                    <td className="text-center">
-                      <StatusChip status={order.status} />
-                    </td>
-                    <td className="text-center">
-                      {toLocalDateTime(order.createdAt)}
-                      {order.confirmBy && <ConfirmInTime confirmBy={order.confirmBy} />}
-                    </td>
-                    <td className="text-end fw-semibold">
-                      <div className="ta-money">{formatMoney(order.total)}</div>
-                      <small className={`d-block ${order.balance > 0 ? 'text-danger' : 'text-success'}`}>
-                        {order.delivery?.awaitsCourierCash
-                          ? `Lo debe Paquetenvia ${formatMoney(order.balance)}`
-                          : order.balance > 0
-                          ? `Por cobrar ${formatMoney(order.balance)}`
-                          : chargedByPlatform(order)
-                            ? `Cobró ${getCollectedByLabel(PlatformCollectedBy.Platform, order.channel)}`
-                            : (order.writtenOffAmount ?? 0) > 0 ? 'Saldado' : 'Pagado'}
-                      </small>
-                      {(order.refundedAmount ?? 0) > 0 && (
-                        <small className="d-block text-warning">Reembolsado {formatMoney(order.refundedAmount ?? 0)}</small>
-                      )}
-                      {(order.writtenOffAmount ?? 0) > 0 && (
-                        <small className="d-block text-muted">Condonado {formatMoney(order.writtenOffAmount ?? 0)}</small>
-                      )}
-                    </td>
-                    <td className="text-center">
-                      {canCharge && order.balance > 0 && order.status !== OrderStatusConst.Cancelled ? (
-                        <div className="d-flex justify-content-center">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-soft-primary"
-                            onClick={() => openPaymentModal(order)}
-                          >
-                            Cobrar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-light"
-                          onClick={() => openOrder(order)}
-                        >
-                          Ver detalle
-                        </button>
-                      )}
-                    </td>
-                  </>
+                  <OrderRowCells
+                    order={order}
+                    showTypeColumn={showTypeColumn}
+                    canCharge={canCharge}
+                    onOpen={openOrder}
+                    onCharge={openPaymentModal}
+                  />
                 )}
               />
             </div>
@@ -834,485 +579,25 @@ export default function OrdersList() {
         </div>
       </div>
 
-      <Modal
-        show={!!selectedOrder}
-        onHide={() => {
+      <OrderDetailModal
+        order={selectedOrder}
+        access={access}
+        capabilities={capabilities}
+        statusSubmitting={statusSubmitting}
+        statusError={statusError}
+        onClose={() => {
           setSelectedOrder(null);
           setStatusError('');
         }}
-        size="lg"
-        centered
-        aria-labelledby={detailTitleId}
-      >
-        <Modal.Header closeButton>
-          <Modal.Title id={detailTitleId}>Pedido {selectedOrder?.orderNumber}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedOrder && (
-            <>
-              <div className="row mb-3">
-                <div className="col-md-6">
-                  <p className="mb-1"><strong>Orden:</strong> {selectedOrder.orderNumber}</p>
-                  <p className="mb-1"><strong>Tipo:</strong> {ORDER_TYPE_LABELS[selectedOrder.orderType]}</p>
-                  <p className="mb-1">
-                    <strong>Cliente:</strong> {selectedOrder.customerName}
-                    {selectedOrder.customerPhone && !selectedPlatform && (
-                      <button
-                        type="button"
-                        className="btn btn-link btn-sm p-0 ms-2 align-baseline"
-                        onClick={() => setCardFor({ phone: selectedOrder.customerPhone ?? '', name: selectedOrder.customerName })}
-                      >
-                        Ver ficha
-                      </button>
-                    )}
-                  </p>
-                  {selectedPlatform ? (
-                    // The app of a platform shares neither the customer's phone nor a table: where it came from instead.
-                    <>
-                      <p className="mb-1">
-                        <strong>Origen:</strong> {getChannelLabel(selectedPlatform)}
-                        {selectedOrder.platformOrder && <> · folio {selectedOrder.platformOrder.externalOrderNumber}</>}
-                      </p>
-                      {selectedOrder.platformOrder && (
-                        <PlatformOrderIdEditor
-                          key={selectedOrder.id}
-                          order={selectedOrder}
-                          platform={selectedPlatform}
-                          canManage={canSell}
-                          onSaved={async (cleared) => {
-                            // Saved already: reading the order again failing is not a failed save.
-                            toast.success(cleared ? 'ID largo quitado.' : 'ID largo guardado.');
-                            await Promise.all([loadOrders(), refreshSelectedOrder(selectedOrder.id)]).catch(() => undefined);
-                          }}
-                        />
-                      )}
-                      {selectedOrder.platformOrder && (
-                        <p className="mb-1">
-                          <strong>Cobró:</strong>{' '}
-                          {selectedOrder.platformOrder.collectedBy === PlatformCollectedBy.Business
-                            ? 'el negocio'
-                            : getCollectedByLabel(PlatformCollectedBy.Platform, selectedPlatform)}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <p className="mb-1"><strong>Teléfono:</strong> {selectedOrder.customerPhone || '-'}</p>
-                      <p className="mb-1"><strong>Mesa:</strong> {selectedOrder.tableNumber || '-'}</p>
-                    </>
-                  )}
-                </div>
-                <div className="col-md-6">
-                  <p className="mb-1"><strong>Estado:</strong> <StatusChip status={selectedOrder.status} /></p>
-                  <p className="mb-1"><strong>Fecha:</strong> {toLocalDateTime(selectedOrder.createdAt)}</p>
-                  <p className="mb-1"><strong>Artículos:</strong> {selectedOrderTotalItems}</p>
-                  <p className="mb-1"><strong>Total:</strong> <span className="ta-money">{formatMoney(selectedOrder.total)}</span></p>
-                  {selectedOrder.visitCharge && (
-                    <p className="mb-1 small">
-                      Incluye el cargo por visita a domicilio ({selectedOrder.visitCharge.zoneName}):{' '}
-                      <span className="ta-money">{formatMoney(selectedOrder.visitCharge.fee)}</span>
-                    </p>
-                  )}
-                  {selectedOrder.quote && (
-                    <p className="mb-1 small">
-                      De la cotización{' '}
-                      <Link to={`/quotes/${selectedOrder.quote.id}`}>{quoteFolio(selectedOrder.quote.number, selectedOrder.quote.revision)}</Link>
-                    </p>
-                  )}
-                  {/* The appointments that do its job (Fase 29F); they are agendadas from its quote. */}
-                  {selectedOrder.workAppointments && selectedOrder.workAppointments.length > 0 && (
-                    <div className="mb-2">
-                      <WorkAppointmentList appointments={selectedOrder.workAppointments} canOpenAgenda={access.appointments} />
-                    </div>
-                  )}
-                  {selectedOrder.taxBreakdown.filter((line) => line.taxAmount > 0).map((line) => (
-                    <p className="mb-1 small text-muted" key={`${line.ratePercent}-${line.isExempt}`}>
-                      {selectedOrder.pricesIncludeTax ? 'Incluye ' : ''}{getVatLabel(line)}: {formatMoney(line.taxAmount)}
-                    </p>
-                  ))}
-                  <p className="mb-1"><strong>Pagado:</strong> <span className="ta-money">{formatMoney(selectedOrder.paidAmount)}</span></p>
-                  {(selectedOrder.refundedAmount ?? 0) > 0 && (
-                    <p className="mb-1">
-                      <strong>Reembolsado:</strong> <span className="ta-money text-warning">{formatMoney(selectedOrder.refundedAmount ?? 0)}</span>
-                      <span className="text-muted small"> · neto {formatMoney(selectedNetPaid)}</span>
-                    </p>
-                  )}
-                  {(selectedOrder.writtenOffAmount ?? 0) > 0 && (
-                    <p className="mb-1"><strong>Condonado:</strong> <span className="ta-money">{formatMoney(selectedOrder.writtenOffAmount ?? 0)}</span></p>
-                  )}
-                  <p className="mb-1"><strong>Por cobrar:</strong> <span className="ta-money">{formatMoney(selectedOrder.balance)}</span></p>
-                </div>
-              </div>
-
-              <OrderDeliveryPanel
-                key={selectedOrder.id}
-                order={selectedOrder}
-                canManage={canSell}
-                onSaved={async (change) => {
-                  await Promise.all([loadOrders(), refreshSelectedOrder(selectedOrder.id)]);
-                  toast.success(change === 'dispatch' ? 'Salida guardada.' : 'Envío guardado.');
-                }}
-              />
-
-              {/* Whoever sells always has «Factura», also on a cancelled order (its invoices). */}
-              {(canSell || (canCharge && selectedOrder.balance > 0) || canRefundSelected) && (
-                <div className="border rounded p-2 mb-3">
-                  <div className="fw-semibold mb-2">Acciones</div>
-                  <div className="d-flex flex-wrap gap-2">
-                    {canCharge && selectedOrder.balance > 0 && selectedOrder.status !== OrderStatusConst.Cancelled && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        disabled={statusSubmitting}
-                        onClick={() => openPaymentModal(selectedOrder)}
-                      >
-                        Cobrar {formatMoney(selectedOrder.balance)}
-                      </button>
-                    )}
-                    {canSell && selectedOrderStatusActions.map((status) => (
-                      <button
-                        key={status}
-                        type="button"
-                        className="btn btn-sm btn-outline-primary"
-                        disabled={statusSubmitting}
-                        onClick={() => void handleStatusChange(selectedOrder, status)}
-                      >
-                        {getStatusLabel(status)}
-                      </button>
-                    ))}
-                    {canSell && selectedOrder.canCancel && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger"
-                        disabled={statusSubmitting}
-                        onClick={() => void handleCancelOrder(selectedOrder)}
-                      >
-                        Cancelar pedido
-                      </button>
-                    )}
-                    {/* A cancelled order is not invoiced, but its invoices stay reachable to download or cancel them. */}
-                    {canSell && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => setCfdiFor(selectedOrder)}
-                      >
-                        <i className="ri-file-text-line me-1" aria-hidden="true"></i>Factura
-                      </button>
-                    )}
-                    {canRefundSelected && (
-                      <>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-warning"
-                          disabled={statusSubmitting}
-                          onClick={() => openRefundModal(selectedOrder, 'refund')}
-                        >
-                          Reembolsar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-danger"
-                          disabled={statusSubmitting}
-                          onClick={() => openRefundModal(selectedOrder, 'void')}
-                        >
-                          Anular venta
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  {!selectedOrder.canCancel && selectedNetPaid > 0
-                    && selectedOrder.allowedTransitions.includes(OrderStatusConst.Cancelled) && (
-                    <small className="text-muted d-block mt-2">
-                      {canRefund
-                        ? 'Tiene pagos registrados: para cancelarla usa «Anular venta», que devuelve el dinero.'
-                        : 'Tiene pagos registrados: solo quien puede hacer reembolsos puede anularla.'}
-                    </small>
-                  )}
-                  {statusError && <div className="alert alert-danger mt-2 mb-0 py-2">{statusError}</div>}
-                </div>
-              )}
-
-              <h5 className="mb-2">Items</h5>
-              <div className="table-responsive">
-                <table className="table table-sm table-striped mb-0">
-                  <thead>
-                    <tr>
-                      <th>Producto</th>
-                      <th className="text-center">Cantidad</th>
-                      <th className="text-end">Precio</th>
-                      <th className="text-end">Importe</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedOrder.items.map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          {item.productName}
-                          {selectedOrder.isTab && <span className="badge bg-light text-dark ms-1">Ronda {item.round ?? 1}</span>}
-                          {item.options && item.options.length > 0 && (
-                            <div className="small text-primary-emphasis">{item.options.map((option) => option.optionName).join(', ')}</div>
-                          )}
-                          {item.notes && <div className="text-muted small">Nota: {item.notes}</div>}
-                        </td>
-                        <td className="text-center">
-                          {formatQuantity(item.quantity, item.unit)}
-                          {(item.returnedQuantity ?? 0) > 0 && (
-                            <div className="text-warning small">
-                              {formatQuantity(item.returnedQuantity ?? 0, item.unit)} devuelto{allowsFractions(item.unit) || item.returnedQuantity === 1 ? '' : 's'}
-                            </div>
-                          )}
-                          {(item.cancelledQuantity ?? 0) > 0 && <div className="text-danger small">{formatCancelled(item)}</div>}
-                        </td>
-                        <td className="text-end">{formatMoney(item.unitPrice)}</td>
-                        <td className="text-end">{formatMoney(item.chargedPrice ?? item.totalPrice)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {selectedOrder.serviceDetail && (
-                <div className="mt-3">
-                  <h5 className="mb-2">Recepción de servicio</h5>
-                  <div className="row g-2">
-                    <div className="col-md-6"><strong>Recibido:</strong> {toLocalDateTime(selectedOrder.serviceDetail.receivedAt)}</div>
-                    <div className="col-md-6">
-                      <strong>Promesa:</strong> {selectedOrder.serviceDetail.promisedAt
-                        ? toLocalDateTime(selectedOrder.serviceDetail.promisedAt)
-                        : '-'}
-                    </div>
-                    <div className="col-md-6"><strong>Prioridad:</strong> {getServicePriorityLabel(selectedOrder.serviceDetail.priority)}</div>
-                  </div>
-                  {selectedOrder.serviceDetail.intakeNotes && (
-                    <div className="mt-2">
-                      <strong>Notas de ingreso:</strong>
-                      <div className="text-muted">{selectedOrder.serviceDetail.intakeNotes}</div>
-                    </div>
-                  )}
-                  {selectedOrder.serviceDetail.deliveryNotes && (
-                    <div className="mt-2">
-                      <strong>Notas de entrega:</strong>
-                      <div className="text-muted">{selectedOrder.serviceDetail.deliveryNotes}</div>
-                    </div>
-                  )}
-
-                  {selectedOrderIntakeChecklist.length > 0 && (
-                    <div className="mt-2">
-                      <strong>Checklist de recepción:</strong>
-                      <ul className="mb-0 mt-1 ps-3">
-                        {selectedOrderIntakeChecklist.map((item, index) => (
-                          <li key={`${item.label || 'item'}-${index}`}>
-                            {item.checked ? '[x]' : '[ ]'} {item.label || 'Item'}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {selectedOrder.orderType === OrderTypeConst.Service && hasCapability(capabilities, TenantCapability.Service) && (
-                <div className="mt-3">
-                  <h5 className="mb-2">Fotos del servicio</h5>
-                  <ServicePhotosPanel key={selectedOrder.id} orderId={selectedOrder.id} orderStatus={selectedOrder.status} headingLevel={6} />
-                </div>
-              )}
-
-              {selectedOrderChecklist.length > 0 && (
-                <div className="mt-3">
-                  <h5 className="mb-2">Checklist de servicios rastreables</h5>
-                  <div className="table-responsive">
-                    <table className="table table-sm table-striped mb-0">
-                      <thead>
-                        <tr>
-                          <th>Servicio</th>
-                          <th>Notificar</th>
-                          <th>Estado</th>
-                          <th className="text-end">Acción</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedOrderChecklist.map((piece) => (
-                          <tr key={piece.id}>
-                            <td>{piece.itemName}</td>
-                            <td>{piece.notifyCustomer ? 'Si' : 'No'}</td>
-                            <td>{SERVICE_PIECE_STATUS_LABELS[piece.status] ?? piece.status}</td>
-                            <td className="text-end" style={{ minWidth: 220 }}>
-                              <select
-                                className="form-select form-select-sm"
-                                value=""
-                                aria-label={`Actualizar estado de ${piece.itemName}`}
-                                disabled={!canSell || getPieceAllowedTransitions(piece.status).length === 0}
-                                onChange={(e) =>
-                                  handleServicePieceStatusChange(selectedOrder.id, piece.id, e.target.value)
-                                }
-                              >
-                                <option value="">Actualizar estado</option>
-                                {SERVICE_PIECE_STATUS_OPTIONS
-                                  .filter((status) => getPieceAllowedTransitions(piece.status).includes(status.value))
-                                  .map((status) => (
-                                    <option key={status.value} value={status.value}>
-                                      {status.label}
-                                    </option>
-                                  ))}
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {(() => {
-                const refunded = (selectedOrder.refunds ?? []).some((refund) => isDisputeRefund(refund.onlineReason));
-                const dispute = describeOnlineDispute(selectedOrder.onlineDispute, refunded);
-                return dispute && (
-                  <div className={`alert alert-${dispute.variant} mt-3 mb-0`} role="status">
-                    <strong>{dispute.title}.</strong> {dispute.text}
-                    {selectedOrder.onlineDisputeUpdatedAt && (
-                      <div className="small">Última noticia de Mercado Pago: {toLocalDateTime(selectedOrder.onlineDisputeUpdatedAt)}</div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {selectedOrder.payments.length > 0 && (
-                <div className="mt-3">
-                  <h5 className="mb-2">Pagos</h5>
-                  <div className="table-responsive">
-                    <table className="table table-sm table-striped mb-0">
-                      <thead>
-                        <tr>
-                          <th>Fecha</th>
-                          <th>Forma de pago</th>
-                          <th>Referencia</th>
-                          <th>Comprobante</th>
-                          <th className="text-end">Monto</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedOrder.payments.map((payment) => (
-                          <tr key={payment.id}>
-                            <td>{toLocalDateTime(payment.paidAt)}</td>
-                            <td>{getPaymentMethodText(selectedOrder, payment)}</td>
-                            {/* The folio of what the platform charged is its reference: it already reads with the method. */}
-                            <td>{(payment.method === OrderPaymentMethod.Platform ? '' : payment.reference) || '-'}</td>
-                            <td>
-                              {toPrivateFilePath(payment.evidenceUrl) ? (
-                                <PrivateFileLink path={toPrivateFilePath(payment.evidenceUrl)!}>Ver</PrivateFileLink>
-                              ) : '-'}
-                            </td>
-                            <td className="text-end">{formatMoney(payment.amount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {(selectedOrder.refunds ?? []).length > 0 && (
-                <div className="mt-3">
-                  <h5 className="mb-2">Reembolsos</h5>
-                  <div className="table-responsive">
-                    <table className="table table-sm table-striped mb-0">
-                      <thead>
-                        <tr>
-                          <th>Fecha</th>
-                          <th>Forma</th>
-                          <th>Motivo</th>
-                          <th>Artículos</th>
-                          <th className="text-end">Monto</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(selectedOrder.refunds ?? []).map((refund) => (
-                          <tr key={refund.id}>
-                            <td>
-                              {toLocalDateTime(refund.refundedAt)}
-                              <div className="text-muted small">{refund.refundedBy}</div>
-                            </td>
-                            <td>
-                              {getPaymentMethodLabel(refund.method)}
-                              {refund.method === OrderPaymentMethod.Online && (() => {
-                                const online = describeOnlineRefund(refund.onlineStatus, refund.onlineFailure, refund.onlineReason);
-                                return online && <div className={`small text-${online.tone}`}>{online.text}</div>;
-                              })()}
-                            </td>
-                            <td>{refund.reason}</td>
-                            <td>
-                              {refund.lines.length === 0 ? '-' : refund.lines.map((line) => {
-                                const item = selectedOrder.items.find((candidate) => candidate.id === line.orderItemId);
-                                return <div key={line.orderItemId}>{line.quantity} × {item?.productName ?? 'Artículo'}</div>;
-                              })}
-                            </td>
-                            <td className="text-end text-warning">−{formatMoney(refund.amount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {(selectedOrder.writeOffs ?? []).length > 0 && (
-                <div className="mt-3">
-                  <h5 className="mb-2">Condonado</h5>
-                  <p className="small text-muted mb-2">Lo que el negocio condonó o descontó de lo que debía el cliente: no salió dinero de la caja.</p>
-                  <div className="table-responsive">
-                    <table className="table table-sm table-striped mb-0">
-                      <thead>
-                        <tr>
-                          <th>Fecha</th>
-                          <th>Motivo</th>
-                          <th className="text-end">Monto</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(selectedOrder.writeOffs ?? []).map((writeOff) => (
-                          <tr key={writeOff.id}>
-                            <td>
-                              {toLocalDateTime(writeOff.writtenOffAt)}
-                              <div className="text-muted small">{writeOff.writtenOffBy}</div>
-                            </td>
-                            <td>
-                              {getWriteOffReasonLabel(writeOff.reason)}
-                              {writeOff.notes && <div className="text-muted small">{writeOff.notes}</div>}
-                            </td>
-                            <td className="text-end">
-                              <span className={writeOff.reversedAt ? 'text-muted text-decoration-line-through' : ''}>−{formatMoney(writeOff.amount)}</span>
-                              {writeOff.reversedAt && (
-                                <div className="text-muted small">Deshecho el {toLocalDateTime(writeOff.reversedAt)}{writeOff.reversedBy ? ` por ${writeOff.reversedBy}` : ''}</div>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {selectedOrder.customerNotes && (
-                <div className="mt-3">
-                  <strong>Notas del cliente:</strong>
-                  <div className="text-muted">{selectedOrder.customerNotes}</div>
-                </div>
-              )}
-
-              {selectedOrder.cancellationReason && (
-                <div className="mt-3">
-                  <strong>Motivo de cancelación:</strong>
-                  <div className="text-danger">{selectedOrder.cancellationReason}</div>
-                </div>
-              )}
-            </>
-          )}
-        </Modal.Body>
-      </Modal>
+        onCharge={openPaymentModal}
+        onChangeStatus={(order, status) => void handleStatusChange(order, status)}
+        onCancelOrder={(order) => void handleCancelOrder(order)}
+        onInvoice={setCfdiFor}
+        onRefund={openRefundModal}
+        onOpenCard={setCardFor}
+        onPieceStatusChange={(orderId, pieceId, status) => void handleServicePieceStatusChange(orderId, pieceId, status)}
+        onReload={(orderId) => Promise.all([loadOrders(), refreshSelectedOrder(orderId)])}
+      />
 
       {cardFor && (
         <CustomerCardModal phone={cardFor.phone} name={cardFor.name} onClose={() => setCardFor(null)} />
@@ -1349,82 +634,15 @@ export default function OrdersList() {
         />
       ))}
 
-      <Modal show={!!paymentOrder} onHide={closePaymentModal} centered size="lg" fullscreen="sm-down" aria-labelledby={paymentTitleId}>
-        <Modal.Header closeButton={!paymentSubmitting}>
-          <Modal.Title id={paymentTitleId} as="h2" className="h5">
-            Cobrar {paymentOrder?.orderNumber}
-            <span className="d-block small text-muted fw-normal">{paymentOrder?.customerName}</span>
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {paymentOrder && (
-            <ChargePanel
-              amountDue={paymentOrder.balance}
-              allowPartial
-              confirmLabel="Registrar"
-              // The tip of a platform's order is in its app, for the courier.
-              allowTip={!isDeliveryPlatform(paymentOrder.channel)}
-              submitting={paymentSubmitting}
-              error={paymentError}
-              onSubmit={(charge) => void handleAddPayment(charge)}
-              onCancel={closePaymentModal}
-              uploadEvidence={async (file) => {
-                const { data } = await ordersApi.uploadPaymentEvidence(file);
-                return { url: data.url, fileName: data.fileName };
-              }}
-            />
-          )}
-        </Modal.Body>
-      </Modal>
+      <OrderPaymentModal
+        order={paymentOrder}
+        submitting={paymentSubmitting}
+        error={paymentError}
+        onClose={closePaymentModal}
+        onSubmit={(charge) => void handleAddPayment(charge)}
+      />
 
-      <Modal show={!!paidReceipt} onHide={() => setPaidReceipt(null)} centered fullscreen="sm-down" aria-labelledby={receiptTitleId}>
-        <Modal.Header closeButton>
-          <Modal.Title id={receiptTitleId} as="h2" className="h5">
-            <i className="ri-checkbox-circle-fill text-success me-1" aria-hidden="true"></i>
-            Pago registrado en {paidReceipt?.order.orderNumber}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {paidReceipt && (
-            <>
-              {paidReceipt.change > 0 && (
-                <div className="charge-change has-change mb-3" aria-live="polite">
-                  <span>Cambio</span>
-                  <strong className="ta-money">{formatMoney(paidReceipt.change)}</strong>
-                </div>
-              )}
-              <SaleTicket
-                order={paidReceipt.order}
-                businessName={tenant?.name ?? 'TienditApp'}
-                logoUrl={tenant?.logoImages?.small ?? tenant?.logoUrl}
-                selfInvoice={receiptSelfInvoice}
-              />
-            </>
-          )}
-        </Modal.Body>
-        <Modal.Footer className="flex-wrap">
-          <button type="button" className="btn btn-light btn-touch" onClick={printTicket} disabled={preparingReceipt}>
-            <i className="ri-printer-line me-1" aria-hidden="true"></i>{preparingReceipt ? 'Preparando el ticket…' : 'Imprimir'}
-          </button>
-          {/* An order of a platform has no phone to send its ticket to. */}
-          {paidReceipt && !isDeliveryPlatform(paidReceipt.order.channel) && (
-            <a
-              className="btn btn-light btn-touch"
-              href={buildWhatsAppTicketUrl(
-                buildTicketText(paidReceipt.order, { businessName: tenant?.name ?? 'TienditApp' }),
-                paidReceipt.order.customerPhone,
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Enviar por WhatsApp
-            </a>
-          )}
-          <button type="button" className="btn btn-primary btn-touch flex-grow-1" onClick={() => setPaidReceipt(null)} autoFocus>
-            Listo
-          </button>
-        </Modal.Footer>
-      </Modal>
+      <PaidReceiptModal receipt={paidReceipt} onClose={() => setPaidReceipt(null)} />
     </>
   );
 }

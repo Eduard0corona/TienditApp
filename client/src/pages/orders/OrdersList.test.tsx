@@ -53,7 +53,7 @@ vi.mock('../../hooks/useOrderSignalR', () => {
     }),
   };
 });
-vi.mock('../../api/ordersApi', () => ({ ordersApi: { getAll: vi.fn(), getById: vi.fn(), cancel: vi.fn(), setPlatformOrderId: vi.fn(), refund: vi.fn() } }));
+vi.mock('../../api/ordersApi', () => ({ ordersApi: { getAll: vi.fn(), getById: vi.fn(), cancel: vi.fn(), setPlatformOrderId: vi.fn(), refund: vi.fn(), addPayment: vi.fn() } }));
 // The refund's own form has its tests: here it only hands the order its refund.
 vi.mock('../../components/orders/RefundOrderModal', () => ({
   default: ({ onSubmit }: { onSubmit: (data: unknown) => void }) => (
@@ -587,6 +587,45 @@ describe('OrdersList', () => {
     const counter = screen.getByText('ORD-000125').closest('tr') as HTMLElement;
     await user.click(within(counter).getByRole('button', { name: 'Cobrar' }));
     expect(within(await screen.findByRole('dialog', { name: /Cobrar ORD-000125/ })).getByRole('radiogroup', { name: 'Propina' })).toBeInTheDocument();
+  });
+
+  it('charges an order from the list, and shows the change and its ticket to print or send (Fase 30H)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ManageOrders', 'ChargeOrders'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    const owed = order({
+      id: 'c1', orderNumber: 'ORD-000125', customerName: 'Lupita', customerPhone: '5512345678',
+      total: 80, balance: 80, paidAmount: 0, payments: [], items: [], taxBreakdown: [],
+    });
+    const paid = order({
+      ...owed, status: 1, balance: 0, paidAmount: 80,
+      items: [{ id: 'i1', productName: 'Torta de milanesa', quantity: 1, unit: 0, unitPrice: 80, totalPrice: 80 }],
+      payments: [{ id: 'p1', amount: 80, method: OrderPaymentMethod.Cash, paidAt: '2026-10-09T16:05:00Z', cashReceived: 100, change: 20 }],
+    } as Partial<OrderDto>);
+    vi.mocked(ordersApi.addPayment).mockResolvedValue({ data: paid } as never);
+    renderOrders(TenantCapability.Food, [owed]);
+
+    const row = (await screen.findByText('ORD-000125')).closest('tr') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Cobrar' }));
+    const charge = await screen.findByRole('dialog', { name: /Cobrar ORD-000125/ });
+    await user.type(within(charge).getByLabelText('Efectivo recibido'), '100');
+    await user.click(within(charge).getByRole('button', { name: /^Registrar/ }));
+
+    expect(ordersApi.addPayment).toHaveBeenCalledWith('c1', expect.objectContaining({ amount: 80, method: OrderPaymentMethod.Cash, cashReceived: 100 }));
+    const receipt = await screen.findByRole('dialog', { name: 'Pago registrado en ORD-000125' });
+    expect(screen.queryByRole('dialog', { name: /Cobrar ORD-000125/ })).not.toBeInTheDocument();
+    // The change to hand back comes first, above the ticket (which prints it too).
+    expect(within(receipt).getAllByText('Cambio')[0].parentElement).toHaveTextContent('Cambio$20.00');
+    // The ticket carries the business of the session and the line paid.
+    expect(receipt).toHaveTextContent('La Esquina');
+    expect(receipt).toHaveTextContent('Torta de milanesa');
+    expect(within(receipt).getByRole('link', { name: 'Enviar por WhatsApp' })).toHaveAttribute('href', expect.stringContaining('5512345678'));
+    // A paid sale asks whether its ticket carries the folio to invoice it online (Fase 28F).
+    expect(apiRequest).toHaveBeenCalledWith('get', '/api/v1/invoicing/orders/{orderId}/self-invoice', expect.objectContaining({ path: { orderId: 'c1' } }));
+
+    await user.click(within(receipt).getByRole('button', { name: 'Listo' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pago registrado en ORD-000125' })).not.toBeInTheDocument());
   });
 
   it('asks whether the supplies go back when cancelling an order of a platform, and leaves them used by default', async () => {
