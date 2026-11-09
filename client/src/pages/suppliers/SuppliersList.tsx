@@ -51,6 +51,8 @@ export default function SuppliersList() {
   const [pageSize, setPageSize] = useState(10);
   const [activeFilter, setActiveFilter] = useState('');
   const [error, setError] = useState('');
+  // What the dialog could not save: shown inside it, where it can be seen, and apart from the errors of the list.
+  const [saveError, setSaveError] = useState('');
   const [success, setSuccess] = useState('');
 
   const [showModal, setShowModal] = useState(false);
@@ -61,6 +63,8 @@ export default function SuppliersList() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    // A failure of the previous read stops being true once this one is asked for.
+    setError('');
     try {
       const params: { isActive?: boolean; search?: string; pageNumber: number; pageSize: number } = {
         pageNumber,
@@ -82,12 +86,14 @@ export default function SuppliersList() {
   }, [loadData]);
 
   const openCreate = () => {
+    setSaveError('');
     setEditing(null);
     setForm(buildEmptyForm());
     setShowModal(true);
   };
 
   const openEdit = (supplier: SupplierDto) => {
+    setSaveError('');
     setEditing(supplier);
     setForm({
       name: supplier.name,
@@ -101,11 +107,16 @@ export default function SuppliersList() {
     setShowModal(true);
   };
 
+  const closeModal = () => {
+    setSaveError('');
+    setShowModal(false);
+  };
+
   const submit = async () => {
-    setError('');
+    setSaveError('');
     setSuccess('');
     if (!form.name.trim()) {
-      setError('El nombre del proveedor es obligatorio.');
+      setSaveError('El nombre del proveedor es obligatorio.');
       return;
     }
 
@@ -129,10 +140,10 @@ export default function SuppliersList() {
         await suppliersApi.create(payload);
         setSuccess('Proveedor creado.');
       }
-      setShowModal(false);
+      closeModal();
       await loadData();
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo guardar el proveedor.'));
+      setSaveError(getApiErrorMessage(err, 'No se pudo guardar el proveedor.'));
     } finally {
       setSaving(false);
     }
@@ -250,11 +261,12 @@ export default function SuppliersList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={() => setShowModal(false)} centered aria-labelledby={titleId}>
+      <Modal show={showModal} onHide={closeModal} centered aria-labelledby={titleId}>
         <Modal.Header closeButton>
           <Modal.Title id={titleId}>{editing ? 'Editar proveedor' : 'Nuevo proveedor'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
+          {saveError && <div className="alert alert-danger" role="alert">{saveError}</div>}
           <div className="row">
             <div className="col-12 mb-2">
               <label htmlFor="supplierslist-nombre" className="form-label">Nombre *</label>
@@ -316,7 +328,7 @@ export default function SuppliersList() {
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <button className="btn btn-light" onClick={() => setShowModal(false)}>Cancelar</button>
+          <button className="btn btn-light" onClick={closeModal}>Cancelar</button>
           <button className="btn btn-primary" onClick={submit} disabled={saving}>
             {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear proveedor'}
           </button>

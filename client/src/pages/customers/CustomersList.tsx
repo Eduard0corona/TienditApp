@@ -43,6 +43,8 @@ export default function CustomersList() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // What the dialog could not save: shown inside it, where it can be seen, and apart from the errors of the list.
+  const [saveError, setSaveError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<CustomerDto | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -101,12 +103,14 @@ export default function CustomersList() {
   }, [loadCustomers]);
 
   const openCreateModal = () => {
+    setSaveError('');
     setEditingCustomer(null);
     reset({ name: '', phone: '', email: '', notes: '' });
     setShowModal(true);
   };
 
   const openEditModal = (customer: CustomerDto) => {
+    setSaveError('');
     setEditingCustomer(customer);
     reset({
       name: customer.name,
@@ -118,14 +122,16 @@ export default function CustomersList() {
   };
 
   const closeModal = () => {
+    setSaveError('');
     setShowModal(false);
     setEditingCustomer(null);
   };
 
   const onSubmit = async (form: CreateCustomerRequest) => {
+    setSaveError('');
     const phone = form.phone.trim();
     if (!phone) {
-      setError('El teléfono es obligatorio.');
+      setSaveError('El teléfono es obligatorio.');
       return;
     }
 
@@ -148,8 +154,7 @@ export default function CustomersList() {
       closeModal();
       await loadCustomers();
     } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'Error al guardar cliente.');
-      setError(msg);
+      setSaveError(getApiErrorMessage(err, 'Error al guardar cliente.'));
     }
   };
 
@@ -336,6 +341,7 @@ export default function CustomersList() {
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
+            {saveError && <div className="alert alert-danger" role="alert">{saveError}</div>}
             <div className="mb-3">
               <label htmlFor="customerslist-nombre" className="form-label">Nombre *</label>
               <input id="customerslist-nombre"
