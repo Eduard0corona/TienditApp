@@ -2633,6 +2633,32 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Cliente:** 211 archivos y 1,628 pruebas, lint, build y `visual:typecheck` en verde. Las 149 declaraciones y las 59 enumeraciones reexportadas del original están una sola vez en los archivos nuevos, con su texto y sus comentarios; los 208 nombres exportados son distintos, así que `export *` no tiene ambigüedades.
   - **`ClientEnumContractTests` (WebApi.Tests):** leía `client/src/types/index.ts` como texto para encontrar un enum escrito a mano; tras dividirlo ya no habría visto los archivos nuevos y seguía en verde. Ahora lee todos los archivos de `src/types`. Con un `InventoryMovementType` copiado a mano en `types/inventory.ts`, la prueba anterior pasaba y la nueva falla; sin la copia, sus 73 casos pasan.
   - **Revisión independiente:** comparó cada declaración con el parser de TypeScript. Encontró la prueba de .NET que dejaba de ver los tipos, los tipos que el original tenía en otra sección, encabezados que exageraban lo que hay en su archivo y comentarios viejos que nombraban `types/index.ts`; quedaron corregidos.
+- Fase 30K, pruebas de las pantallas de Caja (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Qué cambia:** Mi caja, Cerrar caja y Turnos no tenían pruebas propias: `CashManagement.test.tsx` las reemplaza por dobles. Ahora cada una se prueba montada, con la API de caja simulada. No cambia código de la app.
+  - **`MyDrawer.test.tsx` (12, nuevo):**
+    - abrir la caja en la sucursal del dispositivo, con su fondo y sus notas (lo que se manda, la sucursal que queda elegida y el aviso);
+    - abrir sin fondo, y rechazar un fondo con más de dos decimales;
+    - lo que debe haber en caja es lo que dice el servidor (no la suma en pantalla), y los movimientos con su signo;
+    - la caja de otra persona dice de quién es;
+    - un retiro se manda positivo (el servidor pone el signo), rechaza 0 y vuelve a leer la caja;
+    - cerrar contando billetes: lo que se manda y el corte que queda para imprimir o mandar por WhatsApp;
+    - cerrar con faltante pide la nota, el corte dice «Debía haber · Contado · Faltan» en ese orden, y si se contaron billetes y luego se escribe el total, gana el total y no se manda el conteo;
+    - la moneda de 50 centavos se cuenta en centavos y entra al conteo;
+    - un total escrito con centavos cuadra sin pedir nota;
+    - un sobrante también pide la nota y se dice como sobrante en el aviso y el corte;
+    - un cierre que falla deja la caja abierta con el mensaje y el botón listo para reintentar;
+    - un error al leer la caja y «Reintentar».
+  - **`ShiftHistory.test.tsx` (7, nuevo):**
+    - cada turno, columna por columna, con lo que debía haber (el congelado al cierre, no el saldo vivo), lo contado («—» si sigue abierta) y cómo salió;
+    - los filtros por día del negocio (Cancún, UTC-5 todo el año, que no es la zona de los equipos de desarrollo: de las 05:00 UTC a las 04:59:59 UTC del día siguiente), sucursal y «Solo con faltante o sobrante», y «Filtros (4)»;
+    - el detalle de un turno cerrado con todas sus cifras, quién contó, la nota y el conteo del cierre, y los movimientos;
+    - cerrar la caja que otro cajero dejó abierta: lo que se manda con su faltante, su nota y su conteo, y volver a leer los turnos;
+    - el botón para cerrarla solo para quien puede, y nunca la propia;
+    - volver a leer cuando una caja abre o cierra en otra parte de la pantalla;
+    - un error al leer los turnos y «Reintentar».
+  - **Mutaciones:** fallan las pruebas si se ignora la sucursal elegida, si se acepta un movimiento de 0, si se calcula en pantalla lo que debe haber, si se cruzan «Debía haber» y «Contado» en el corte o en la tabla, si se cruzan entradas y salidas en el detalle, si la moneda de 50 centavos o los centavos del esperado o del total escrito se redondean mal, si un sobrante se dice como faltante (en el texto o en el aviso) o no pide nota, si se cierra con diferencia sin nota, si se manda el conteo al escribir el total, si no se vuelve a leer la caja o los turnos, si se manda el filtro apagado o el fin del día como su inicio, si el botón de cerrar otra caja ignora el permiso o la propia, si al cerrar otra caja se manda el esperado en lugar de lo contado, si un turno abierto muestra $0.00 contado, si un cierre fallido deja el botón deshabilitado o si se ignora el cambio de otra parte de la pantalla.
+  - **Revisión independiente:** corrió las dos suites en cinco zonas horarias y en orden aleatorio, y 33 mutaciones. Señaló las que sobrevivían (los centavos, el sobrante, lo que se manda al cerrar otra caja y las columnas cruzadas); quedaron cubiertas.
+  - **Cliente:** 213 archivos y 1,647 pruebas, lint y build en verde.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
