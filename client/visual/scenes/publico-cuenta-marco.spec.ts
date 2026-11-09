@@ -518,12 +518,11 @@ test.describe('Marco: búsqueda y menú en cada tamaño', () => {
     });
   }
 
-  for (const [size, viewport, entry] of [['tableta', SIZES.tablet, '/orders'], ['vertical', SIZES.upright, '/settings/business']] as const) {
+  for (const [size, viewport, entry] of [['tableta', SIZES.tablet, 'Pedidos'], ['vertical', SIZES.upright, 'Configuración']] as const) {
     test(`marco menú condensado ${size}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await open(page, '/dashboard');
-      // Condensed, the labels are hidden (not in the accessible name): the entry is found by where it goes.
-      await page.getByRole('navigation', { name: 'Menú principal' }).locator(`a[href="${entry}"]`).hover();
+      await page.getByRole('navigation', { name: 'Menú principal' }).getByRole('link', { name: entry, exact: true }).hover();
       await snapHovering(page, `marco-menu-condensado-${size}`);
     });
   }
