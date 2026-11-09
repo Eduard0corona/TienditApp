@@ -105,6 +105,8 @@ export default function PublicBookingPage() {
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [sending, setSending] = useState(false);
+  // After a refusal, while the page reads again what changed (the person, the time): the sheet can close, nothing is sent.
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const [receipt, setReceipt] = useState<PublicAppointmentReceipt | null>(null);
   const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
@@ -129,7 +131,7 @@ export default function PublicBookingPage() {
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!service || !chosen || sending) return;
+    if (!service || !chosen || sending || checking) return;
     setSending(true);
     setError('');
     const request: RequestPublicAppointment = {
@@ -158,6 +160,10 @@ export default function PublicBookingPage() {
         setError(`${message} Si ya se había enviado, no se repite.`);
         return;
       }
+      // Nothing is on its way any more: the sheet can close while the page reads what changed, but it sends nothing
+      // else until then.
+      setSending(false);
+      setChecking(true);
       // The person no longer takes it: the page reads who does, and the customer picks again; with nobody doing the
       // service any more, the customer picks another one.
       if (staffId) {
@@ -188,6 +194,7 @@ export default function PublicBookingPage() {
       }
     } finally {
       setSending(false);
+      setChecking(false);
     }
   };
 
@@ -384,8 +391,9 @@ export default function PublicBookingPage() {
         </div>
       )}
 
-      <Offcanvas show={sheetOpen && !!chosen} onHide={() => setSheetOpen(false)} placement="bottom" className="pm-sheet" aria-labelledby={sheetTitleId}>
-        <Offcanvas.Header closeButton>
+      {/* It stays open while the request is on its way: its answer is shown here. */}
+      <Offcanvas show={sheetOpen && !!chosen} onHide={() => !sending && setSheetOpen(false)} placement="bottom" className="pm-sheet" aria-labelledby={sheetTitleId}>
+        <Offcanvas.Header closeButton={!sending}>
           <Offcanvas.Title id={sheetTitleId} as="h2" className="h5">Tu cita</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
@@ -415,7 +423,7 @@ export default function PublicBookingPage() {
                 </div>
               </div>
               {error && <div className="alert alert-danger mt-3 mb-0" role="alert">{error}</div>}
-              <button type="submit" className="btn btn-primary btn-touch btn-touch-lg w-100 mt-3" disabled={sending}>
+              <button type="submit" className="btn btn-primary btn-touch btn-touch-lg w-100 mt-3" disabled={sending || checking}>
                 {sending ? 'Enviando…' : 'Pedir cita'}
               </button>
               <p className="small text-muted mt-2 mb-0">

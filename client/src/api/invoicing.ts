@@ -236,7 +236,10 @@ function useInvoiceChange<TVariables, TResult = OrderInvoice>(
   });
 }
 
-/** With an email, the customer gets its XML and PDF once it is stamped, and those of its complements and credit notes. */
+/**
+ * With an email, the customer gets its XML and PDF once it is stamped, and those of its complements and credit notes. Its
+ * dialog does not close while it is on its way (`behind`), and its button waits for the order's invoicing read again.
+ */
 export function useIssueOrderInvoice(orderId: string) {
   return useInvoiceChange(orderId, (body: {
     receiver: CfdiReceiver;
@@ -244,7 +247,7 @@ export function useIssueOrderInvoice(orderId: string) {
     receiverEmail?: string | null;
     receiverWhatsApp?: string | null;
   }) =>
-    apiRequest('post', '/api/v1/invoicing/orders/{orderId}/invoices', { path: { orderId }, body }));
+    apiRequest('post', '/api/v1/invoicing/orders/{orderId}/invoices', { path: { orderId }, body }), { behind: true });
 }
 
 export function useRetryOrderInvoice(orderId: string) {
@@ -268,7 +271,7 @@ export function useSubstituteOrderInvoice(orderId: string) {
     saveToCustomer: boolean;
     receiverEmail?: string | null;
     receiverWhatsApp?: string | null;
-  }) => apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/substitute', { path: { invoiceId }, body }));
+  }) => apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/substitute', { path: { invoiceId }, body }), { behind: true });
 }
 
 /** «Cancelar con relación»: asks the SAT again to cancel with motive 01 an invoice whose replacement is stamped. */

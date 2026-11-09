@@ -204,6 +204,64 @@ describe('PublicHomeVisitPage', () => {
     expect(await screen.findByText(`En /cita#${LINK}`)).toBeInTheDocument();
   });
 
+  it('keeps the sheet open while the request is on its way', async () => {
+    const user = userEvent.setup();
+    let answered: (value: unknown) => void = () => undefined;
+    api.requestHomeVisit.mockReturnValue(new Promise((resolve) => { answered = resolve; }) as never);
+    renderPage();
+
+    await user.type(await screen.findByLabelText('Código postal'), '72000');
+    await user.click(await screen.findByRole('button', { name: '10:00 a. m.' }));
+    await user.click(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Tu visita' });
+    await user.type(within(sheet).getByLabelText('¿Qué pasa?'), 'Gotea el calentador');
+    await user.type(within(sheet).getByLabelText('Dirección'), 'Av. Juárez 123, Col. Centro');
+    await user.type(within(sheet).getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(within(sheet).getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    await user.click(within(sheet).getByRole('button', { name: 'Solicitar visita' }));
+
+    expect(within(sheet).getByRole('button', { name: 'Enviando…' })).toBeDisabled();
+    expect(within(sheet).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Tu visita' })).toHaveClass('show');
+
+    answered(receipt());
+    expect(await screen.findByRole('heading', { name: '¡Solicitud enviada!' })).toBeInTheDocument();
+  });
+
+  it('can close while the times are read again after a refusal, and sends nothing else until they are', async () => {
+    const user = userEvent.setup();
+    const refused = { isAxiosError: true, response: { status: 400, data: { detail: 'Escribe un teléfono de 10 dígitos.' } } };
+    api.requestHomeVisit.mockRejectedValue(refused);
+    let reads = 0;
+    let reread: (value: unknown) => void = () => undefined;
+    api.getHomeVisitSlots.mockImplementation((() => (++reads === 1
+      ? Promise.resolve(week())
+      : new Promise((resolve) => { reread = resolve; }))) as never);
+    renderPage();
+
+    const sheet = await pickMondayAtTen(user);
+    await user.type(sheet.getByLabelText('¿Qué pasa?'), 'Gotea el calentador');
+    await user.type(sheet.getByLabelText('Dirección'), 'Av. Juárez 123');
+    await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    await user.click(sheet.getByRole('button', { name: 'Solicitar visita' }));
+
+    // Refused, nothing is on its way: the sheet can close while the times are read again, and does not send it again.
+    await waitFor(() => expect(reads).toBe(2));
+    expect(sheet.getByRole('button', { name: 'Solicitar visita' })).toBeDisabled();
+    await user.click(sheet.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tu visita' })).not.toBeInTheDocument());
+    expect(api.requestHomeVisit).toHaveBeenCalledTimes(1);
+
+    // Still free: the sheet opens again ready to send it again.
+    reread(week());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
+    const again = within(await screen.findByRole('dialog', { name: 'Tu visita' }));
+    await waitFor(() => expect(again.getByRole('button', { name: 'Solicitar visita' })).toBeEnabled());
+  });
+
   it('takes photos of what happens with the request, and sends them with its link once it is saved (Fase 29H)', async () => {
     const user = userEvent.setup();
     vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`);

@@ -715,8 +715,9 @@ export default function PublicMenuPage() {
         contactUrl={contact}
       />
 
-      <Offcanvas show={cartOpen} onHide={() => setCartOpen(false)} placement="end" className="pm-checkout" aria-labelledby={cartTitleId}>
-        <Offcanvas.Header closeButton>
+      {/* It stays open while the order is on its way: its answer is shown here. */}
+      <Offcanvas show={cartOpen} onHide={() => !sending && setCartOpen(false)} placement="end" className="pm-checkout" aria-labelledby={cartTitleId}>
+        <Offcanvas.Header closeButton={!sending}>
           <div className="min-w-0">
             <Offcanvas.Title id={cartTitleId} as="h2" className="h5 mb-0">Tu pedido</Offcanvas.Title>
             <div className="small text-muted text-truncate">{data.businessName}</div>
@@ -736,20 +737,21 @@ export default function PublicMenuPage() {
                       {line.notes && <div className="small text-muted fst-italic">«{line.notes}»</div>}
                       <div className="small ta-money">{formatMoney(lineAmount(line.unitPrice, line.quantity))}</div>
                     </div>
+                    {/* What goes in the order does not change while it is on its way: its answer empties the cart. */}
                     <div className="pm-stepper small" role="group" aria-label={`Cantidad de ${line.product.name}`}>
-                      <button type="button" onClick={() => changeQuantity(line.key, -1)}
+                      <button type="button" disabled={sending} onClick={() => changeQuantity(line.key, -1)}
                         aria-label={line.quantity === 1 ? `Quitar ${line.product.name}` : 'Uno menos'}>
                         <i className={line.quantity === 1 ? 'ri-delete-bin-line' : 'ri-subtract-line'} aria-hidden="true"></i>
                       </button>
                       <span className="ta-money">{line.quantity}</span>
-                      <button type="button" onClick={() => changeQuantity(line.key, 1)} aria-label="Uno más">
+                      <button type="button" disabled={sending} onClick={() => changeQuantity(line.key, 1)} aria-label="Uno más">
                         <i className="ri-add-line" aria-hidden="true"></i>
                       </button>
                     </div>
                   </li>
                 ))}
               </ul>
-              <button type="button" className="btn btn-link px-0" onClick={() => setCartOpen(false)}>
+              <button type="button" className="btn btn-link px-0" disabled={sending} onClick={() => setCartOpen(false)}>
                 <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar más productos
               </button>
             </section>

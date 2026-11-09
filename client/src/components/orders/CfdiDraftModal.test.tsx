@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -75,6 +75,39 @@ function renderModal(
 
 describe('CfdiDraftModal', () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it('stays open while an invoice is being stamped, and closes with the answer without waiting for the invoices read again', async () => {
+    const user = userEvent.setup();
+    let stamped: (value: unknown) => void = () => undefined;
+    let reads = 0;
+    serve(() => (++reads === 1 ? Promise.resolve(INVOICING) : new Promise<Invoicing>(() => undefined)),
+      () => new Promise((resolve) => { stamped = resolve; }));
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CfdiDraftModal orderId="o-1" orderNumber="ORD-000001" canCancel={false} canSaveToCustomer orderCancelled={false} onClose={onClose} />
+      </QueryClientProvider>,
+    );
+
+    const stamp = await screen.findByRole('button', { name: 'Timbrar factura' });
+    await waitFor(() => expect(stamp).toBeEnabled());
+    await user.click(stamp);
+
+    expect(await screen.findByRole('button', { name: 'Timbrando…' })).toBeDisabled();
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Cerrar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Stamped, it can close although the order's invoices never come back.
+    stamped(STAMPED);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada.'));
+    expect(reads).toBe(2);
+    expect(within(dialog).getByRole('button', { name: 'Cerrar' })).toBeEnabled();
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 
   it('stamps the invoice for the proposed customer and keeps their data when asked', async () => {
     let issued: unknown;
@@ -279,7 +312,7 @@ describe('CfdiDraftModal', () => {
     expect(screen.queryByText('F-1')).not.toBeInTheDocument();
   });
 
-  it('keeps the stamp pending until the order\'s invoices are read again, so it cannot be pressed twice', async () => {
+  it('does not offer the stamp again until the order\'s invoices are read again, so it cannot be pressed twice', async () => {
     let calls = 0;
     let answer: (value: Invoicing) => void = () => {};
     serve(() => {
@@ -290,17 +323,21 @@ describe('CfdiDraftModal', () => {
     renderModal();
     const stamp = await screen.findByRole('button', { name: 'Timbrar factura' });
     await waitFor(() => expect(stamp).toBeEnabled());
+    const drafts = () => vi.mocked(apiRequest).mock.calls.filter(([, path]) => path === '/api/v1/orders/{id}/cfdi-draft').length;
+    const draftsBefore = drafts();
 
     await userEvent.click(stamp);
 
-    await waitFor(() => expect(calls).toBe(2));
-    expect(screen.getByRole('button', { name: 'Timbrando…' })).toBeDisabled();
-    expect(toast.success).not.toHaveBeenCalled();
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada.'));
+    expect(calls).toBe(2);
+    // The preview is read again too, and comes back first: the order's invoices still say it can be invoiced.
+    await waitFor(() => expect(drafts()).toBe(draftsBefore + 1));
+    await act(() => new Promise((resolve) => { setTimeout(resolve, 20); }));
+    expect(screen.getByRole('button', { name: 'Timbrar factura' })).toBeDisabled();
 
     answer({ ...INVOICING, canInvoice: false, problem: 'Este pedido ya tiene la factura F-1.', invoices: [STAMPED] });
 
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada.'));
-    expect(screen.queryByRole('button', { name: /Timbr/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Timbr/ })).not.toBeInTheDocument());
     expect(vi.mocked(apiRequest).mock.calls.filter(([method]) => method === 'post')).toHaveLength(1);
   });
 
@@ -470,6 +507,41 @@ describe('CfdiDraftModal', () => {
       // The form keeps what the new one went with, and the focus goes to the order's invoices.
       expect(screen.getByLabelText('Código postal fiscal')).toHaveValue('26015');
       expect(screen.getByRole('heading', { name: 'Facturas de este pedido' })).toHaveFocus();
+    });
+
+    it('stays open while the invoice is being replaced, and closes with the answer without waiting for the invoices', async () => {
+      let replaced: (value: unknown) => void = () => undefined;
+      const before: Invoicing = { ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, invoices: [{ ...STAMPED, canSubstitute: true }] };
+      let reads = 0;
+      serve(
+        () => (++reads === 1 ? Promise.resolve(before) : new Promise<Invoicing>(() => undefined)),
+        () => new Promise((resolve) => { replaced = resolve; }),
+      );
+      const onClose = vi.fn();
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <CfdiDraftModal orderId="o-1" orderNumber="ORD-000001" canCancel canSaveToCustomer orderCancelled={false} onClose={onClose} />
+        </QueryClientProvider>,
+      );
+      await userEvent.click(await screen.findByRole('button', { name: 'Sustituir factura F-1' }));
+      const replace = screen.getByRole('button', { name: 'Timbrar y sustituir la F-1' });
+      await waitFor(() => expect(replace).toBeEnabled());
+
+      await userEvent.click(replace);
+
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByRole('button', { name: 'Timbrando…' })).toBeDisabled();
+      expect(within(dialog).getByRole('button', { name: 'Cerrar' })).toBeDisabled();
+      expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+      await userEvent.keyboard('{Escape}');
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Replaced, it can close although the order's invoices never come back.
+      replaced({ ...STAMPED, id: 'inv-2', number: 'F-2', replacesInvoiceId: 'inv-1', replacesNumber: 'F-1' });
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-2 timbrada en lugar de la F-1.'));
+      expect(reads).toBe(2);
+      expect(within(dialog).getByRole('button', { name: 'Cerrar' })).toBeEnabled();
+      expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument();
     });
 
     it.each([

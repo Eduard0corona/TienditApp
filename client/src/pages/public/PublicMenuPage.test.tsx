@@ -664,6 +664,33 @@ describe('PublicMenuPage', () => {
       expect(readCart('cafe-luna')?.skipped).toBeUndefined();
     });
 
+    it('keeps the cart open and what goes in it while the order is on its way', async () => {
+      const user = userEvent.setup();
+      api.getMenu.mockResolvedValue(menu());
+      let answered: (value: unknown) => void = () => undefined;
+      api.placeOrder.mockReturnValue(new Promise((resolve) => { answered = resolve; }) as never);
+
+      renderPage();
+      await user.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await user.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
+      await user.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
+      await user.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      await user.click(within(cart).getByRole('button', { name: /^Hacer pedido/ }));
+
+      expect(within(cart).getByRole('button', { name: 'Enviando…' })).toBeDisabled();
+      expect(within(cart).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+      await user.keyboard('{Escape}');
+      expect(screen.getByRole('dialog', { name: 'Tu pedido' })).toHaveClass('show');
+      // Neither another product nor another quantity: the answer empties the cart.
+      expect(within(cart).getByRole('button', { name: 'Agregar más productos' })).toBeDisabled();
+      expect(within(cart).getByRole('button', { name: 'Quitar Latte' })).toBeDisabled();
+      expect(within(cart).getByRole('button', { name: 'Uno más' })).toBeDisabled();
+
+      answered(receipt({ trackingToken: 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE' }));
+      expect(await screen.findByText('¡Pedido enviado!')).toBeInTheDocument();
+    });
+
     it('sends the order with a key, the same one when it is sent again, and forgets the cart once it is placed', async () => {
       api.getMenu.mockResolvedValue(menu());
       api.placeOrder.mockRejectedValueOnce(new Error('Network Error'))
