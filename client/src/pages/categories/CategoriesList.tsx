@@ -36,13 +36,13 @@ export default function CategoriesList() {
   const [archiving, setArchiving] = useState<CategoryDto | null>(null);
   const [moveToId, setMoveToId] = useState('');
   const [archiveBusy, setArchiveBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  // What a dialog could not do is said inside it, where it can be seen, not on the list behind it. A dialog stays open
+  // while what it sent is on its way, so the answer always reaches the dialog that sent it.
+  const [saveError, setSaveError] = useState('');
+  const [installError, setInstallError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryDto | null>(null);
-  const [templates, setTemplates] = useState<CategoryTemplateDto[]>([]);
-  const [templatesLoading, setTemplatesLoading] = useState(false);
   const [installingTemplateId, setInstallingTemplateId] = useState<string | null>(null);
 
   const {
@@ -61,76 +61,75 @@ export default function CategoriesList() {
     queryFn: async () => (await categoriesApi.getAll(showArchived)).data,
   });
   const categories = categoriesQuery.data ?? [];
+  // Read when the templates dialog opens, not before; apart from ['categories'], which installing one reads again.
+  const templatesQuery = useQuery({
+    queryKey: ['category-templates'],
+    queryFn: async () => (await categoriesApi.getTemplates()).data,
+    enabled: showTemplatesModal,
+  });
+  const templates = templatesQuery.data;
   const moveTargets = categories.filter((category) => category.isActive && category.id !== archiving?.id);
 
   const loadCategories = () => queryClient.invalidateQueries({ queryKey: ['categories'] });
 
   const openCreateModal = () => {
+    setSaveError('');
     setEditingCategory(null);
     reset({ name: '', description: '', sortOrder: 0 });
     setShowModal(true);
   };
 
-  const openTemplatesModal = async () => {
-    setError('');
-    setSuccess('');
+  const openTemplatesModal = () => {
+    setInstallError('');
     setShowTemplatesModal(true);
-    setTemplatesLoading(true);
-    try {
-      const { data } = await categoriesApi.getTemplates();
-      setTemplates(data);
-    } catch {
-      setError('Error al cargar las plantillas de categorías.');
-    } finally {
-      setTemplatesLoading(false);
-    }
   };
 
   const openEditModal = (category: CategoryDto) => {
+    setSaveError('');
     setEditingCategory(category);
     setShowModal(true);
   };
 
   const closeModal = () => {
+    setSaveError('');
     setShowModal(false);
     setEditingCategory(null);
   };
 
+  // While a template is being installed the dialog stays open, so what happens to it is said there.
   const closeTemplatesModal = () => {
-    setShowTemplatesModal(false);
-    setInstallingTemplateId(null);
+    if (installingTemplateId === null) setShowTemplatesModal(false);
   };
 
   const onSubmit = async (data: CreateCategoryRequest) => {
+    setSaveError('');
     try {
       if (editingCategory) {
         await categoriesApi.update(editingCategory.id, { ...data, id: editingCategory.id });
       } else {
         await categoriesApi.create(data);
       }
-      setSuccess(editingCategory ? 'Categoría actualizada.' : 'Categoría creada.');
+      toast.success(editingCategory ? 'Categoría actualizada.' : 'Categoría creada.');
       closeModal();
-      await loadCategories();
+      // Not awaited: the form is done once it is saved. Awaiting the list would keep this submit going, and when it
+      // ended it would let go of the next form's «Guardando...» while that one is still on its way.
+      void loadCategories();
     } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'Error al guardar la categoría.');
-      setError(msg);
+      setSaveError(getApiErrorMessage(err, 'Error al guardar la categoría.'));
     }
   };
 
   const handleInstallTemplate = async (template: CategoryTemplateDto) => {
-    setError('');
-    setSuccess('');
+    setInstallError('');
     setInstallingTemplateId(template.id);
     try {
       const { data } = await categoriesApi.installTemplate(template.id);
-      setSuccess(
-        `Plantilla "${data.templateName}" instalada: ${data.createdCount} creadas, ${data.skippedCount} omitidas.`,
-      );
-      await loadCategories();
-      closeTemplatesModal();
+      toast.success(`Plantilla "${data.templateName}" instalada: ${data.createdCount} creadas, ${data.skippedCount} omitidas.`);
+      setShowTemplatesModal(false);
+      // Not awaited, so the dialog does not open again still installing while the list is read.
+      void loadCategories();
     } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'Error al instalar la plantilla.');
-      setError(msg);
+      setInstallError(getApiErrorMessage(err, 'Error al instalar la plantilla.'));
     } finally {
       setInstallingTemplateId(null);
     }
@@ -188,20 +187,6 @@ export default function CategoriesList() {
             <div className="card-body">
               {categoriesQuery.isError && (
                 <div className="alert alert-danger">Error al cargar las categorías.</div>
-              )}
-
-              {error && (
-                <div className="alert alert-danger alert-dismissible fade show">
-                  {error}
-                  <button type="button" className="btn-close" onClick={() => setError('')}></button>
-                </div>
-              )}
-
-              {success && (
-                <div className="alert alert-success alert-dismissible fade show">
-                  {success}
-                  <button type="button" className="btn-close" onClick={() => setSuccess('')}></button>
-                </div>
               )}
 
               <DataTable
@@ -288,43 +273,58 @@ export default function CategoriesList() {
       </div>
 
       {/* Create/Edit Modal */}
-      <Modal show={showModal} onHide={closeModal} centered aria-labelledby={formTitleId}>
-        <Modal.Header closeButton>
+      <Modal show={showModal} onHide={() => !isSubmitting && closeModal()} centered aria-labelledby={formTitleId}>
+        <Modal.Header closeButton={!isSubmitting}>
           <Modal.Title id={formTitleId}>{editingCategory ? 'Editar categoría' : 'Nueva categoría'}</Modal.Title>
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
+            {saveError && <div className="alert alert-danger" role="alert">{saveError}</div>}
             <div className="mb-3">
               <label htmlFor="categorieslist-nombre" className="form-label">Nombre <span className="text-danger">*</span></label>
               <input id="categorieslist-nombre"
                 type="text"
                 className={`form-control ${errors.name ? 'is-invalid' : ''}`}
+                aria-invalid={!!errors.name}
+                aria-describedby={errors.name ? 'categorieslist-nombre-error' : undefined}
                 {...register('name', { required: 'El nombre es requerido', maxLength: { value: 150, message: 'Máximo 150 caracteres' } })}
               />
-              {errors.name && <div className="invalid-feedback">{errors.name.message}</div>}
+              {errors.name && <div id="categorieslist-nombre-error" className="invalid-feedback">{errors.name.message}</div>}
             </div>
             <div className="mb-3">
               <label htmlFor="categorieslist-descripcion" className="form-label">Descripción</label>
               <textarea id="categorieslist-descripcion"
-                className="form-control"
+                className={`form-control ${errors.description ? 'is-invalid' : ''}`}
                 rows={3}
+                aria-invalid={!!errors.description}
+                aria-describedby={errors.description ? 'categorieslist-descripcion-error' : undefined}
                 {...register('description', { maxLength: { value: 500, message: 'Máximo 500 caracteres' } })}
               />
+              {errors.description && <div id="categorieslist-descripcion-error" className="invalid-feedback">{errors.description.message}</div>}
             </div>
             <div className="mb-0">
-              <label htmlFor="categorieslist-orden" className="form-label">Orden</label>
+              <label htmlFor="categorieslist-orden" className="form-label">Orden <span className="text-danger">*</span></label>
               <input id="categorieslist-orden"
                 type="number"
-                className="form-control"
-                {...register('sortOrder', { valueAsNumber: true, min: { value: 0, message: 'Debe ser 0 o mayor' } })}
+                className={`form-control ${errors.sortOrder ? 'is-invalid' : ''}`}
+                aria-invalid={!!errors.sortOrder}
+                aria-describedby={errors.sortOrder ? 'categorieslist-orden-error' : undefined}
+                {...register('sortOrder', {
+                  valueAsNumber: true,
+                  required: 'Escribe el orden: 0 o mayor',
+                  min: { value: 0, message: 'Debe ser 0 o mayor' },
+                })}
               />
+              {errors.sortOrder && <div id="categorieslist-orden-error" className="invalid-feedback">{errors.sortOrder.message}</div>}
             </div>
           </Modal.Body>
           <Modal.Footer>
-            <button type="button" className="btn btn-light" onClick={closeModal}>
+            <button type="button" className="btn btn-light" onClick={closeModal} disabled={isSubmitting}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+            {/* Also while it fades out after saving: what is still written is not sent again by a double click or Enter
+                (with its submit button disabled, Enter does not send the form either). */}
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting || !showModal}>
               {isSubmitting ? 'Guardando...' : editingCategory ? 'Guardar cambios' : 'Crear categoría'}
             </button>
           </Modal.Footer>
@@ -377,20 +377,31 @@ export default function CategoriesList() {
       </Modal>
 
       <Modal show={showTemplatesModal} onHide={closeTemplatesModal} centered size="lg" aria-labelledby={templatesTitleId}>
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={installingTemplateId === null}>
           <Modal.Title id={templatesTitleId}>Instalar plantilla de categorías</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {templatesLoading ? (
+          {installError && <div className="alert alert-danger" role="alert">{installError}</div>}
+          {/* Reading them again without any goes back to pending, so «Reintentar» shows the spinner. */}
+          {templates === undefined && templatesQuery.isError ? (
+            <div className="alert alert-danger mb-0 d-flex align-items-center justify-content-between gap-2" role="alert">
+              Error al cargar las plantillas de categorías.
+              <button type="button" className="btn btn-sm btn-light" onClick={() => void templatesQuery.refetch()}>
+                Reintentar
+              </button>
+            </div>
+          ) : templates === undefined ? (
             <div className="text-center py-4">
-              <div className="spinner-border text-primary" role="status"></div>
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Cargando plantillas…</span>
+              </div>
             </div>
           ) : (
             <div className="row g-3">
               {templates.length === 0 && (
                 <div className="col-12">
                   <div className="alert alert-light border mb-0">
-                    No hay plantillas disponibles para este tenant.
+                    No hay plantillas disponibles para este negocio.
                   </div>
                 </div>
               )}
@@ -425,7 +436,8 @@ export default function CategoriesList() {
                         <button
                           className="btn btn-primary"
                           onClick={() => handleInstallTemplate(template)}
-                          disabled={installingTemplateId !== null}
+                          disabled={installingTemplateId !== null || !showTemplatesModal}
+                          aria-label={installingTemplateId === template.id ? `Instalando ${template.name}...` : `Instalar ${template.name}`}
                         >
                           {installingTemplateId === template.id ? 'Instalando...' : 'Instalar'}
                         </button>
@@ -438,7 +450,7 @@ export default function CategoriesList() {
           )}
         </Modal.Body>
         <Modal.Footer>
-          <button type="button" className="btn btn-light" onClick={closeTemplatesModal}>
+          <button type="button" className="btn btn-light" onClick={closeTemplatesModal} disabled={installingTemplateId !== null}>
             Cerrar
           </button>
         </Modal.Footer>
