@@ -40,7 +40,8 @@ export default function CloseDrawerModal({ session, submitting, error, onClose, 
   const canSubmit = counted !== null && (!needsNote || notes.trim().length > 0) && !submitting;
 
   return (
-    <Modal show onHide={onClose} centered size="lg" aria-labelledby={titleId}>
+    // It stays open while the drawer is being closed: its answer, or its error, belongs here and not to the next dialog.
+    <Modal show onHide={() => !submitting && onClose()} centered size="lg" aria-labelledby={titleId}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -48,7 +49,7 @@ export default function CloseDrawerModal({ session, submitting, error, onClose, 
           onSubmit(counted, notes.trim() || undefined, byDenomination && countLines.length > 0 ? countLines : undefined);
         }}
       >
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!submitting}>
           <Modal.Title id={titleId} as="h2" className="h5">Cerrar caja</Modal.Title>
         </Modal.Header>
         <Modal.Body>

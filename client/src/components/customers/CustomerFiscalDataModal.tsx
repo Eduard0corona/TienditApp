@@ -42,9 +42,10 @@ export default function CustomerFiscalDataModal({ customer, onClose }: CustomerF
   };
 
   return (
-    <Modal show onHide={() => onClose(false)} size="lg" centered aria-labelledby={titleId}>
+    // It stays open while the change is on its way: a late answer must not close the dialog of another customer.
+    <Modal show onHide={() => !update.isPending && onClose(false)} size="lg" centered aria-labelledby={titleId}>
       <form onSubmit={submit}>
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!update.isPending}>
           <Modal.Title id={titleId} as="h2" className="h5">Datos fiscales de {customer.name}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -79,7 +80,7 @@ export default function CustomerFiscalDataModal({ customer, onClose }: CustomerF
               Quitar datos fiscales
             </button>
           )}
-          <button type="button" className="btn btn-light" onClick={() => onClose(false)}>Cancelar</button>
+          <button type="button" className="btn btn-light" onClick={() => onClose(false)} disabled={update.isPending}>Cancelar</button>
           <button type="submit" className="btn btn-primary" disabled={update.isPending || !emailValid}>
             {update.isPending ? 'Guardando…' : 'Guardar'}
           </button>

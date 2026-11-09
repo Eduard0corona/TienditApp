@@ -285,8 +285,9 @@ export default function DeliveryZones() {
             loading={zones.isLoading}
             emptyMessage="Todavía no tienes zonas de entrega. Agrega una con los códigos postales a los que llegas y su costo de envío."
             searchPlaceholder="Nombre o código postal"
+            // Not while a zone is changed from its row: the dialog would open already saving, with the row's change.
             toolbarEnd={(
-              <button type="button" className="btn btn-primary btn-sm" onClick={openCreate}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={openCreate} disabled={busy}>
                 <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva zona
               </button>
             )}
@@ -330,10 +331,11 @@ export default function DeliveryZones() {
 
       {makesVisits && <div className="mt-3"><HomeVisitTravelCard /></div>}
 
-      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered aria-labelledby={titleId}>
+      {/* It stays open while what it sent is on its way, so the answer reaches it and not a form opened after it. */}
+      <Modal show={form !== null} onHide={() => !save.isPending && setForm(null)} size="lg" centered aria-labelledby={titleId}>
         {form && (
           <form onSubmit={(event) => void submit(event)} noValidate>
-            <Modal.Header closeButton>
+            <Modal.Header closeButton={!save.isPending}>
               <Modal.Title id={titleId}>{editing ? `Editar ${editing.name}` : 'Nueva zona de entrega'}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -380,10 +382,10 @@ export default function DeliveryZones() {
                   </div>
                 </div>
               </div>
-              {formError && <div className="alert alert-danger mt-3 mb-0">{formError}</div>}
+              {formError && <div className="alert alert-danger mt-3 mb-0" role="alert">{formError}</div>}
             </Modal.Body>
             <Modal.Footer>
-              <button type="button" className="btn btn-light" onClick={() => setForm(null)}>Cancelar</button>
+              <button type="button" className="btn btn-light" onClick={() => setForm(null)} disabled={save.isPending}>Cancelar</button>
               <button type="submit" className="btn btn-primary" disabled={save.isPending}>
                 {save.isPending ? 'Guardando…' : editing ? 'Guardar cambios' : 'Agregar zona'}
               </button>

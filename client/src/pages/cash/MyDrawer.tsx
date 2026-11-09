@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import CashCutTicket from '../../components/cash/CashCutTicket';
 import DataTable from '../../components/common/DataTable';
@@ -88,15 +88,21 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
   const [movementReference, setMovementReference] = useState('');
   const [movementNotes, setMovementNotes] = useState('');
 
+  // Each read of the drawer has its number, and opening or closing it moves the number on: a read that arrives after a
+  // newer one, or after the drawer was opened or closed here, is dropped (it would bring back a drawer already closed).
+  const sessionRead = useRef(0);
   const loadSession = useCallback(async () => {
+    const read = ++sessionRead.current;
     try {
       const { data } = await cashApi.getCurrentSession();
+      if (read !== sessionRead.current) return;
       setSession(data);
       setLoadError('');
     } catch (err: unknown) {
+      if (read !== sessionRead.current) return;
       setLoadError(getApiErrorMessage(err, 'No se pudo cargar tu caja.'));
     } finally {
-      setLoading(false);
+      if (read === sessionRead.current) setLoading(false);
     }
   }, []);
 
@@ -135,6 +141,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
         notes: openingNotes.trim() || undefined,
         branchId: chosenBranchId || undefined,
       });
+      sessionRead.current += 1;
       setSession(data);
       setClosedCut(null);
       refreshCashState();
@@ -156,6 +163,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
     setActionError('');
     try {
       const { data } = await cashApi.closeSession(session.id, { closingAmount, notes, cashCount });
+      sessionRead.current += 1;
       setShowClose(false);
       setSession(null);
       setMovements(EMPTY_PAGE);
@@ -201,7 +209,8 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
       setMovementNotes('');
       toast.success(`${getTransactionTypeLabel(movementType)} registrado.`);
       refreshCashState();
-      await loadSession();
+      // Not awaited: the dialog is done once it is saved. A read that arrives after the drawer was closed is dropped.
+      void loadSession();
     } catch (err: unknown) {
       setActionError(getApiErrorMessage(err, 'No se pudo registrar el movimiento.'));
     } finally {
@@ -401,9 +410,10 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
         />
       )}
 
-      <Modal show={showMovement} onHide={() => setShowMovement(false)} centered aria-labelledby={titleId}>
+      {/* It stays open while the movement is on its way, so a late answer cannot close and empty the one opened after it. */}
+      <Modal show={showMovement} onHide={() => !submitting && setShowMovement(false)} centered aria-labelledby={titleId}>
         <form onSubmit={(event) => void addMovement(event)}>
-          <Modal.Header closeButton>
+          <Modal.Header closeButton={!submitting}>
             <Modal.Title id={titleId} as="h2" className="h5">Registrar movimiento</Modal.Title>
           </Modal.Header>
           <Modal.Body>
@@ -460,6 +470,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
           </Modal.Body>
           <Modal.Footer>
             <button type="button" className="btn btn-light" onClick={() => setShowMovement(false)} disabled={submitting}>Volver</button>
+            {/* Saving empties the amount, so a second click while it fades out sends nothing. */}
             <button type="submit" className="btn btn-primary" disabled={submitting}>
               {submitting ? 'Guardando…' : 'Registrar'}
             </button>

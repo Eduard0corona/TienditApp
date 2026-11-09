@@ -98,7 +98,8 @@ export default function PlansPage() {
       else await platformApi.createPlan(body);
       toast.success(form.id ? 'Plan actualizado.' : 'Plan creado.');
       setForm(null);
-      await queryClient.invalidateQueries({ queryKey: ['platform'] });
+      // Not awaited: the form is done once it is saved, and «Guardando…» belongs to it, not to the list.
+      void queryClient.invalidateQueries({ queryKey: ['platform'] });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo guardar el plan.'));
     } finally {
@@ -183,10 +184,11 @@ export default function PlansPage() {
         </div>
       </div>
 
-      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered aria-labelledby={titleId}>
+      {/* It stays open while what it sent is on its way, so the answer reaches it and not a form opened after it. */}
+      <Modal show={form !== null} onHide={() => !saving && setForm(null)} size="lg" centered aria-labelledby={titleId}>
         {form && (
           <form onSubmit={(event) => void save(event)}>
-            <Modal.Header closeButton>
+            <Modal.Header closeButton={!saving}>
               <Modal.Title id={titleId}>{form.id ? `Editar ${form.name}` : 'Nuevo plan'}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -267,10 +269,10 @@ export default function PlansPage() {
                   </div>
                 )}
               </div>
-              {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
+              {error && <div className="alert alert-danger mt-3 mb-0" role="alert">{error}</div>}
             </Modal.Body>
             <Modal.Footer>
-              <button type="button" className="btn btn-light" onClick={() => setForm(null)}>Cancelar</button>
+              <button type="button" className="btn btn-light" onClick={() => setForm(null)} disabled={saving}>Cancelar</button>
               <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Guardar plan'}</button>
             </Modal.Footer>
           </form>

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders } from 'axios';
@@ -103,6 +103,19 @@ describe('CustomerFiscalDataModal', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('El RFC del cliente no tiene un formato válido.'));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+  it('cannot be closed while the change is on its way, so a late answer cannot close the dialog of another customer', async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiRequest).mockReturnValue(new Promise(() => undefined));
+    const onClose = renderModal(KARLA);
+    const dialog = screen.getByRole('dialog');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+    expect(within(dialog).getByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
     expect(onClose).not.toHaveBeenCalled();
   });
 });

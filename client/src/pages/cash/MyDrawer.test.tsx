@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Branch } from '../../api/branchesApi';
@@ -151,6 +151,42 @@ describe('MyDrawer', () => {
     expect(refreshCashState).toHaveBeenCalled();
   });
 
+  it('keeps the movement open while it is sent, so a late answer cannot close and empty the one opened after it', async () => {
+    const user = userEvent.setup();
+    renderDrawer(drawer());
+    let answer: (value: unknown) => void = () => undefined;
+    vi.mocked(cashApi.addTransaction).mockReturnValue(new Promise((resolve) => { answer = resolve; }) as never);
+
+    await user.click(await screen.findByRole('button', { name: 'Gasto, retiro o depósito' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Registrar movimiento' });
+    await user.type(within(dialog).getByLabelText('Monto'), '150');
+    await user.click(within(dialog).getByRole('button', { name: 'Registrar' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Volver' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(dialog).toHaveClass('show');
+
+    answer({ data: {} });
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Gasto registrado.'));
+    expect(cashApi.addTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('records a movement once, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    renderDrawer(drawer());
+    vi.mocked(cashApi.addTransaction).mockResolvedValue({ data: {} } as never);
+
+    await user.click(await screen.findByRole('button', { name: 'Gasto, retiro o depósito' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Registrar movimiento' });
+    await user.type(within(dialog).getByLabelText('Monto'), '150');
+    // The second click lands while the dialog fades out.
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Registrar movimiento' })).not.toBeInTheDocument());
+    expect(cashApi.addTransaction).toHaveBeenCalledTimes(1);
+  });
+
   it('closes counting the bills, and keeps the cut at hand to print or send', async () => {
     const user = userEvent.setup();
     const { onChanged } = renderDrawer(drawer());
@@ -291,6 +327,53 @@ describe('MyDrawer', () => {
     expect(within(dialog).getByRole('button', { name: 'Cerrar caja' })).toBeEnabled();
     expect(toast.success).not.toHaveBeenCalled();
     expect(screen.queryByRole('heading', { name: 'Abre tu caja' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the close dialog open while the drawer is being closed', async () => {
+    const user = userEvent.setup();
+    renderDrawer(drawer());
+    vi.mocked(cashApi.closeSession).mockReturnValue(new Promise(() => undefined) as never);
+
+    await user.click(await screen.findByRole('button', { name: 'Cerrar caja' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Cerrar caja' });
+    await user.click(within(dialog).getByRole('button', { name: 'Escribir el total' }));
+    await user.type(within(dialog).getByLabelText('Efectivo contado'), '1250');
+    await user.click(within(dialog).getByRole('button', { name: 'Cerrar caja' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Cerrando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Volver' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    // The dialog is taken out when it closes: still there, it was not closed.
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveClass('show');
+  });
+
+  it('drops a read of the drawer that arrives after it was closed', async () => {
+    const user = userEvent.setup();
+    renderDrawer(drawer());
+    vi.mocked(cashApi.addTransaction).mockResolvedValue({ data: {} } as never);
+    vi.mocked(cashApi.closeSession).mockResolvedValue({ data: { ...drawer(), status: CashSessionStatus.Closed, closingDifference: 0 } } as never);
+
+    await user.click(await screen.findByRole('button', { name: 'Gasto, retiro o depósito' }));
+    const movement = await screen.findByRole('dialog', { name: 'Registrar movimiento' });
+    // The drawer read after the movement arrives late, once the drawer is closed.
+    let readLate: (value: unknown) => void = () => undefined;
+    vi.mocked(cashApi.getCurrentSession).mockReturnValue(new Promise((resolve) => { readLate = resolve; }) as never);
+    await user.type(within(movement).getByLabelText('Monto'), '150');
+    await user.click(within(movement).getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Registrar movimiento' })).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Cerrar caja' }));
+    const closing = await screen.findByRole('dialog', { name: 'Cerrar caja' });
+    await user.click(within(closing).getByRole('button', { name: 'Escribir el total' }));
+    await user.type(within(closing).getByLabelText('Efectivo contado'), '1250');
+    await user.click(within(closing).getByRole('button', { name: 'Cerrar caja' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Caja cerrada: cuadró exacto.'));
+
+    await act(async () => readLate({ data: drawer() }));
+    expect(screen.getByRole('heading', { name: 'Abre tu caja' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Gasto, retiro o depósito' })).not.toBeInTheDocument();
   });
 
   it('says when the drawer could not be read, and reads it again on retry', async () => {

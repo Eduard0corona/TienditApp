@@ -63,8 +63,9 @@ export default function NewCountModal({ show, activeLocations, supplyOptions, on
   };
 
   return (
-    <Modal show={show} onHide={onHide} centered aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    // It stays open while the count is being started: a late answer must not close the dialog opened after it.
+    <Modal show={show} onHide={() => !start.isPending && onHide()} centered aria-labelledby={titleId}>
+      <Modal.Header closeButton={!start.isPending}>
         <Modal.Title id={titleId}>Nuevo conteo</Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -141,8 +142,9 @@ export default function NewCountModal({ show, activeLocations, supplyOptions, on
         </p>
       </Modal.Body>
       <Modal.Footer>
-        <button type="button" className="btn btn-light" onClick={onHide}>Cancelar</button>
-        <button type="button" className="btn btn-primary" onClick={submit} disabled={start.isPending}>
+        <button type="button" className="btn btn-light" onClick={onHide} disabled={start.isPending}>Cancelar</button>
+        {/* Also while it fades out after starting, so a double click does not start two counts. */}
+        <button type="button" className="btn btn-primary" onClick={submit} disabled={start.isPending || !show}>
           {start.isPending ? 'Empezando…' : 'Empezar conteo'}
         </button>
       </Modal.Footer>

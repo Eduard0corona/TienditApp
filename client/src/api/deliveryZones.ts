@@ -17,14 +17,21 @@ export function useDeliveryZones(enabled = true) {
   });
 }
 
-/** Adds a zone, or saves one with the revision it was read with (an older one answers 409); the list is read again. */
+/**
+ * Adds a zone, or saves one with the revision it was read with (an older one answers 409); the list is read again. Saved,
+ * it is read without waiting for it, so the dialog that saved closes at once; refused, the answer waits for the list, so
+ * a zone someone else changed opens again from it as it is now.
+ */
 export function useSaveDeliveryZone() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id?: string; body: SaveDeliveryZone }) => (id
       ? apiRequest('put', '/api/v1/delivery-zones/{id}', { path: { id }, body })
       : apiRequest('post', '/api/v1/delivery-zones', { body })),
-    onSettled: () => client.invalidateQueries({ queryKey: deliveryZonesKey }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: deliveryZonesKey });
+    },
+    onError: () => client.invalidateQueries({ queryKey: deliveryZonesKey }),
   });
 }
 

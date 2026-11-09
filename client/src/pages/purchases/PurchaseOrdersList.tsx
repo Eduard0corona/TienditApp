@@ -86,6 +86,8 @@ export default function PurchaseOrdersList() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+  // What the dialog could not save is said inside it, where it can be seen, not on the list behind it.
+  const [formError, setFormError] = useState('');
   const [success, setSuccess] = useState('');
 
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
@@ -161,11 +163,11 @@ export default function PurchaseOrdersList() {
   };
 
   const submit = async () => {
-    setError('');
+    setFormError('');
     setSuccess('');
 
     if (!form.supplierId) {
-      setError('Selecciona un proveedor.');
+      setFormError('Selecciona un proveedor.');
       return;
     }
 
@@ -176,19 +178,19 @@ export default function PurchaseOrdersList() {
       const unitCost = Number(line.unitCost);
       const taxPercent = Number(line.taxPercent);
       if (!line.supplyItemId || !line.inventoryLocationId) {
-        setError(`Línea ${index + 1}: insumo y ubicación son obligatorios.`);
+        setFormError(`Línea ${index + 1}: insumo y ubicación son obligatorios.`);
         return;
       }
       if (Number.isNaN(quantity) || quantity <= 0) {
-        setError(`Línea ${index + 1}: cantidad inválida.`);
+        setFormError(`Línea ${index + 1}: cantidad inválida.`);
         return;
       }
       if (Number.isNaN(unitCost) || unitCost < 0) {
-        setError(`Línea ${index + 1}: costo inválido.`);
+        setFormError(`Línea ${index + 1}: costo inválido.`);
         return;
       }
       if (Number.isNaN(taxPercent) || taxPercent < 0 || taxPercent > 100) {
-        setError(`Línea ${index + 1}: impuesto inválido.`);
+        setFormError(`Línea ${index + 1}: impuesto inválido.`);
         return;
       }
 
@@ -218,11 +220,12 @@ export default function PurchaseOrdersList() {
       setSuccess('Compra registrada.');
       setShowModal(false);
       setForm(buildForm());
-      await loadOrders();
+      // Not awaited: the dialog is done once it is saved, and «Guardando...» belongs to it, not to the list.
+      void loadOrders();
       // Its detail opens next: from there it goes to the supplier by WhatsApp.
       setDetail({ id: created.id, mode: 'view' });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo registrar la compra.'));
+      setFormError(getApiErrorMessage(err, 'No se pudo registrar la compra.'));
     } finally {
       setSaving(false);
     }
@@ -275,7 +278,7 @@ export default function PurchaseOrdersList() {
               </DataTableFilter>
             )}
             toolbarEnd={(
-              <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => { setFormError(''); setShowModal(true); }}>
                 <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva compra
               </button>
             )}
@@ -343,11 +346,13 @@ export default function PurchaseOrdersList() {
         onChanged={loadOrders}
       />
 
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered aria-labelledby={titleId}>
-        <Modal.Header closeButton>
+      {/* It stays open while what it sent is on its way, so the answer reaches it and not a dialog opened after it. */}
+      <Modal show={showModal} onHide={() => !saving && setShowModal(false)} size="xl" centered aria-labelledby={titleId}>
+        <Modal.Header closeButton={!saving}>
           <Modal.Title id={titleId}>Nueva compra</Modal.Title>
         </Modal.Header>
         <Modal.Body>
+          {formError && <div className="alert alert-danger" role="alert">{formError}</div>}
           <div className="row">
             <div className="col-md-6 mb-2">
               <label htmlFor="purchaseorderslist-proveedor" className="form-label">Proveedor *</label>
@@ -492,8 +497,9 @@ export default function PurchaseOrdersList() {
           ))}
         </Modal.Body>
         <Modal.Footer>
-          <button className="btn btn-light" onClick={() => setShowModal(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={submit} disabled={saving}>
+          <button type="button" className="btn btn-light" onClick={() => setShowModal(false)} disabled={saving}>Cancelar</button>
+          {/* Also while it fades out after saving, so a double click does not register it twice. */}
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={saving || !showModal}>
             {saving ? 'Guardando...' : 'Registrar compra'}
           </button>
         </Modal.Footer>

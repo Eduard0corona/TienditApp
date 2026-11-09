@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -81,5 +82,40 @@ describe('NewCountModal', () => {
     await waitFor(() => expect(request).toHaveBeenCalledWith('post', '/api/v1/inventory/counts', {
       body: { inventoryLocationId: 'l1', categoryName: null, supplyItemIds: ['s1'], notes: null },
     }));
+  });
+  it('cannot be closed while the count is being started', async () => {
+    const user = userEvent.setup();
+    request.mockReturnValue(new Promise(() => undefined) as never);
+    const onHide = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <NewCountModal show activeLocations={LOCATIONS} supplyOptions={SUPPLIES} onHide={onHide} onStarted={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Nuevo conteo' });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Empezar conteo' }));
+    expect(within(dialog).getByRole('button', { name: 'Empezando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
+  it('starts one count, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    // As Inventario does: starting closes the dialog.
+    function Harness() {
+      const [show, setShow] = useState(true);
+      return <NewCountModal show={show} activeLocations={LOCATIONS} supplyOptions={SUPPLIES} onHide={() => setShow(false)} onStarted={() => setShow(false)} />;
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>);
+
+    // The second click lands while the dialog fades out.
+    await user.dblClick(within(screen.getByRole('dialog', { name: 'Nuevo conteo' })).getByRole('button', { name: 'Empezar conteo' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(request.mock.calls.filter(([method]) => method === 'post')).toHaveLength(1);
   });
 });
