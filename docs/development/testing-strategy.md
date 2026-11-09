@@ -2659,6 +2659,29 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Mutaciones:** fallan las pruebas si se ignora la sucursal elegida, si se acepta un movimiento de 0, si se calcula en pantalla lo que debe haber, si se cruzan «Debía haber» y «Contado» en el corte o en la tabla, si se cruzan entradas y salidas en el detalle, si la moneda de 50 centavos o los centavos del esperado o del total escrito se redondean mal, si un sobrante se dice como faltante (en el texto o en el aviso) o no pide nota, si se cierra con diferencia sin nota, si se manda el conteo al escribir el total, si no se vuelve a leer la caja o los turnos, si se manda el filtro apagado o el fin del día como su inicio, si el botón de cerrar otra caja ignora el permiso o la propia, si al cerrar otra caja se manda el esperado en lugar de lo contado, si un turno abierto muestra $0.00 contado, si un cierre fallido deja el botón deshabilitado o si se ignora el cambio de otra parte de la pantalla.
   - **Revisión independiente:** corrió las dos suites en cinco zonas horarias y en orden aleatorio, y 33 mutaciones. Señaló las que sobrevivían (los centavos, el sobrante, lo que se manda al cerrar otra caja y las columnas cruzadas); quedaron cubiertas.
   - **Cliente:** 213 archivos y 1,647 pruebas, lint y build en verde.
+- Fase 30L, pruebas de la pantalla de Inventario (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Qué cambia:** `InventoryManagement` y «Registrar movimiento» no tenían pruebas propias; los conteos, las transferencias, el cuadre y el alta de un insumo ya las tenían. Ahora la pantalla se prueba montada, con la API de inventario simulada. No cambia código de la app.
+  - **`InventoryManagement.test.tsx` (8, nuevo):**
+    - abre en Insumos; cada pestaña tiene su propia acción y ninguna aparece en otra; el historial por insumo se lee solo al abrir su pestaña, no al abrir otras;
+    - Existencias, columna por columna: lo que hay en cada ubicación, lo apartado y lo disponible como los manda el servidor (cifras que no cuadran a propósito, para que no se puedan calcular en pantalla), «Bajo», el último costo con cuatro decimales y el estado, inactivo si la ubicación está apagada;
+    - los filtros de Existencias por ubicación y «Solo con pocas existencias» van al servidor y regresan a la primera página; las ubicaciones inactivas siguen como filtro, porque su existencia se sigue mostrando;
+    - registrar un movimiento: solo las ubicaciones activas reciben o dan existencia; lo que se manda, el aviso, y se vuelven a leer los movimientos, las existencias, los insumos y las opciones de los diálogos;
+    - cada movimiento, columna por columna (tipo, motivo, fecha en la zona del negocio, referencia con su contraparte y monto); su detalle se lee del servidor (la lista no trae las líneas), con su encabezado y cada línea con su costo de cuatro decimales, el total que manda el servidor y lo que había antes y lo que quedó;
+    - si el detalle no se puede leer, se ve el motivo y el diálogo se cierra;
+    - los filtros de Movimientos (tipo, motivo y días del negocio) y la búsqueda van al servidor;
+    - el historial por insumo, columna por columna (entrada, salida, el saldo que dejó cada movimiento, el costo y la referencia), y sus filtros por insumo, ubicación y días del negocio (Cancún, de las 05:00 UTC a las 04:59:59 UTC del día siguiente);
+    - desactivar un insumo lo dice y vuelve a leer los insumos, las opciones de los diálogos y las existencias; si el servidor lo rechaza, se ve su motivo y no queda el aviso anterior.
+  - **`MovementModal.test.tsx` (7, nuevo):**
+    - solo los tipos y los motivos que se hacen a mano, como lista exacta: ni las patas de una transferencia ni el cuadre del historial; cada insumo con su código antes que su SKU;
+    - una salida por merma con dos líneas: los números que toma la API, la referencia recortada y la fecha en ISO;
+    - lo que se escribe en cada campo del movimiento (referencia externa, contraparte, documento y notas) y de su línea (lote, caducidad en la zona del negocio y notas);
+    - mientras guarda, el botón se deshabilita y no se puede mandar dos veces;
+    - quitar la línea de en medio conserva lo que dicen las otras, y una sola línea no se puede quitar;
+    - lo que falta antes de mandar (insumo y ubicación de la línea, o una cantidad mayor a 0);
+    - lo que responde el servidor cuando rechaza el movimiento, con el botón listo para reintentar.
+  - **Mutaciones:** de 60, fallan las pruebas en 59. Sobrevive mostrar la salida de una línea de entrada como «-» por otra condición, que da lo mismo porque una línea es entrada o salida.
+  - **Revisión independiente:** corrió las suites en cinco zonas horarias y en orden aleatorio, y 29 mutaciones propias. Señaló lo que sobrevivía: las recargas al desactivar un insumo, el historial leído al abrir otras pestañas, las acciones de una pestaña en otra, los filtros que no regresaban a la primera página, las cifras que se podrían calcular en pantalla, el detalle que no se distinguía de la lista, las columnas cruzadas, el encabezado del detalle, el doble envío, los campos mal conectados, los motivos que no se comparaban como lista y el orden del código y el SKU. Quedaron cubiertas. Siguen sin pruebas Recetas, Ubicaciones, Alertas y las listas de Transferencias y Conteos.
+  - **Cliente:** 215 archivos y 1,662 pruebas, lint y build en verde.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
