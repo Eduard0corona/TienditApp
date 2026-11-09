@@ -80,6 +80,8 @@ function ReviewForm({ business, review, open, save, remove, onCancel }: ReviewFo
       onSubmit={(event) => {
         event.preventDefault();
         if (hidden || rating === 0 || busy) return;
+        // Each starts without the error of the other: a delete that failed does not stay for the next time it opens.
+        remove.reset();
         save.mutate({ business, editing: review !== null, body: { rating, comment: comment.trim() || null } });
       }}
     >
@@ -147,7 +149,7 @@ function ReviewForm({ business, review, open, save, remove, onCancel }: ReviewFo
           <>
             <span className="me-auto small">¿Borrar tu reseña de {business.name}?</span>
             <button type="button" className="btn btn-light" onClick={() => setDeleting(false)} disabled={busy}>Volver</button>
-            <button type="button" className="btn btn-danger" onClick={() => remove.mutate(business)} disabled={busy || !open}>
+            <button type="button" className="btn btn-danger" onClick={() => { save.reset(); remove.mutate(business); }} disabled={busy || !open}>
               {remove.isPending ? 'Borrando…' : 'Borrar'}
             </button>
           </>
