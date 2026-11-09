@@ -10,8 +10,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// values: the inventory movement copies started at 0 while the domain starts at 1, so "Salida" was saved as Entry
 /// and added stock. Since the Fase 7 they are generated from the contract (client/src/api/generated/enums.ts, from
 /// the names EnumNamesSchemaFilter writes; one module each since the Fase 30C); every exported const named like a
-/// domain enum, generated or still written in client/src/types/index.ts, is compared with it, and one defined in both
-/// places fails.
+/// domain enum, generated or still written in the manual types (client/src/types: index.ts and, since the Fase 30J, one
+/// file per context), is compared with it, and one defined in both places fails.
 /// </summary>
 public class ClientEnumContractTests
 {
@@ -118,11 +118,13 @@ public class ClientEnumContractTests
                 var source = Path.Combine(directory.FullName, "client", "src");
                 var generated = Path.Combine(source, "api", "generated");
                 var modules = Directory.GetFiles(Path.Combine(generated, "enums"), "*.ts").Order(StringComparer.Ordinal);
+                // Every file of the manual types, not only index.ts: since the Fase 30J it only re-exports them.
+                var manualTypes = Directory.GetFiles(Path.Combine(source, "types"), "*.ts").Order(StringComparer.Ordinal);
                 return string.Join("\n", modules.Select(File.ReadAllText))
                     + "\n"
                     + File.ReadAllText(Path.Combine(generated, "enums.ts"))
                     + "\n"
-                    + File.ReadAllText(Path.Combine(source, "types", "index.ts"));
+                    + string.Join("\n", manualTypes.Select(File.ReadAllText));
             }
         }
 

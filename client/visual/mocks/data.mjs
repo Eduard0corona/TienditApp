@@ -1,5 +1,5 @@
 // Demo data for "Café La Esquina" (CDMX): a café that sells food/drinks and also offers services
-// (coffee-machine maintenance, barista workshops, terrace rental). Shapes follow client/src/types/index.ts.
+// (coffee-machine maintenance, barista workshops, terrace rental). Shapes follow client/src/types.
 // All timestamps are relative to NOW (2026-10-04 13:25 America/Mexico_City, UTC-6).
 import { createHash } from 'node:crypto';
 
