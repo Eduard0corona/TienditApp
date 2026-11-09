@@ -1,9 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { isOrderInvoicingWaiting, type CfdiWhatsApp } from '../../api/invoicing';
+import { isOrderInvoicingWaiting, type CfdiWhatsApp, orderInvoicingKey } from '../../api/invoicing';
 import { apiRequest } from '../../api/typedClient';
 import { CfdiEmailDocument, OrderInvoiceStatus, OutgoingMessageStatus } from '../../types';
 import { formatDateTime } from '../../utils/dates';
@@ -23,11 +23,18 @@ function message(overrides: Partial<CfdiWhatsApp> = {}): CfdiWhatsApp {
   };
 }
 
+function InvoicingOnScreen({ read }: { read: () => Promise<unknown> }) {
+  useQuery({ queryKey: orderInvoicingKey('o-1'), queryFn: read });
+  return null;
+}
+
 function renderButton(props: {
   invoiceWhatsApp?: string | null;
   latestWhatsApp?: CfdiWhatsApp;
   proposedWhatsApp?: string | null;
   document?: CfdiEmailDocument;
+  /** The order's invoicing on screen, read again after the message is asked for. */
+  invoicing?: () => Promise<unknown>;
 }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -41,6 +48,7 @@ function renderButton(props: {
         latestWhatsApp={props.latestWhatsApp}
         proposedWhatsApp={props.proposedWhatsApp}
       />
+      {props.invoicing && <InvoicingOnScreen read={props.invoicing} />}
     </QueryClientProvider>,
   );
 }
@@ -187,5 +195,31 @@ describe('SendCfdiWhatsAppButton', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(NOT_CONNECTED));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('stays open while it is sent, and closes with the answer before the invoicing is read again', async () => {
+    const user = userEvent.setup();
+    let sent: (value: unknown) => void = () => undefined;
+    vi.mocked(apiRequest).mockReturnValue(new Promise((resolve) => { sent = resolve; }) as never);
+    const invoicing = vi.fn().mockResolvedValueOnce({}).mockReturnValue(new Promise(() => undefined));
+    renderButton({ invoiceWhatsApp: '+525512345678', invoicing });
+    await waitFor(() => expect(invoicing).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole('button', { name: 'Enviar por WhatsApp la factura F-1' }));
+    const dialog = screen.getByRole('dialog', { name: 'Enviar por WhatsApp la factura F-1' });
+    await user.click(within(dialog).getByRole('button', { name: 'Enviar' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Enviando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Enviar por WhatsApp la factura F-1' })).toBeInTheDocument();
+
+    sent(message());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Se está enviando la factura F-1 por WhatsApp a 5512345678.');
+    expect(invoicing).toHaveBeenCalledTimes(2);
+    // Until the invoicing comes back it is not offered again: it would propose the number the invoice had before.
+    expect(screen.getByRole('button', { name: 'Enviar por WhatsApp la factura F-1' })).toBeDisabled();
   });
 });

@@ -373,6 +373,60 @@ describe('IssuedCfdis', () => {
     expect(await screen.findByText('Mandando los CFDI a otra@despacho.mx…')).toBeInTheDocument();
   });
 
+  it('keeps «Mandar al contador» open while the month is on its way, and closes before its emails are read again', async () => {
+    const user = userEvent.setup();
+    let sent: (value: CfdiMonthEmail) => void = () => undefined;
+    const send = vi.fn(() => new Promise<CfdiMonthEmail>((resolve) => { sent = resolve; }));
+    renderPage(() => [cfdi()], { accountantEmail: 'contador@despacho.mx', send });
+
+    await user.click(await screen.findByRole('button', { name: 'Mandar al contador' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mandar al contador los CFDI de octubre de 2026' });
+    await user.click(within(dialog).getByRole('button', { name: 'Mandar' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Mandando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Mandar al contador los CFDI de octubre de 2026' })).toBeInTheDocument();
+
+    // The month's emails, read again after it, do not come back: the dialog does not wait for them.
+    const reads = request.getMockImplementation()!;
+    request.mockImplementation(((method: string, path: string, options?: unknown) => {
+      if (path === '/api/v1/invoicing/issued-cfdis/accountant-emails' && method === 'get') return new Promise(() => undefined);
+      return (reads as unknown as (m: string, p: string, o?: unknown) => Promise<unknown>)(method, path, options);
+    }) as unknown as typeof apiRequest);
+    sent(monthEmail({ id: 'm-2' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Se están mandando los CFDI de octubre de 2026 a contador@despacho.mx.');
+  });
+
+  it('waits for the settings read again before proposing the address of the accountant once more', async () => {
+    const user = userEvent.setup();
+    const send = vi.fn((body: { year: number; month: number; email: string }) => Promise.resolve(monthEmail({ id: 'm-2', to: body.email })));
+    renderPage(() => [cfdi()], { accountantEmail: 'contador@despacho.mx', send });
+
+    await user.click(await screen.findByRole('button', { name: 'Mandar al contador' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mandar al contador los CFDI de octubre de 2026' });
+    await user.clear(within(dialog).getByLabelText('Correo del contador'));
+    await user.type(within(dialog).getByLabelText('Correo del contador'), 'otra@despacho.mx');
+    // The settings, read again after the send, come back when told: the server keeps the address typed as the accountant's.
+    let settings: (value: unknown) => void = () => undefined;
+    const reads = request.getMockImplementation()!;
+    request.mockImplementation(((method: string, path: string, options?: unknown) => {
+      if (path === '/api/v1/invoicing/settings') return new Promise((resolve) => { settings = resolve; });
+      return (reads as unknown as (m: string, p: string, o?: unknown) => Promise<unknown>)(method, path, options);
+    }) as unknown as typeof apiRequest);
+    await user.click(within(dialog).getByRole('button', { name: 'Mandar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Mandar al contador' })).toBeDisabled();
+    settings({ accountantEmail: 'otra@despacho.mx', sendsMonthToAccountant: false });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Mandar al contador' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Mandar al contador' }));
+    const again = await screen.findByRole('dialog', { name: 'Mandar al contador los CFDI de octubre de 2026' });
+    expect(within(again).getByLabelText('Correo del contador')).toHaveValue('otra@despacho.mx');
+  });
+
   it('says the current month is not over, and that the month on its own moves to the address typed', async () => {
     const user = userEvent.setup();
     renderPage(() => [cfdi()], { accountantEmail: 'contador@despacho.mx', sendsMonthToAccountant: true });

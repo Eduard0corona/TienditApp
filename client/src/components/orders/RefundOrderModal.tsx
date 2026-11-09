@@ -100,9 +100,10 @@ export default function RefundOrderModal(props: RefundModalProps) {
   };
 
   return (
+    // Its page does not close it while what it sent is on its way; without the X it does not look like it would.
     <Modal show onHide={onClose} centered size="lg" aria-labelledby={titleId}>
       <form onSubmit={submit}>
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!submitting}>
           <Modal.Title id={titleId} as="h2" className="h5">
             {props.mode === 'void' ? `Anular la venta ${order.orderNumber}` : `Reembolsar ${order.orderNumber}`}
           </Modal.Title>

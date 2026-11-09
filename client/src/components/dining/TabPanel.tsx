@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ordersApi } from '../../api/ordersApi';
 import { getApiErrorMessage } from '../../api/errors';
 import type { DiningTable } from '../../api/tablesApi';
@@ -62,13 +62,23 @@ export default function TabPanel({ orderId, freeTables, businessName, logoUrl, o
     refetchInterval: 15_000,
   });
   const order = tab.data;
+  // The free tables come from Mesas: while they are read again (after the tab moved, too), the move waits for them.
+  const tablesReading = useIsFetching({ queryKey: ['tables'] }) > 0;
 
+  // The tab shows what the server answered and is read again behind it, with the tables. Without an answer to show (a
+  // round served), the tab waits for its new reading, so the same button does not come back before it.
   const refresh = async (updated?: OrderDto) => {
-    if (updated) queryClient.setQueryData(['orders', orderId], updated);
-    await queryClient.invalidateQueries({ queryKey: ['tables'] });
+    void queryClient.invalidateQueries({ queryKey: ['tables'] });
+    if (updated) {
+      queryClient.setQueryData(['orders', orderId], updated);
+      void queryClient.invalidateQueries({ queryKey: ['orders', orderId] });
+      return;
+    }
     await queryClient.invalidateQueries({ queryKey: ['orders', orderId] });
   };
 
+  // The panel does not close while what it sent is on its way: its answer (a charge, the tab closed) reaches this tab and
+  // not one opened after it.
   const run = async (action: () => Promise<OrderDto | void>, success?: string) => {
     setBusy(true);
     setError('');
@@ -79,6 +89,8 @@ export default function TabPanel({ orderId, freeTables, businessName, logoUrl, o
       return true;
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo completar la acción.'));
+      // A mixed charge may have saved its first payments before one failed: the tab says what it has now.
+      void refresh();
       return false;
     } finally {
       setBusy(false);
@@ -128,8 +140,8 @@ export default function TabPanel({ orderId, freeTables, businessName, logoUrl, o
   const cancellationsOf = (item: OrderItemDto) => order?.itemCancellations?.filter((c) => c.orderItemId === item.id) ?? [];
 
   return (
-    <Modal show onHide={onClose} centered size="lg" fullscreen="md-down" scrollable aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    <Modal show onHide={() => !busy && onClose()} centered size="lg" fullscreen="md-down" scrollable aria-labelledby={titleId}>
+      <Modal.Header closeButton={!busy}>
         <Modal.Title id={titleId} as="h2" className="h5">
           {order ? `${order.tableNumber || order.customerName} · ${order.orderNumber}` : 'Cuenta'}
         </Modal.Title>
@@ -290,7 +302,7 @@ export default function TabPanel({ orderId, freeTables, businessName, logoUrl, o
                   <i className="ri-printer-line me-1" aria-hidden="true"></i>Imprimir
                 </button>
               )}
-              <button type="button" className="btn btn-light" onClick={() => setMode('detail')}>Volver</button>
+              <button type="button" className="btn btn-light" disabled={busy} onClick={() => setMode('detail')}>Volver</button>
             </>
           ) : order.isOpenTab ? (
             <>
@@ -298,17 +310,20 @@ export default function TabPanel({ orderId, freeTables, businessName, logoUrl, o
               <button
                 type="button"
                 className="btn btn-outline-primary btn-touch"
+                disabled={busy}
                 onClick={() => navigate(`/sell?tab=${order.id}&label=${encodeURIComponent(order.tableNumber || order.customerName)}`)}
               >
                 <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar ronda
               </button>
-              <button type="button" className="btn btn-light btn-touch" onClick={() => setMode('bill')}>Ver cuenta</button>
+              <button type="button" className="btn btn-light btn-touch" disabled={busy} onClick={() => setMode('bill')}>Ver cuenta</button>
               {order.diningTableId && (
-                <button type="button" className="btn btn-light btn-touch" onClick={() => setMode('move')}>Cambiar de mesa</button>
+                <button type="button" className="btn btn-light btn-touch" disabled={busy || tablesReading} onClick={() => setMode('move')}>
+                  Cambiar de mesa
+                </button>
               )}
               {order.balance > 0 ? (
                 canCharge ? (
-                  <button type="button" className="btn btn-primary btn-touch ms-md-auto" onClick={() => setMode('charge')}>
+                  <button type="button" className="btn btn-primary btn-touch ms-md-auto" disabled={busy} onClick={() => setMode('charge')}>
                     Cobrar {formatMoney(order.balance)}
                   </button>
                 ) : (

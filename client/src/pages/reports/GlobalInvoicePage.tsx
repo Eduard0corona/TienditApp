@@ -62,6 +62,7 @@ export default function GlobalInvoicePage() {
   return (
     <GlobalInvoiceScreen
       invoice={invoice.data}
+      reading={invoice.isFetching}
       refreshError={invoice.isError ? getApiErrorMessage(invoice.error, 'No se pudo actualizar la factura global.') : null}
       onRefresh={() => void invoice.refetch()}
     />
@@ -70,12 +71,14 @@ export default function GlobalInvoicePage() {
 
 interface GlobalInvoiceScreenProps {
   invoice: GlobalInvoiceDetail;
+  /** It is being read again (after a cancellation, too): it is not cancelled from what it said before. */
+  reading: boolean;
   /** Why the last read failed, while what was read before stays on screen. */
   refreshError: string | null;
   onRefresh: () => void;
 }
 
-function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoiceScreenProps) {
+function GlobalInvoiceScreen({ invoice, reading, refreshError, onRefresh }: GlobalInvoiceScreenProps) {
   const id = useId();
   const toast = useToast();
   const retry = useRetryGlobalInvoice();
@@ -221,7 +224,7 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
               </button>
             )}
             {invoice.status === OrderInvoiceStatus.Stamped && !hasLiveNotes && (
-              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setCancelling(true)}>
+              <button type="button" className="btn btn-sm btn-outline-danger" disabled={reading} onClick={() => setCancelling(true)}>
                 Cancelar factura global
               </button>
             )}
@@ -343,9 +346,10 @@ function CancelGlobalInvoiceModal({ invoice, onClose }: { invoice: GlobalInvoice
   };
 
   return (
-    <Modal show onHide={onClose} centered aria-labelledby={titleId}>
+    // It stays open while what it sent is on its way, so the answer reaches it and not a dialog opened after it.
+    <Modal show onHide={() => !cancel.isPending && onClose()} centered aria-labelledby={titleId}>
       <form onSubmit={submit}>
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!cancel.isPending}>
           <Modal.Title id={titleId} as="h2" className="h5">Cancelar la factura global {invoice.number}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -375,7 +379,7 @@ function CancelGlobalInvoiceModal({ invoice, onClose }: { invoice: GlobalInvoice
           </fieldset>
         </Modal.Body>
         <Modal.Footer>
-          <button type="button" className="btn btn-light" onClick={onClose}>Volver</button>
+          <button type="button" className="btn btn-light" onClick={onClose} disabled={cancel.isPending}>Volver</button>
           <button type="submit" className="btn btn-danger" disabled={cancel.isPending}>
             {cancel.isPending ? 'Cancelando…' : 'Cancelar factura global'}
           </button>

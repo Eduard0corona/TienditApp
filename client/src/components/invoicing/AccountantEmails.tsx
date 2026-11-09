@@ -136,9 +136,10 @@ function SendToAccountantModal({
   };
 
   return (
-    <Modal show onHide={onClose} centered aria-labelledby={titleId}>
+    // It stays open while what it sent is on its way, so the answer reaches it and not a dialog opened after it.
+    <Modal show onHide={() => !send.isPending && onClose()} centered aria-labelledby={titleId}>
       <form onSubmit={submit} noValidate>
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!send.isPending}>
           <Modal.Title id={titleId} as="h2" className="h5">Mandar al contador los CFDI de {monthLabel}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -170,7 +171,7 @@ function SendToAccountantModal({
           </p>
         </Modal.Body>
         <Modal.Footer>
-          <button type="button" className="btn btn-light" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-light" onClick={onClose} disabled={send.isPending}>Cancelar</button>
           <button type="submit" className="btn btn-primary" disabled={!valid || send.isPending}>
             {send.isPending ? 'Mandando…' : 'Mandar'}
           </button>

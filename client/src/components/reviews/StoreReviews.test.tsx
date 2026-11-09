@@ -6,6 +6,8 @@ import { reviewsApi, type PublicReview } from '../../api/reviewsApi';
 import StoreReviews from './StoreReviews';
 
 vi.mock('../../api/reviewsApi', () => ({ reviewsApi: { getStoreReviews: vi.fn(), getMyReview: vi.fn() } }));
+// The review dialog says what it saved with a toast; the app gives it its provider.
+vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }) }));
 
 const api = vi.mocked(reviewsApi);
 const CAFE = { slug: 'cafe-luna', name: 'Café Luna' };

@@ -343,7 +343,8 @@ export default function OrdersList() {
         : `Reembolso de ${formatMoney(request.data.amount)} registrado en ${order.orderNumber}.`);
       // A refund (or a void) to the balance in the customer's favor changes their account, card and what Vender offers.
       if (order.customerPhone) refreshCredit();
-      await loadOrders();
+      // Not awaited: a refund opened while the list is read again does not wait in «Guardando…» for it.
+      void loadOrders();
     } catch (err: unknown) {
       setRefundError(getApiErrorMessage(err, request.mode === 'void' ? 'No se pudo anular la venta.' : 'No se pudo registrar el reembolso.'));
     } finally {
@@ -377,13 +378,14 @@ export default function OrdersList() {
         setPaidReceipt({ order: updated, change: charge.change });
         if (selectedOrder?.id === updated.id) setSelectedOrder(withItsQuote(updated, selectedOrder));
       }
-      await loadOrders();
+      // Not awaited: a charge opened while the list is read again does not wait in «Cobrando…» for it.
+      void loadOrders();
     } catch (err: unknown) {
       setPaymentError(getApiErrorMessage(err, 'No se pudo registrar el pago.'));
       // Earlier payments of a mixed charge may already be saved: show the order as it is now.
       if (updated) {
         setPaymentOrder(updated);
-        await loadOrders();
+        void loadOrders();
       }
     } finally {
       setPaymentSubmitting(false);

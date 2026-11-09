@@ -33,6 +33,9 @@ export default function TablesConfigModal({ onClose }: TablesConfigModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const list = tables.data?.tables ?? [];
+  // While the list is read (after a save too), a table opens and a new one is named from what the list will say, not from
+  // what it said before.
+  const reading = tables.isFetching;
 
   const edit = (table: DiningTable) => setForm({
     id: table.id,
@@ -57,9 +60,11 @@ export default function TablesConfigModal({ onClose }: TablesConfigModalProps) {
     try {
       if (form.id) await tablesApi.update(form.id, { ...body, id: form.id, isActive: form.isActive });
       else await tablesApi.create(body);
-      toast.success(form.id ? 'Mesa actualizada.' : `Mesa ${body.name} agregada.`);
+      // «Mesa 3 agregada.», not «Mesa Mesa 3 agregada.»: the name the form proposes already says «Mesa».
+      toast.success(form.id ? 'Mesa actualizada.' : `${body.name} agregada.`);
       setForm(null);
-      await queryClient.invalidateQueries({ queryKey: ['tables'] });
+      // Not awaited: the list comes back with the answer, and is read again behind it.
+      void queryClient.invalidateQueries({ queryKey: ['tables'] });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo guardar la mesa.'));
     } finally {
@@ -68,12 +73,13 @@ export default function TablesConfigModal({ onClose }: TablesConfigModalProps) {
   };
 
   return (
-    <Modal show onHide={onClose} centered size="lg" scrollable aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    // It stays open while what it sent is on its way.
+    <Modal show onHide={() => !saving && onClose()} centered size="lg" scrollable aria-labelledby={titleId}>
+      <Modal.Header closeButton={!saving}>
         <Modal.Title id={titleId} as="h2" className="h5">Configurar mesas</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        {error && <div className="alert alert-danger">{error}</div>}
+        {error && <div className="alert alert-danger" role="alert">{error}</div>}
         {form ? (
           <form id="table-form" onSubmit={(event) => void save(event)}>
             <div className="row g-2">
@@ -122,7 +128,15 @@ export default function TablesConfigModal({ onClose }: TablesConfigModalProps) {
                   {table.seats && <span className="text-muted"> · {table.seats} lugares</span>}
                   {!table.isActive && <span className="badge bg-light text-dark ms-2">Desactivada</span>}
                 </span>
-                <button type="button" className="btn btn-sm btn-light" onClick={() => edit(table)}>Editar</button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light"
+                  disabled={reading}
+                  aria-label={`Editar ${table.name}`}
+                  onClick={() => edit(table)}
+                >
+                  Editar
+                </button>
               </li>
             ))}
           </ul>
@@ -140,6 +154,7 @@ export default function TablesConfigModal({ onClose }: TablesConfigModalProps) {
             <button
               type="button"
               className="btn btn-primary"
+              disabled={reading}
               onClick={() => setForm({ ...EMPTY, name: `Mesa ${list.length + 1}`, sortOrder: list.length + 1 })}
             >
               <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar mesa

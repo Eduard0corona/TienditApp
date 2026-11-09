@@ -1,8 +1,10 @@
 import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import { useIsFetching } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import {
   downloadPaymentComplementFile,
+  orderInvoicingKey,
   useCancelPaymentComplement,
   useIssuePaymentComplement,
   useRetryPaymentComplement,
@@ -69,6 +71,8 @@ export default function PaymentComplementList({
   const issue = useIssuePaymentComplement(orderId);
   const retry = useRetryPaymentComplement(orderId);
   const [cancelling, setCancelling] = useState<PaymentComplement | null>(null);
+  // While the order's invoicing is read again (after a cancellation, too), it is not offered from what it said before.
+  const reading = useIsFetching({ queryKey: orderInvoicingKey(orderId) }) > 0;
   const [downloading, setDownloading] = useState<string | null>(null);
   const today = getBusinessToday();
 
@@ -237,6 +241,7 @@ export default function PaymentComplementList({
                             type="button"
                             className="btn btn-sm btn-outline-danger"
                             aria-label={`Cancelar complemento ${complement.number}`}
+                            disabled={reading}
                             onClick={() => setCancelling(complement)}
                           >
                             Cancelar complemento
@@ -295,9 +300,10 @@ function CancelComplementModal({ orderId, complement, onClose }: CancelComplemen
   };
 
   return (
-    <Modal show onHide={onClose} centered aria-labelledby={titleId}>
+    // It stays open while what it sent is on its way, so the answer reaches it and not a dialog opened after it.
+    <Modal show onHide={() => !cancel.isPending && onClose()} centered aria-labelledby={titleId}>
       <form onSubmit={submit}>
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!cancel.isPending}>
           <Modal.Title id={titleId} as="h2" className="h5">Cancelar el complemento {complement.number}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -323,7 +329,7 @@ function CancelComplementModal({ orderId, complement, onClose }: CancelComplemen
           </fieldset>
         </Modal.Body>
         <Modal.Footer>
-          <button type="button" className="btn btn-light" onClick={onClose}>Volver</button>
+          <button type="button" className="btn btn-light" onClick={onClose} disabled={cancel.isPending}>Volver</button>
           <button type="submit" className="btn btn-danger" disabled={cancel.isPending}>
             {cancel.isPending ? 'Cancelando…' : 'Cancelar complemento'}
           </button>

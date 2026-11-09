@@ -28,8 +28,9 @@ export default function CancelCountModal({ countId, countNumber, onHide, onCance
   };
 
   return (
-    <Modal show onHide={onHide} centered aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    // It stays open while what it sent is on its way, so the answer reaches it and not a dialog opened after it.
+    <Modal show onHide={() => !cancel.isPending && onHide()} centered aria-labelledby={titleId}>
+      <Modal.Header closeButton={!cancel.isPending}>
         <Modal.Title id={titleId}>Cancelar el conteo {countNumber}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -46,7 +47,7 @@ export default function CancelCountModal({ countId, countNumber, onHide, onCance
         />
       </Modal.Body>
       <Modal.Footer>
-        <button type="button" className="btn btn-light" onClick={onHide}>Volver</button>
+        <button type="button" className="btn btn-light" onClick={onHide} disabled={cancel.isPending}>Volver</button>
         <button type="button" className="btn btn-danger" onClick={submit} disabled={cancel.isPending}>
           {cancel.isPending ? 'Cancelando…' : 'Cancelar conteo'}
         </button>

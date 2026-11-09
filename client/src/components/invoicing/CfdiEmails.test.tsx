@@ -1,9 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { isOrderInvoicingWaiting, type CfdiEmail } from '../../api/invoicing';
+import { isOrderInvoicingWaiting, orderInvoicingKey, type CfdiEmail } from '../../api/invoicing';
 import { apiRequest } from '../../api/typedClient';
 import { CfdiEmailDocument, CfdiEmailFailure, CfdiEmailKind, OrderInvoiceStatus } from '../../types';
 import { isPlainEmail } from '../../utils/cfdi';
@@ -26,11 +26,18 @@ function email(overrides: Partial<CfdiEmail> = {}): CfdiEmail {
   };
 }
 
+function InvoicingOnScreen({ read }: { read: () => Promise<unknown> }) {
+  useQuery({ queryKey: orderInvoicingKey('o-1'), queryFn: read });
+  return null;
+}
+
 function renderButton(props: {
   invoiceEmail?: string | null;
   latestEmail?: CfdiEmail;
   proposedEmail?: string | null;
   document?: CfdiEmailDocument;
+  /** The order's invoicing on screen, read again after the email is asked for. */
+  invoicing?: () => Promise<unknown>;
 }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -44,6 +51,7 @@ function renderButton(props: {
         latestEmail={props.latestEmail}
         proposedEmail={props.proposedEmail}
       />
+      {props.invoicing && <InvoicingOnScreen read={props.invoicing} />}
     </QueryClientProvider>,
   );
 }
@@ -267,6 +275,32 @@ describe('SendCfdiEmailButton', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(TOO_MANY));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('stays open while it is sent, and closes with the answer before the invoicing is read again', async () => {
+    const user = userEvent.setup();
+    let sent: (value: unknown) => void = () => undefined;
+    vi.mocked(apiRequest).mockReturnValue(new Promise((resolve) => { sent = resolve; }) as never);
+    const invoicing = vi.fn().mockResolvedValueOnce({}).mockReturnValue(new Promise(() => undefined));
+    renderButton({ invoiceEmail: 'karla@ejemplo.mx', invoicing });
+    await waitFor(() => expect(invoicing).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole('button', { name: 'Enviar por correo la factura F-1' }));
+    const dialog = screen.getByRole('dialog', { name: 'Enviar por correo la factura F-1' });
+    await user.click(within(dialog).getByRole('button', { name: 'Enviar' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Enviando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Enviar por correo la factura F-1' })).toBeInTheDocument();
+
+    sent(email());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Se está enviando la factura F-1 a karla@ejemplo.mx.');
+    expect(invoicing).toHaveBeenCalledTimes(2);
+    // Until the invoicing comes back it is not offered again: it would propose the address the invoice had before.
+    expect(screen.getByRole('button', { name: 'Enviar por correo la factura F-1' })).toBeDisabled();
   });
 });
 

@@ -198,4 +198,12 @@ describe('RefundOrderModal', () => {
     expect(screen.queryByRole('button', { name: 'Lo registré dos veces' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Anula el pedido si/)).not.toBeInTheDocument();
   });
+  it('does not offer to close while what it sent is on its way', () => {
+    const { rerender } = render(<RefundOrderModal mode="void" order={sale} submitting error="" onClose={vi.fn()} onSubmit={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Volver' })).toBeDisabled();
+
+    rerender(<RefundOrderModal mode="void" order={sale} submitting={false} error="" onClose={vi.fn()} onSubmit={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
 });

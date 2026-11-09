@@ -166,4 +166,26 @@ describe('CourierCash', () => {
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('ya no se le debe al repartidor');
   });
+  it('keeps the settlement open while it is being saved', async () => {
+    const user = userEvent.setup();
+    let answer: (value: unknown) => void = () => undefined;
+    serve({ settle: () => new Promise((resolve) => { answer = resolve; }) });
+    renderCash();
+
+    await user.click(await screen.findByRole('button', { name: 'Liquidar a Paquetenvia' }));
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Entregó'), '550');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar liquidación' }));
+
+    expect(await within(dialog).findByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Volver' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    answer({ ...DETAIL, settlement: { ...SETTLEMENT, id: 's2', handedAmount: 550 } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Liquidación guardada: $550.00 entraron a tu caja.');
+    expect(posts()).toHaveLength(1);
+  });
 });

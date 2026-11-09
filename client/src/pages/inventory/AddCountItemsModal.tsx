@@ -37,8 +37,9 @@ export default function AddCountItemsModal({ countId, lineCount, supplyOptions, 
   };
 
   return (
-    <Modal show onHide={onHide} centered aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    // It stays open while what it sent is on its way, so the answer reaches it and not a dialog opened after it.
+    <Modal show onHide={() => !add.isPending && onHide()} centered aria-labelledby={titleId}>
+      <Modal.Header closeButton={!add.isPending}>
         <Modal.Title id={titleId}>Agregar artículos al conteo</Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -46,7 +47,7 @@ export default function AddCountItemsModal({ countId, lineCount, supplyOptions, 
         <SupplyPicker supplies={supplyOptions} selected={chosen} onChange={setChosen} idPrefix="agregar-conteo-articulo" />
       </Modal.Body>
       <Modal.Footer>
-        <button type="button" className="btn btn-light" onClick={onHide}>Cancelar</button>
+        <button type="button" className="btn btn-light" onClick={onHide} disabled={add.isPending}>Cancelar</button>
         <button type="button" className="btn btn-primary" onClick={submit} disabled={add.isPending}>
           {add.isPending ? 'Agregando…' : 'Agregar'}
         </button>

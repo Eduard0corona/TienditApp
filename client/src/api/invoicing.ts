@@ -215,16 +215,24 @@ export function isWaiting(invoice: Pick<OrderInvoice, 'status' | 'stampWindowEnd
  * Each change answers the invoice as it ended up; the order's invoicing and its draft are read again, and the change stays
  * pending until they are, so what it changed (a live invoice) is on screen before anything else can be pressed. The global
  * invoices are read again too: the detail of one lists the credit notes of its sales, and whether it can be cancelled.
+ *
+ * A dialog that closes with the answer passes `behind`: it does not close while the change is on its way, so it does not
+ * wait for the lists either, which are read again behind it; what opens it waits for them instead.
  */
-function useInvoiceChange<TVariables, TResult = OrderInvoice>(orderId: string, change: (variables: TVariables) => Promise<TResult>) {
+function useInvoiceChange<TVariables, TResult = OrderInvoice>(
+  orderId: string,
+  change: (variables: TVariables) => Promise<TResult>,
+  { behind = false } = {},
+) {
   const client = useQueryClient();
+  const refresh = () => Promise.all([
+    client.invalidateQueries({ queryKey: orderInvoicingKey(orderId) }),
+    client.invalidateQueries({ queryKey: ['orders', orderId, 'cfdi-draft'] }),
+    client.invalidateQueries({ queryKey: globalInvoicesKey }),
+  ]);
   return useMutation({
     mutationFn: change,
-    onSettled: () => Promise.all([
-      client.invalidateQueries({ queryKey: orderInvoicingKey(orderId) }),
-      client.invalidateQueries({ queryKey: ['orders', orderId, 'cfdi-draft'] }),
-      client.invalidateQueries({ queryKey: globalInvoicesKey }),
-    ]),
+    onSettled: () => (behind ? void refresh() : refresh()),
   });
 }
 
@@ -246,7 +254,7 @@ export function useRetryOrderInvoice(orderId: string) {
 
 export function useCancelOrderInvoice(orderId: string) {
   return useInvoiceChange(orderId, ({ invoiceId, motive }: { invoiceId: string; motive: CfdiCancellationMotive }) =>
-    apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/cancel', { path: { invoiceId }, body: { motive } }));
+    apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/cancel', { path: { invoiceId }, body: { motive } }), { behind: true });
 }
 
 /**
@@ -285,7 +293,7 @@ export function useRetryPaymentComplement(orderId: string) {
 
 export function useCancelPaymentComplement(orderId: string) {
   return useInvoiceChange(orderId, ({ complementId, motive }: { complementId: string; motive: CfdiCancellationMotive }) =>
-    apiRequest('post', '/api/v1/invoicing/payment-complements/{complementId}/cancel', { path: { complementId }, body: { motive } }));
+    apiRequest('post', '/api/v1/invoicing/payment-complements/{complementId}/cancel', { path: { complementId }, body: { motive } }), { behind: true });
 }
 
 /**
@@ -306,7 +314,7 @@ export function useRetryCreditNote(orderId: string) {
 
 export function useCancelCreditNote(orderId: string) {
   return useInvoiceChange(orderId, ({ creditNoteId, motive }: { creditNoteId: string; motive: CfdiCancellationMotive }) =>
-    apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/cancel', { path: { creditNoteId }, body: { motive } }));
+    apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/cancel', { path: { creditNoteId }, body: { motive } }), { behind: true });
 }
 
 /**
@@ -330,7 +338,7 @@ export function useSendCfdiByEmail(orderId: string) {
       default:
         return apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/email', { path: { invoiceId: cfdiId }, body });
     }
-  });
+  }, { behind: true });
 }
 
 /**
@@ -353,7 +361,7 @@ export function useSendCfdiByWhatsApp(orderId: string) {
       default:
         return apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/whatsapp', { path: { invoiceId: cfdiId }, body });
     }
-  });
+  }, { behind: true });
 }
 
 /** What Reportes › CFDI emitidos narrows the month to; empty, all of them. */
@@ -481,10 +489,11 @@ export function useSendIssuedCfdisToAccountant() {
   return useMutation({
     mutationFn: (body: { year: number; month: number; email: string }) =>
       apiRequest('post', '/api/v1/invoicing/issued-cfdis/accountant-emails', { body }),
-    onSettled: () => Promise.all([
-      client.invalidateQueries({ queryKey: [...issuedCfdisKey, 'accountant-emails'] }),
-      client.invalidateQueries({ queryKey: invoicingSettingsKey }),
-    ]),
+    // Read again behind its dialog, which does not close while the month is on its way and so does not wait for them.
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: [...issuedCfdisKey, 'accountant-emails'] });
+      void client.invalidateQueries({ queryKey: invoicingSettingsKey });
+    },
   });
 }
 
@@ -617,16 +626,18 @@ export function useGlobalInvoice(invoiceId: string) {
 
 /**
  * Each change answers the global invoice as it ended up. The global invoices are read again, and so is the invoicing of the
- * orders: a sale in a live global invoice is not invoiced alone.
+ * orders: a sale in a live global invoice is not invoiced alone. Like the changes of an order's invoicing, it waits for
+ * them, unless its dialog closes with the answer (`behind`).
  */
-function useGlobalInvoiceChange<TVariables>(change: (variables: TVariables) => Promise<GlobalInvoice>) {
+function useGlobalInvoiceChange<TVariables>(change: (variables: TVariables) => Promise<GlobalInvoice>, { behind = false } = {}) {
   const client = useQueryClient();
+  const refresh = () => Promise.all([
+    client.invalidateQueries({ queryKey: globalInvoicesKey }),
+    client.invalidateQueries({ queryKey: ['invoicing', 'orders'] }),
+  ]);
   return useMutation({
     mutationFn: change,
-    onSettled: () => Promise.all([
-      client.invalidateQueries({ queryKey: globalInvoicesKey }),
-      client.invalidateQueries({ queryKey: ['invoicing', 'orders'] }),
-    ]),
+    onSettled: () => (behind ? void refresh() : refresh()),
   });
 }
 
@@ -651,5 +662,5 @@ export function useRetryGlobalInvoice() {
 
 export function useCancelGlobalInvoice() {
   return useGlobalInvoiceChange(({ invoiceId, motive }: { invoiceId: string; motive: CfdiCancellationMotive }) =>
-    apiRequest('post', '/api/v1/invoicing/global-invoices/{invoiceId}/cancel', { path: { invoiceId }, body: { motive } }));
+    apiRequest('post', '/api/v1/invoicing/global-invoices/{invoiceId}/cancel', { path: { invoiceId }, body: { motive } }), { behind: true });
 }

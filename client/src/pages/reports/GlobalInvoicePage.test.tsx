@@ -105,6 +105,34 @@ describe('GlobalInvoicePage', () => {
     expect(screen.queryByRole('button', { name: 'Cancelar factura global' })).not.toBeInTheDocument();
   });
 
+  it('keeps the cancellation open while it is on its way, and closes with the answer before the invoice is read again', async () => {
+    const user = userEvent.setup();
+    let cancelled: (value: unknown) => void = () => undefined;
+    let reads = 0;
+    renderPage(
+      // Read again after the cancellation, it does not come back.
+      () => (++reads === 1 ? Promise.resolve(invoice()) : new Promise(() => undefined)),
+      () => new Promise((resolve) => { cancelled = resolve; }),
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar factura global' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancelar la factura global F-5' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar factura global' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Cancelando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Volver' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Cancelar la factura global F-5' })).toBeInTheDocument();
+
+    cancelled(invoice({ status: OrderInvoiceStatus.Cancelled, cancelledAt: '2026-10-23T18:00:00Z' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith('Factura global F-5 cancelada.');
+    expect(reads).toBe(2);
+    // Until it comes back, it is not offered from what it said before.
+    expect(screen.getByRole('button', { name: 'Cancelar factura global' })).toBeDisabled();
+  });
+
   it('lists the credit notes of its sales, and says which go first while one stands instead of offering to cancel it', async () => {
     const note = {
       id: 'nc-1', orderInvoiceId: null, globalInvoiceId: 'g-1', globalInvoiceNumber: 'F-5', number: 'NC-1',
@@ -208,6 +236,27 @@ describe('GlobalInvoicePage', () => {
     expect(toast.info).toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /Descargar/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancelar factura global' })).not.toBeInTheDocument();
+  });
+
+  it('waits for the invoice read again before offering to ask the PAC again', async () => {
+    const user = userEvent.setup();
+    const stamping = invoice({ status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, hasXml: false, hasPdf: false });
+    let reads = 0;
+    let reread: (value: GlobalInvoiceDetail) => void = () => undefined;
+    renderPage(
+      () => (++reads === 1 ? Promise.resolve(stamping) : new Promise<GlobalInvoiceDetail>((resolve) => { reread = resolve; })),
+      () => Promise.resolve(stamping),
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Volver a pedir el timbre' }));
+
+    // The PAC answered, but the button stays pressed until the invoice says how it is now.
+    await waitFor(() => expect(reads).toBe(2));
+    expect(screen.getByRole('button', { name: 'Volver a pedir el timbre' })).toBeDisabled();
+    expect(toast.info).not.toHaveBeenCalled();
+    reread(stamping);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Volver a pedir el timbre' })).toBeEnabled());
+    expect(toast.info).toHaveBeenCalled();
   });
 
   it('keeps the invoice on screen when reading it again fails, and reads it again on request', async () => {

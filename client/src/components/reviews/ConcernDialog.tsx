@@ -16,19 +16,27 @@ interface ConcernDialogProps {
   onClose: () => void;
 }
 
-function ConcernForm({ description, confirmLabel, initial, onSubmit, onClose }: Omit<ConcernDialogProps, 'title'>) {
+interface ConcernFormProps {
+  description: string;
+  confirmLabel: string;
+  initial?: ReviewConcern | null;
+  /** False while it fades out: what it sent was answered, so it sends nothing else. */
+  open: boolean;
+  saving: boolean;
+  error: unknown;
+  onSave: (reason: ReviewConcern) => void;
+  onCancel: () => void;
+}
+
+function ConcernForm({ description, confirmLabel, initial, open, saving, error, onSave, onCancel }: ConcernFormProps) {
   const ids = useId();
   const [reason, setReason] = useState<ReviewConcern | null>(initial ?? null);
-  const submit = useMutation({
-    mutationFn: (chosen: ReviewConcern) => onSubmit(chosen),
-    onSuccess: onClose,
-  });
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (reason !== null && !submit.isPending) submit.mutate(reason);
+        if (reason !== null && !saving) onSave(reason);
       }}
     >
       <Modal.Body>
@@ -49,14 +57,14 @@ function ConcernForm({ description, confirmLabel, initial, onSubmit, onClose }: 
             </div>
           ))}
         </fieldset>
-        {submit.isError && (
-          <div className="alert alert-danger mt-3 mb-0" role="alert">{getApiErrorMessage(submit.error, 'No se pudo guardar. Intenta de nuevo.')}</div>
+        {error != null && (
+          <div className="alert alert-danger mt-3 mb-0" role="alert">{getApiErrorMessage(error, 'No se pudo guardar. Intenta de nuevo.')}</div>
         )}
       </Modal.Body>
       <Modal.Footer>
-        <button type="button" className="btn btn-light" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn btn-primary" disabled={reason === null || submit.isPending}>
-          {submit.isPending ? 'Guardando…' : confirmLabel}
+        <button type="button" className="btn btn-light" onClick={onCancel} disabled={saving}>Cancelar</button>
+        <button type="submit" className="btn btn-primary" disabled={reason === null || saving || !open}>
+          {saving ? 'Guardando…' : confirmLabel}
         </button>
       </Modal.Footer>
     </form>
@@ -67,19 +75,42 @@ function ConcernForm({ description, confirmLabel, initial, onSubmit, onClose }: 
  * The reason from the list (Fase 24H): why a business reports a review, or why the platform hides it. A list and not a
  * text, so nobody writes about the customer.
  */
-export default function ConcernDialog({ title, ...form }: ConcernDialogProps) {
+export default function ConcernDialog({ title, onSubmit, onClose, ...form }: ConcernDialogProps) {
   const titleId = useId();
   // While it fades out it keeps its title and its form.
   const [shown, setShown] = useState(title);
   if (title !== null && title !== shown) setShown(title);
   const current = title ?? shown;
+  // Here and not in the form: the dialog does not close while what it sent is on its way, so the answer (and its error)
+  // reaches it and not one opened after it.
+  const submit = useMutation({
+    mutationFn: (reason: ReviewConcern) => onSubmit(reason),
+    onSuccess: onClose,
+  });
+  const close = () => {
+    if (submit.isPending) return;
+    // The next one starts without the error of this one.
+    submit.reset();
+    onClose();
+  };
+
   return (
-    <Modal show={title !== null} onHide={form.onClose} centered aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    <Modal show={title !== null} onHide={close} centered aria-labelledby={titleId}>
+      <Modal.Header closeButton={!submit.isPending}>
         <Modal.Title id={titleId} as="h2" className="h5">{current}</Modal.Title>
       </Modal.Header>
       {/* A new key for another review starts from its own reason. */}
-      {current !== null && <ConcernForm key={current} {...form} />}
+      {current !== null && (
+        <ConcernForm
+          key={current}
+          {...form}
+          open={title !== null}
+          saving={submit.isPending}
+          error={submit.error}
+          onSave={(reason) => submit.mutate(reason)}
+          onCancel={close}
+        />
+      )}
     </Modal>
   );
 }

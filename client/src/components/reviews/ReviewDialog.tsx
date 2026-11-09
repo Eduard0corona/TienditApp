@@ -18,33 +18,61 @@ function reviewQueryKeys(slug: string) {
   return [['me', 'reviews'], ['public-reviews', slug], ['public-menu', slug]] as const;
 }
 
-function ReviewForm({ business, review, onClose }: { business: ReviewedBusiness; review: MyReview | null; onClose: () => void }) {
-  const ids = useId();
-  const toast = useToast();
+/**
+ * Saving and deleting live in the dialog and not in its form: it does not close while what it sent is on its way, so the
+ * answer reaches it and not one opened after it. It closes with the answer, and what shows the review asks for it again
+ * behind it.
+ */
+function useReviewRefresh() {
   const queryClient = useQueryClient();
+  return (slug: string) => {
+    for (const queryKey of reviewQueryKeys(slug)) void queryClient.invalidateQueries({ queryKey });
+  };
+}
+
+function useSaveReview(onClose: () => void) {
+  const toast = useToast();
+  const refresh = useReviewRefresh();
+  return useMutation({
+    mutationFn: ({ business, body }: { business: ReviewedBusiness; editing: boolean; body: { rating: number; comment: string | null } }) =>
+      reviewsApi.saveMyReview(business.slug, body),
+    onSuccess: (_saved, { business, editing }) => {
+      toast.success(editing ? 'Guardamos los cambios de tu reseña.' : `Publicamos tu reseña de ${business.name}.`);
+      onClose();
+      refresh(business.slug);
+    },
+  });
+}
+
+function useRemoveReview(onClose: () => void) {
+  const toast = useToast();
+  const refresh = useReviewRefresh();
+  return useMutation({
+    mutationFn: (business: ReviewedBusiness) => reviewsApi.deleteMyReview(business.slug),
+    onSuccess: (_removed, business) => {
+      toast.success('Borraste tu reseña.');
+      onClose();
+      refresh(business.slug);
+    },
+  });
+}
+
+interface ReviewFormProps {
+  business: ReviewedBusiness;
+  review: MyReview | null;
+  /** False while it fades out: what it sent was answered, so it sends nothing else. */
+  open: boolean;
+  save: ReturnType<typeof useSaveReview>;
+  remove: ReturnType<typeof useRemoveReview>;
+  onCancel: () => void;
+}
+
+function ReviewForm({ business, review, open, save, remove, onCancel }: ReviewFormProps) {
+  const ids = useId();
   const [rating, setRating] = useState(review?.rating ?? 0);
   const [comment, setComment] = useState(review?.comment ?? '');
   const [deleting, setDeleting] = useState(false);
   const hidden = !!review?.hidden;
-  const refresh = () => Promise.all(reviewQueryKeys(business.slug).map((queryKey) => queryClient.invalidateQueries({ queryKey })));
-
-  // The dialog closes at once, and what shows the review asks for it again behind it.
-  const save = useMutation({
-    mutationFn: () => reviewsApi.saveMyReview(business.slug, { rating, comment: comment.trim() || null }),
-    onSuccess: () => {
-      toast.success(review ? 'Guardamos los cambios de tu reseña.' : `Publicamos tu reseña de ${business.name}.`);
-      onClose();
-      void refresh();
-    },
-  });
-  const remove = useMutation({
-    mutationFn: () => reviewsApi.deleteMyReview(business.slug),
-    onSuccess: () => {
-      toast.success('Borraste tu reseña.');
-      onClose();
-      void refresh();
-    },
-  });
   const busy = save.isPending || remove.isPending;
 
   return (
@@ -52,7 +80,9 @@ function ReviewForm({ business, review, onClose }: { business: ReviewedBusiness;
       onSubmit={(event) => {
         event.preventDefault();
         if (hidden || rating === 0 || busy) return;
-        save.mutate();
+        // Each starts without the error of the other: a delete that failed does not stay for the next time it opens.
+        remove.reset();
+        save.mutate({ business, editing: review !== null, body: { rating, comment: comment.trim() || null } });
       }}
     >
       <Modal.Body>
@@ -119,7 +149,7 @@ function ReviewForm({ business, review, onClose }: { business: ReviewedBusiness;
           <>
             <span className="me-auto small">¿Borrar tu reseña de {business.name}?</span>
             <button type="button" className="btn btn-light" onClick={() => setDeleting(false)} disabled={busy}>Volver</button>
-            <button type="button" className="btn btn-danger" onClick={() => remove.mutate()} disabled={busy}>
+            <button type="button" className="btn btn-danger" onClick={() => { save.reset(); remove.mutate(business); }} disabled={busy || !open}>
               {remove.isPending ? 'Borrando…' : 'Borrar'}
             </button>
           </>
@@ -130,9 +160,9 @@ function ReviewForm({ business, review, onClose }: { business: ReviewedBusiness;
                 Borrar reseña
               </button>
             )}
-            <button type="button" className="btn btn-light" onClick={onClose}>{hidden ? 'Cerrar' : 'Cancelar'}</button>
+            <button type="button" className="btn btn-light" onClick={onCancel} disabled={busy}>{hidden ? 'Cerrar' : 'Cancelar'}</button>
             {!hidden && (
-              <button type="submit" className="btn btn-primary" disabled={rating === 0 || busy}>
+              <button type="submit" className="btn btn-primary" disabled={rating === 0 || busy || !open}>
                 {save.isPending ? 'Guardando…' : review ? 'Guardar cambios' : 'Publicar'}
               </button>
             )}
@@ -160,10 +190,20 @@ export default function ReviewDialog({ business, onClose }: { business: Reviewed
     enabled: business !== null,
   });
   const review = mine.data?.review ?? null;
+  const save = useSaveReview(onClose);
+  const remove = useRemoveReview(onClose);
+  const busy = save.isPending || remove.isPending;
+  const close = () => {
+    if (busy) return;
+    // The next time it opens, without the error of this one.
+    save.reset();
+    remove.reset();
+    onClose();
+  };
 
   return (
-    <Modal show={business !== null} onHide={onClose} centered fullscreen="sm-down" aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    <Modal show={business !== null} onHide={close} centered fullscreen="sm-down" aria-labelledby={titleId}>
+      <Modal.Header closeButton={!busy}>
         <Modal.Title id={titleId} as="h2" className="h5">
           {review ? `Tu reseña de ${current?.name}` : `Califica a ${current?.name}`}
         </Modal.Title>
@@ -177,7 +217,15 @@ export default function ReviewDialog({ business, onClose }: { business: Reviewed
       ) : current && (review || mine.data?.canReview) ? (
         // Another business starts the form from what it keeps; the same one keeps what is being written, also while the
         // review is asked for again after a save (the dialog is gone by then).
-        <ReviewForm key={current.slug} business={current} review={review} onClose={onClose} />
+        <ReviewForm
+          key={current.slug}
+          business={current}
+          review={review}
+          open={business !== null}
+          save={save}
+          remove={remove}
+          onCancel={close}
+        />
       ) : (
         <Modal.Body>
           <p className="mb-0">Podrás calificar a {current?.name} cuando recibas un pedido o vayas a una cita con tu cuenta.</p>

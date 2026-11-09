@@ -1,7 +1,8 @@
 import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import { useIsFetching } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
-import { useSendCfdiByEmail, type CfdiEmail } from '../../api/invoicing';
+import { orderInvoicingKey, useSendCfdiByEmail, type CfdiEmail } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
 import { CfdiEmailDocument, CfdiEmailFailure, CfdiEmailKind } from '../../types';
 import { cfdiEmailLabel, isPlainEmail } from '../../utils/cfdi';
@@ -127,6 +128,8 @@ interface SendCfdiEmailButtonProps {
 /** «Enviar por correo» a stamped CFDI of the order's invoice: to the address typed, out from the queue. */
 export function SendCfdiEmailButton({ orderId, document, cfdiId, number, invoiceEmail, latestEmail, proposedEmail }: SendCfdiEmailButtonProps) {
   const [open, setOpen] = useState(false);
+  // While the order's invoicing is read again (after a send, too), it waits: it proposes what the invoice keeps now.
+  const reading = useIsFetching({ queryKey: orderInvoicingKey(orderId) }) > 0;
   const label = cfdiEmailLabel(document, number);
   return (
     <>
@@ -134,6 +137,7 @@ export function SendCfdiEmailButton({ orderId, document, cfdiId, number, invoice
         type="button"
         className="btn btn-sm btn-outline-secondary"
         aria-label={`Enviar por correo ${label}`}
+        disabled={reading}
         onClick={() => setOpen(true)}
       >
         Enviar por correo
@@ -192,9 +196,10 @@ function SendCfdiEmailModal({ orderId, document, cfdiId, label, invoiceEmail, in
   };
 
   return (
-    <Modal show onHide={onClose} centered aria-labelledby={titleId}>
+    // It stays open while what it sent is on its way, so the answer reaches it and not a dialog opened after it.
+    <Modal show onHide={() => !send.isPending && onClose()} centered aria-labelledby={titleId}>
       <form onSubmit={submit} noValidate>
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!send.isPending}>
           <Modal.Title id={titleId} as="h2" className="h5">Enviar por correo {label}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -233,7 +238,7 @@ function SendCfdiEmailModal({ orderId, document, cfdiId, label, invoiceEmail, in
           )}
         </Modal.Body>
         <Modal.Footer>
-          <button type="button" className="btn btn-light" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-light" onClick={onClose} disabled={send.isPending}>Cancelar</button>
           <button type="submit" className="btn btn-primary" disabled={!valid || send.isPending}>
             {send.isPending ? 'Enviando…' : 'Enviar'}
           </button>
