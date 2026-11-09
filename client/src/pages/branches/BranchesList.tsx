@@ -3,6 +3,7 @@ import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { branchesApi, type Branch } from '../../api/branchesApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -366,6 +367,7 @@ export default function BranchesList() {
             loading={branches.isLoading}
             emptyMessage="No hay sucursales."
             searchPlaceholder="Nombre, clave o ciudad"
+            activeFilters={countActiveFilters(activeFilter)}
             filters={(
               <DataTableFilter label="Estado" htmlFor="branches-filter">
                 <select

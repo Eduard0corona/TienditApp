@@ -560,7 +560,7 @@ test.describe('Pedidos', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/orders');
     await expect(page.getByRole('combobox', { name: 'Estado' })).toBeHidden();
-    await page.getByRole('button', { name: 'Filtros' }).click();
+    await page.getByRole('button', { name: /^Filtros( \(\d+\))?$/ }).click();
     await expect(page.getByRole('combobox', { name: 'Estado' })).toBeVisible();
     await snapPage(page, 'pedidos-telefono-filtros');
   });

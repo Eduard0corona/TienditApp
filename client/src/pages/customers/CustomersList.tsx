@@ -4,6 +4,7 @@ import { Modal } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import { countActiveFilters } from '../../components/common/countActiveFilters';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import CreditLimitModal from '../../components/customers/CreditLimitModal';
 import CustomerFiscalDataModal from '../../components/customers/CustomerFiscalDataModal';
@@ -204,6 +205,7 @@ export default function CustomersList() {
                 loading={loading}
                 emptyMessage="No hay clientes registrados."
                 searchPlaceholder="Nombre, teléfono o correo"
+                activeFilters={countActiveFilters(filterActive)}
                 filters={(
                   <DataTableFilter label="Estado" htmlFor="customers-status">
                     <select

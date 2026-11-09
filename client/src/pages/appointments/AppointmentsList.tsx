@@ -7,6 +7,7 @@ import { useArrivalChime } from '../../hooks/useArrivalChime';
 import PageTitle from '../../components/common/PageTitle';
 import ChimeSettingsButton from '../../components/common/ChimeSettingsButton';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import { countActiveFilters } from '../../components/common/countActiveFilters';
 import VisitProblem from '../../components/appointments/VisitProblem';
 import { appointmentsApi } from '../../api/appointmentsApi';
 import { employeesApi } from '../../api/employeesApi';
@@ -642,6 +643,7 @@ export default function AppointmentsList() {
             emptyMessage={view === 'upcoming' ? 'No hay citas de hoy en adelante.' : 'No hay citas anteriores.'}
             searchPlaceholder="Cliente, teléfono, servicio o persona"
             views={viewPicker}
+            activeFilters={countActiveFilters(placeFilter, statusFilter)}
             filters={(
               <>
                 <DataTableFilter label="Dónde" htmlFor="appointments-place">

@@ -5,6 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import PageTitle from '../../components/common/PageTitle';
 import ChimeSettingsButton from '../../components/common/ChimeSettingsButton';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { getApiErrorMessage } from '../../api/errors';
 import { quotesApi } from '../../api/quotesApi';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
@@ -166,6 +167,7 @@ export default function QuotesList() {
             emptyMessage={filter === QuoteListFilter.Open
               ? 'No tienes cotizaciones abiertas. Empieza una aquí o desde la cita de una visita en la Agenda.'
               : 'No hay cotizaciones con ese estado.'}
+            activeFilters={countActiveFilters(filter === QuoteListFilter.All ? null : filter)}
             filters={(
               <DataTableFilter label="Estado" htmlFor="quotes-filter">
                 <select

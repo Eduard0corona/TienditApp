@@ -157,7 +157,9 @@
     white-space: nowrap;
   }
 
+  /* Its own row, as when the filters filled the one above: hidden behind «Filtros», they no longer do. */
   .datatable-toolbar-end {
+    flex-basis: 100%;
     margin-left: 0;
   }
 }

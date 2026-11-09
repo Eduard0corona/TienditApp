@@ -1,4 +1,5 @@
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import { countActiveFilters } from '../../components/common/countActiveFilters';
 import type { InventoryKardexEntryDto, InventoryLocationDto, SupplyItemDto } from '../../types';
 import { formatUnitCost } from '../../utils/money';
 import { formatStockQuantity } from '../../utils/units';
@@ -33,6 +34,7 @@ export default function KardexTab({ list, supplyOptions, locations }: KardexTabP
       keyExtractor={(item) => item.movementLineId}
       loading={list.loading}
       emptyMessage="No hay movimientos para los filtros seleccionados."
+      activeFilters={countActiveFilters(list.filters.supplyId, list.filters.locationId, list.filters.fromDate, list.filters.toDate)}
       filters={(
         <>
           <DataTableFilter label="Insumo" htmlFor="inventorymanagement-insumo">

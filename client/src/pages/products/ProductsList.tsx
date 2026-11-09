@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type { ProductDto, CategoryDto, PaginatedList } from '../../types';
@@ -129,6 +130,7 @@ export default function ProductsList() {
                 loading={loading}
                 emptyMessage="No hay productos registrados."
                 searchPlaceholder="Nombre, SKU o código de barras"
+                activeFilters={countActiveFilters(filterCategory, filterAvailability)}
                 filters={(
                   <>
                     <DataTableFilter label="Categoría" htmlFor="products-category">

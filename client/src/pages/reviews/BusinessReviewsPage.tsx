@@ -5,6 +5,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { BusinessReviewsFilter, ReviewStatus } from '../../api/generated/enums';
 import { reviewsApi, type BusinessReview } from '../../api/reviewsApi';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import { countActiveFilters } from '../../components/common/countActiveFilters';
 import PageTitle from '../../components/common/PageTitle';
 import ConcernDialog from '../../components/reviews/ConcernDialog';
 import { ReviewContent, ReviewStatusChip } from '../../components/reviews/ReviewContent';
@@ -200,6 +201,7 @@ export default function BusinessReviewsPage() {
               onPageChange: setPage,
               onPageSizeChange: (size) => { setPageSize(size); setPage(1); },
             }}
+            activeFilters={countActiveFilters(filter === BusinessReviewsFilter.All ? null : filter)}
             filters={(
               <DataTableFilter label="Mostrar" htmlFor="reviews-filter">
                 <select

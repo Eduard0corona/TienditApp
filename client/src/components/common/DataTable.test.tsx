@@ -87,6 +87,30 @@ describe('DataTable', () => {
     expect(within(screen.getByRole('search')).getByRole('button', { name: 'Próximas' })).toBe(views);
   });
 
+  it('says on «Filtros» how many filters are set, as they wait behind it on a phone', () => {
+    const table = (activeFilters?: number) => (
+      <DataTable
+        data={rows(3)}
+        columns={[{ header: 'Nombre' }]}
+        keyExtractor={(row) => row.id}
+        renderRow={(row) => <td>{row.name}</td>}
+        activeFilters={activeFilters}
+        filters={(
+          <DataTableFilter label="Estado" htmlFor="test-status-count">
+            <select id="test-status-count" className="form-select form-select-sm"><option>Todos</option></select>
+          </DataTableFilter>
+        )}
+      />
+    );
+    const { rerender } = render(table(2));
+    expect(screen.getByRole('button', { name: 'Filtros (2)' })).toBeInTheDocument();
+
+    rerender(table(0));
+    expect(screen.getByRole('button', { name: 'Filtros' })).toBeInTheDocument();
+    rerender(table());
+    expect(screen.getByRole('button', { name: 'Filtros' })).toBeInTheDocument();
+  });
+
   it('shows no «Filtros» button for a list without filters', () => {
     render(
       <DataTable

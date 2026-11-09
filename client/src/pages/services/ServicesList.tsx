@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type {
@@ -309,6 +310,7 @@ export default function ServicesList() {
                 loading={loading}
                 emptyMessage="No hay servicios registrados."
                 searchPlaceholder="Nombre del servicio"
+                activeFilters={countActiveFilters(filterCategory, filterAvailability)}
                 filters={(
                   <>
                     <DataTableFilter label="Categoría" htmlFor="services-category">

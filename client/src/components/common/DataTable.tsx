@@ -45,6 +45,11 @@ interface DataTableProps<T> {
   views?: ReactNode;
   /** The screen's own filters, in the same bar as the search box (each one a `DataTableFilter`). */
   filters?: ReactNode;
+  /**
+   * How many of those filters have a value (not «Todos»), as `countActiveFilters` counts them. On a phone, where they wait
+   * behind «Filtros», the button says it: a list filtered out of sight («Desde» today in Pedidos) does not look complete.
+   */
+  activeFilters?: number;
   /** The action of the list (Nuevo producto) or a control of the screen, at the end of that bar. */
   toolbarEnd?: ReactNode;
 }
@@ -76,6 +81,7 @@ export default function DataTable<T>({
   searchMaxLength,
   views,
   filters,
+  activeFilters = 0,
   toolbarEnd,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState(initialSearch);
@@ -198,7 +204,7 @@ export default function DataTable<T>({
                 onClick={() => setFiltersOpen((open) => !open)}
               >
                 <i className="ri-filter-3-line" aria-hidden="true"></i>
-                Filtros
+                {activeFilters > 0 ? `Filtros (${activeFilters})` : 'Filtros'}
               </button>
             </>
           )}
