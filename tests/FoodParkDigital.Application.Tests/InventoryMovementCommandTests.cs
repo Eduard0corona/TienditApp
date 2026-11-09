@@ -91,7 +91,7 @@ public class InventoryMovementCommandTests
         }, CancellationToken.None));
     }
 
-    // Bodies as the inventory screen posts them: the enums travel as the numbers of client/src/types/index.ts.
+    // Bodies as the inventory screen posts them: the enums travel as the numbers of client/src/api/generated/enums.
     [Theory]
     [InlineData("Entrada / Compra", 1, 1, 13)]
     [InlineData("Salida / Consumo", 2, 4, 7)]

@@ -340,9 +340,10 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - **Durante un regreso a la 27B, o mientras conviven las dos versiones,** la anterior enseña el motivo nuevo como «12» y no tiene la revisión. No hay migración.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
-- Componentes frontend de más de 1,000 líneas: Vender (`SellPage.tsx`, 1,096, que desde la Fase 15 coordina la venta y deja sus partes junto a ella), y `types/index.ts` monolítico (2,189). Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.
+- Componentes frontend de más de 1,000 líneas: Vender (`SellPage.tsx`, 1,096), que desde la Fase 15 coordina la venta y deja sus partes junto a ella. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.
   - Resuelto en la Fase 30H: Pedidos (`OrdersList.tsx`) bajó de 1,431 a 649 líneas. La fila, el detalle (con su sección de servicio y sus registros de dinero), el cobro y el recibo viven en su archivo, y lo que no depende de React en `ordersListModel.ts`, con pruebas de sus reglas. Lo que se ve es lo mismo: las escenas no cambian contra la 30G.
   - Resuelto en la Fase 30I: Nuevo pedido (`OrdersCart.tsx`) bajó de 1,069 a 397 líneas. La recepción de un servicio vive en `useServiceIntake`, el catálogo, la recepción (con sus piezas) y el carrito en su archivo, y lo que no depende de React en `ordersCartModel.ts`, con pruebas de sus reglas. Dos escenas nuevas (un servicio y un producto en el carrito, en escritorio y teléfono) se tomaron del código anterior y no cambian.
+  - Resuelto en la Fase 30J: `types/index.ts` (2,189 líneas) se dividió en un archivo por contexto (`common`, `account`, `tenant`, `catalog`, `inventory`, `orders`, `invoicing` y los demás); `index.ts` solo los reexporta, así que nada que importe de `types` cambió y el `dist` compilado es idéntico byte por byte. Lo que el archivo tenía en la sección de otra área pasó a la suya: los enums de los ajustes del negocio a `tenant`, los de facturas a `invoicing`, la ficha y los datos fiscales del cliente a `customers`, las métricas de Inicio a `reports` y el alta de un cliente a `account`. `ClientEnumContractTests` lee ahora todos los archivos de `src/types`, no solo `index.ts`.
 - Las pruebas del cliente (Vitest y Testing Library, desde la Fase 5) cubren utilidades de dinero, unidades, acceso, errores, IVA, mensajes de WhatsApp y componentes con existencias; faltan pruebas de pantallas completas y de extremo a extremo. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
 - El slot de staging con swap y aprobación está listo en el workflow, pero sin activar (Fase 7, [despliegue](../development/deploy-azure.md)): requiere plan Standard o superior, OIDC, crear el slot, la credencial federada del environment `production` y sus revisores. Mientras tanto cada push a `master` despliega directo a producción; la prueba de humo confirma la versión nueva y que la base tenga sus migraciones (`/health/schema`).
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
@@ -660,7 +661,7 @@ Pendientes detectados en la Fase 2:
 - Un envío a Meta que expira puede haberse entregado: el reintento puede duplicar un aviso o un mensaje de campaña (Meta no ofrece idempotencia en envíos).
 - Los índices únicos filtrados nuevos (deduplicación de mensajes, caja abierta por cajero, bajas por número) tienen pruebas InMemory y se crearon sin errores en SQL Server 2022 al probar los scripts de producción, y el CI los crea en cada PR (job `Migrations`); faltan pruebas de concurrencia contra SQL Server.
 - `OutgoingMessages` no tiene retención y las campañas no respetan horario de envío.
-- Pantallas aún sin TanStack Query ni tipos generados; conviven tipos manuales (`types/index.ts`) y generados.
+- Pantallas aún sin TanStack Query ni tipos generados; conviven tipos manuales (`src/types`) y generados.
 - La actualización de pantallas por SignalR sigue siendo best-effort.
 
 ## Resuelto el 2026-10-04 (Fase 3: crecer)
@@ -739,7 +740,7 @@ Pendientes detectados en la Fase 3:
 
 ## Resuelto el 2026-10-05 (Fase 7: contrato, capas y entrega)
 
-- Enums con nombre en el contrato (`x-enum-varnames`, `x-enum-flags`) y generados en el cliente (`src/api/generated/enums.ts`, `npm run api:types`); `types/index.ts` ya no copia ninguno y CI revisa que el archivo esté al día.
+- Enums con nombre en el contrato (`x-enum-varnames`, `x-enum-flags`) y generados en el cliente (`src/api/generated/enums.ts`, `npm run api:types`); `src/types` ya no copia ninguno y CI revisa que el archivo esté al día.
 - Reglas de negocio de Infrastructure a Application: respuestas automáticas, búsqueda y reclamo de clientes temporales y los estados de entrega de WhatsApp (`ApplyWhatsAppStatusesCommand`, en el alcance del negocio dueño del número). Infrastructure solo adapta (Meta, enlaces de la app, correo).
 - Inventario dividido por pestaña y diálogo (de 2,494 líneas a archivos de 60–360). De paso se corrigieron:
   - la unidad de las existencias de productos vendidos por rebanada, libra, onza, par, rollo, ración, sesión o servicio, que se mostraba como número;
