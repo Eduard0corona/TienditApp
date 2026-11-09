@@ -104,12 +104,15 @@ function useRefreshCounts() {
   return () => client.invalidateQueries({ queryKey: countKeys.all });
 }
 
-/** Starts the count of a location: what it has stock of (all or one category), or the items chosen. */
+/**
+ * Starts the count of a location: what it has stock of (all or one category), or the items chosen. Its dialog does not
+ * close while the count is on its way, so it does not wait for the list either: the list is read again behind it.
+ */
 export function useStartInventoryCount() {
   const refresh = useRefreshCounts();
   return useMutation({
     mutationFn: (body: StartInventoryCountBody) => apiRequest('post', '/api/v1/inventory/counts', { body }),
-    onSuccess: refresh,
+    onSuccess: () => { void refresh(); },
   });
 }
 

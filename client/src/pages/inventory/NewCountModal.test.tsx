@@ -1,8 +1,9 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { countKeys } from '../../api/inventoryCounts';
 import { apiRequest } from '../../api/typedClient';
 import { InventoryCountStatus, type InventoryLocationDto, type SupplyItemDto } from '../../types';
 import NewCountModal from './NewCountModal';
@@ -117,5 +118,27 @@ describe('NewCountModal', () => {
     await user.dblClick(within(screen.getByRole('dialog', { name: 'Nuevo conteo' })).getByRole('button', { name: 'Empezar conteo' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(request.mock.calls.filter(([method]) => method === 'post')).toHaveLength(1);
+  });
+  it('starts the count with the answer, before the list of counts is read again', async () => {
+    const user = userEvent.setup();
+    // The list of counts is on screen; read again after the count starts, it does not come back.
+    const list = vi.fn().mockResolvedValueOnce([]).mockReturnValue(new Promise(() => undefined));
+    function CountsList() {
+      useQuery({ queryKey: [...countKeys.all, 'list'], queryFn: list });
+      return null;
+    }
+    const onStarted = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CountsList />
+        <NewCountModal show activeLocations={LOCATIONS} supplyOptions={SUPPLIES} onHide={vi.fn()} onStarted={onStarted} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Empezar conteo' }));
+
+    await waitFor(() => expect(onStarted).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' })));
+    expect(list).toHaveBeenCalledTimes(2);
   });
 });
