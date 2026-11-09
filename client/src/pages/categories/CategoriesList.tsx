@@ -4,7 +4,6 @@ import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { categoriesApi } from '../../api/categoriesApi';
 import type {
   CategoryDto,
@@ -212,7 +211,7 @@ export default function CategoriesList() {
                 loading={categoriesQuery.isLoading}
                 emptyMessage={showArchived ? 'No hay categorías registradas.' : 'No hay categorías activas.'}
                 searchPlaceholder="Nombre o descripción"
-                activeFilters={countActiveFilters(showArchived)}
+                filterValues={[showArchived]}
                 filters={(
                   <div className="form-check form-switch mb-1">
                     <input

@@ -2,7 +2,6 @@ import type { Dispatch, SetStateAction } from 'react';
 import { getApiErrorMessage } from '../../api/errors';
 import { useInventoryTransfers, type InventoryTransfersFilter } from '../../api/inventoryTransfers';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import type { InventoryLocationDto } from '../../types';
 import { formatMoney } from '../../utils/money';
 import { formatDateTime } from './inventoryLabels';
@@ -44,7 +43,7 @@ export default function TransfersTab({ locations, filter, onFilterChange: setFil
           ? 'Ninguna transferencia coincide con los filtros.'
           : 'Todavía no hay transferencias. Haz una para llevar artículos de una ubicación a otra.'}
         searchPlaceholder="Buscar por folio o ubicación"
-        activeFilters={countActiveFilters(filter.locationId)}
+        filterValues={[filter.locationId]}
         filters={(
           <DataTableFilter label="Ubicación" htmlFor="transferencias-ubicacion">
             <select

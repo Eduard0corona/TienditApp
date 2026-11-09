@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { auditApi } from '../../api/auditApi';
 import type { AuditLogDto, PaginatedList } from '../../types';
 import { formatInBusinessZone, businessDayEnd, businessDayStart } from '../../utils/dates';
@@ -88,7 +87,7 @@ export default function AuditLogs() {
             keyExtractor={(item) => item.id}
             loading={loading}
             emptyMessage="No hay actividad registrada con estos filtros."
-            activeFilters={countActiveFilters(entityName, action, fromDate, toDate)}
+            filterValues={[entityName, action, fromDate, toDate]}
             filters={(
               <>
                 <DataTableFilter label="Entidad" htmlFor="auditlogs-entidad">

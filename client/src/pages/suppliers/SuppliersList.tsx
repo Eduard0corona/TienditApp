@@ -2,7 +2,6 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { suppliersApi } from '../../api/suppliersApi';
 import type { CreateSupplierRequest, PaginatedList, SupplierDto, UpdateSupplierRequest } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
@@ -177,7 +176,7 @@ export default function SuppliersList() {
             loading={loading}
             emptyMessage="No hay proveedores registrados."
             searchPlaceholder="Nombre, contacto, teléfono o correo"
-            activeFilters={countActiveFilters(activeFilter)}
+            filterValues={[activeFilter]}
             filters={(
               <DataTableFilter label="Estado" htmlFor="supplierslist-estado">
                 <select id="supplierslist-estado"

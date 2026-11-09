@@ -7,7 +7,6 @@ import {
   type InventoryCountLinesFilter,
 } from '../../api/inventoryCounts';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { getUnitLabel } from '../../utils/units';
 import { parseCountedQuantity } from './countEntry';
 
@@ -171,7 +170,7 @@ export default function CountSheet({ countId }: CountSheetProps) {
         loading={lines.isLoading}
         emptyMessage={filter.pending ? 'Ya contaste todos los artículos.' : 'El conteo no tiene artículos.'}
         searchPlaceholder="Buscar o escanear un código"
-        activeFilters={countActiveFilters(filter.pending)}
+        filterValues={[filter.pending]}
         filters={(
           <DataTableFilter label="Mostrar" htmlFor="conteo-mostrar">
             <select

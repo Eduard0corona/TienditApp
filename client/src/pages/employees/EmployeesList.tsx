@@ -2,7 +2,6 @@ import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import PageTitle from '../../components/common/PageTitle';
 import EmployeeFormModal from '../../components/employees/EmployeeFormModal';
 import InvitationShare from '../../components/employees/InvitationShare';
@@ -139,7 +138,7 @@ export default function EmployeesList() {
             loading={employees.isLoading}
             emptyMessage="Nadie en el equipo con ese filtro."
             searchPlaceholder="Nombre, correo o teléfono"
-            activeFilters={countActiveFilters(status)}
+            filterValues={[status]}
             filters={(
               <DataTableFilter label="Estado" htmlFor="employees-status">
                 <select

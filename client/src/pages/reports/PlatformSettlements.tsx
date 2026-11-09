@@ -9,7 +9,6 @@ import {
   type PlatformSettlementFilters,
 } from '../../api/platformSettlements';
 import DataTable, { DataTableFilter, type DataTableColumn } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import PageTitle from '../../components/common/PageTitle';
 import { describePeriod } from '../../components/reports/reportPeriods';
 import { getSettlementStatusChip, getSettlementStatusLabel } from '../../components/reports/settlementLabels';
@@ -135,7 +134,7 @@ export default function PlatformSettlements() {
               },
               onSearchChange: (search) => filter({ search }),
             }}
-            activeFilters={countActiveFilters(filters.channel, filters.status)}
+            filterValues={[filters.channel, filters.status]}
             filters={(
               <>
                 <DataTableFilter label="Plataforma" htmlFor={`${id}-platform`}>

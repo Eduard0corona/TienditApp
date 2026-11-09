@@ -46,10 +46,12 @@ interface DataTableProps<T> {
   /** The screen's own filters, in the same bar as the search box (each one a `DataTableFilter`). */
   filters?: ReactNode;
   /**
-   * How many of those filters have a value (not «Todos»), as `countActiveFilters` counts them. On a phone, where they wait
-   * behind «Filtros», the button says it: a list filtered out of sight («Desde» today in Pedidos) does not look complete.
+   * The values of those filters. On a phone, where they wait behind «Filtros», the button says how many are set: a list
+   * filtered out of sight («Desde» today in Pedidos) does not look complete. Set is what is not empty, null, undefined or
+   * false (a switch that is off); zero is set, as it is the first value of many enums. A «Todos» of another value is
+   * passed as null.
    */
-  activeFilters?: number;
+  filterValues?: unknown[];
   /** The action of the list (Nuevo producto) or a control of the screen, at the end of that bar. */
   toolbarEnd?: ReactNode;
 }
@@ -81,13 +83,14 @@ export default function DataTable<T>({
   searchMaxLength,
   views,
   filters,
-  activeFilters = 0,
+  filterValues = [],
   toolbarEnd,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState(initialSearch);
   // On a phone the filters wait behind «Filtros» (Fase 30G): with 16 px fields they took up to five rows above the list.
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
+  const activeFilters = filterValues.filter((value) => value !== '' && value !== null && value !== undefined && value !== false).length;
   const [clientPage, setClientPage] = useState(1);
   const [clientPageSize, setClientPageSize] = useState(pageSizeOptions[0]);
 

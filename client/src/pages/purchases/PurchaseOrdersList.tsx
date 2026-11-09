@@ -2,7 +2,6 @@ import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { purchaseOrdersApi } from '../../api/purchaseOrdersApi';
 import { suppliersApi } from '../../api/suppliersApi';
 import { inventoryApi } from '../../api/inventoryApi';
@@ -254,7 +253,7 @@ export default function PurchaseOrdersList() {
             keyExtractor={(item) => item.id}
             loading={loading}
             emptyMessage="No hay compras registradas."
-            activeFilters={countActiveFilters(statusFilter)}
+            filterValues={[statusFilter]}
             filters={(
               <DataTableFilter label="Estado" htmlFor="purchaseorderslist-estado">
                 <select id="purchaseorderslist-estado"

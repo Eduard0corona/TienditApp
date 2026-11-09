@@ -1,5 +1,4 @@
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import type { InventoryMovementDto } from '../../types';
 import { formatMoney } from '../../utils/money';
 import {
@@ -36,7 +35,7 @@ export default function MovementsTab({ list, onOpenDetail }: MovementsTabProps) 
       keyExtractor={(item) => item.id}
       loading={list.loading}
       emptyMessage="No hay movimientos registrados."
-      activeFilters={countActiveFilters(list.filters.type, list.filters.reason, list.filters.fromDate, list.filters.toDate)}
+      filterValues={[list.filters.type, list.filters.reason, list.filters.fromDate, list.filters.toDate]}
       filters={(
         <>
           <DataTableFilter label="Tipo" htmlFor="inventorymanagement-tipo">

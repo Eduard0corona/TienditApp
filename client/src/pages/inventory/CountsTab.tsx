@@ -2,7 +2,6 @@ import type { Dispatch, SetStateAction } from 'react';
 import { getApiErrorMessage } from '../../api/errors';
 import { useInventoryCounts, type InventoryCountsFilter } from '../../api/inventoryCounts';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import { InventoryCountStatus, type InventoryLocationDto } from '../../types';
 import { COUNT_STATUS_OPTIONS, formatDateTime, getCountStatusChip, getCountStatusLabel } from './inventoryLabels';
 
@@ -43,7 +42,7 @@ export default function CountsTab({ locations, filter, onFilterChange: setFilter
           ? 'Ningún conteo coincide con los filtros.'
           : 'Todavía no hay conteos. Empieza uno para cuadrar lo que hay en el anaquel con lo que dice el sistema.'}
         searchPlaceholder="Buscar por folio o ubicación"
-        activeFilters={countActiveFilters(filter.status, filter.locationId)}
+        filterValues={[filter.status, filter.locationId]}
         filters={(
           <>
             <DataTableFilter label="Estado" htmlFor="conteos-estado">

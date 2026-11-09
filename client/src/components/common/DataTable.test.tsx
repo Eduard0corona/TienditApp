@@ -88,13 +88,13 @@ describe('DataTable', () => {
   });
 
   it('says on «Filtros» how many filters are set, as they wait behind it on a phone', () => {
-    const table = (activeFilters?: number) => (
+    const table = (filterValues?: unknown[]) => (
       <DataTable
         data={rows(3)}
         columns={[{ header: 'Nombre' }]}
         keyExtractor={(row) => row.id}
         renderRow={(row) => <td>{row.name}</td>}
-        activeFilters={activeFilters}
+        filterValues={filterValues}
         filters={(
           <DataTableFilter label="Estado" htmlFor="test-status-count">
             <select id="test-status-count" className="form-select form-select-sm"><option>Todos</option></select>
@@ -102,10 +102,11 @@ describe('DataTable', () => {
         )}
       />
     );
-    const { rerender } = render(table(2));
-    expect(screen.getByRole('button', { name: 'Filtros (2)' })).toBeInTheDocument();
+    // Set: a date, a switch that is on, and zero (the first value of many enums, OrderStatus.Pending).
+    const { rerender } = render(table(['2026-10-04', true, 0, '', null, undefined, false]));
+    expect(screen.getByRole('button', { name: 'Filtros (3)' })).toBeInTheDocument();
 
-    rerender(table(0));
+    rerender(table(['', null, undefined, false]));
     expect(screen.getByRole('button', { name: 'Filtros' })).toBeInTheDocument();
     rerender(table());
     expect(screen.getByRole('button', { name: 'Filtros' })).toBeInTheDocument();

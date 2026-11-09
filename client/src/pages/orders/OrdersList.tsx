@@ -5,7 +5,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import ChimeSettingsButton from '../../components/common/ChimeSettingsButton';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import ChannelBadge from '../../components/common/ChannelBadge';
 import StatusChip from '../../components/common/StatusChip';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
@@ -591,7 +590,7 @@ export default function OrdersList() {
                   : fromDate || toDate ? 'No hay pedidos en estas fechas.' : 'No hay pedidos con estos filtros.'}
                 searchPlaceholder="Folio, cliente o teléfono"
                 initialSearch={initialSearch}
-                activeFilters={countActiveFilters(selectedOrderType, selectedStatus, selectedChannel, fromDate, toDate)}
+                filterValues={[selectedOrderType, selectedStatus, selectedChannel, fromDate, toDate]}
                 filters={(
                   <>
                     {mixesOrderTypes && (

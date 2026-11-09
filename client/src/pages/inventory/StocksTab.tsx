@@ -1,5 +1,4 @@
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import type { InventoryLocationDto, InventoryStockDto } from '../../types';
 import { formatUnitCost } from '../../utils/money';
 import { formatStockQuantity, getUnitLabel } from '../../utils/units';
@@ -31,7 +30,7 @@ export default function StocksTab({ list, locations }: StocksTabProps) {
       keyExtractor={(item) => item.stockId}
       loading={list.loading}
       emptyMessage="No hay existencias registradas."
-      activeFilters={countActiveFilters(list.filters.locationId, list.filters.lowStockOnly)}
+      filterValues={[list.filters.locationId, list.filters.lowStockOnly]}
       filters={(
         <>
           <DataTableFilter label="Ubicación" htmlFor="inventorymanagement-ubicacion">

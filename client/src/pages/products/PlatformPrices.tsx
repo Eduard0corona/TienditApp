@@ -5,7 +5,6 @@ import { getApiErrorMessage } from '../../api/errors';
 import { usePlatformPrices, useSavePlatformPrices } from '../../api/platformPrices';
 import { useDeliveryPlatformChannels } from '../../api/queries';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import PageTitle from '../../components/common/PageTitle';
 import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -292,7 +291,7 @@ export default function PlatformPrices() {
                   </select>
                 </DataTableFilter>
             )}
-            activeFilters={countActiveFilters(category)}
+            filterValues={[category]}
             filters={(
                 <DataTableFilter label="Categoría" htmlFor={`${filterId}-category`}>
                   <select

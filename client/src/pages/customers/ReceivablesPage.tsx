@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import CustomerAccountModal from '../../components/customers/CustomerAccountModal';
 import CreditTermModal from '../../components/customers/CreditTermModal';
 import CreditRemindersModal from '../../components/customers/CreditRemindersModal';
@@ -123,7 +122,7 @@ export default function ReceivablesPage() {
               : search ? 'Nadie que coincida te debe.' : 'Nadie te debe: los pedidos entregados están pagados.'}
             searchPlaceholder="Nombre o teléfono"
             searchMaxLength={100}
-            activeFilters={countActiveFilters(overdueOnly)}
+            filterValues={[overdueOnly]}
             filters={(
               <>
                 <DataTableFilter label="Ordenar" htmlFor="receivables-sort">

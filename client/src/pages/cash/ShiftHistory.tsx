@@ -2,7 +2,6 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import CashCutTicket from '../../components/cash/CashCutTicket';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import PrintButton from '../../components/common/PrintButton';
 import WhatsAppLink from '../../components/common/WhatsAppLink';
 import type { Branch } from '../../api/branchesApi';
@@ -145,7 +144,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
           keyExtractor={(session) => session.id}
           loading={loading}
           emptyMessage="No hay turnos con estos filtros."
-          activeFilters={countActiveFilters(fromDate, toDate, branchId, onlyWithDifference)}
+          filterValues={[fromDate, toDate, branchId, onlyWithDifference]}
           filters={(
             <>
               <DataTableFilter label="Desde" htmlFor="shifts-from">

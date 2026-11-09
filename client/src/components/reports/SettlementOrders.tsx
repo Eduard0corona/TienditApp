@@ -7,7 +7,6 @@ import { getCollectedByLabel } from '../../utils/labels';
 import { formatMoney, toCents } from '../../utils/money';
 import { placementOf } from './settlementEdits';
 import DataTable, { DataTableFilter, type DataTableColumn } from '../common/DataTable';
-import { countActiveFilters } from '../common/countActiveFilters';
 import StatusChip from '../common/StatusChip';
 
 type Shown = 'all' | 'picked' | 'unpicked';
@@ -76,7 +75,7 @@ export default function SettlementOrders({ platform, orders, from, to, saved, pi
         || (order.externalOrderId ?? '').toLowerCase().includes(search)
         || order.orderNumber.toLowerCase().includes(search)}
       pageSizeOptions={PAGE_SIZES}
-      activeFilters={countActiveFilters(shown === 'all' ? null : shown)}
+      filterValues={[shown === 'all' ? null : shown]}
       filters={picking && (
         <DataTableFilter label="Mostrar" htmlFor={`${id}-shown`}>
           <select id={`${id}-shown`} className="form-select form-select-sm" value={shown} onChange={(event) => setShown(event.target.value as Shown)}>

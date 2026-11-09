@@ -13,7 +13,6 @@ import {
   type IssuedCfdiSummary,
 } from '../../api/invoicing';
 import DataTable, { DataTableFilter, type DataTableColumn } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import PageTitle from '../../components/common/PageTitle';
 import { AccountantEmailStatus, SendToAccountantButton } from '../../components/invoicing/AccountantEmails';
 import { globalPeriodLabel } from '../../components/invoicing/globalPeriod';
@@ -285,7 +284,7 @@ export default function IssuedCfdis() {
             searchPlaceholder="Buscar folio, UUID, RFC, nombre o pedido"
             searchMaxLength={MAX_SEARCH_LENGTH}
             pageSizeOptions={PAGE_SIZES}
-            activeFilters={countActiveFilters(kind, status)}
+            filterValues={[kind, status]}
             filters={(
               <>
                 <DataTableFilter label="Tipo" htmlFor="issued-cfdis-kind">

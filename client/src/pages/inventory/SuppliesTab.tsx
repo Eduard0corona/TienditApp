@@ -1,5 +1,4 @@
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
-import { countActiveFilters } from '../../components/common/countActiveFilters';
 import type { SupplyItemDto } from '../../types';
 import { formatUnitCost } from '../../utils/money';
 import { formatStockQuantity, getUnitLabel } from '../../utils/units';
@@ -32,7 +31,7 @@ export default function SuppliesTab({ list, onEdit, onToggleActive }: SuppliesTa
       keyExtractor={(item) => item.id}
       loading={list.loading}
       emptyMessage="No hay insumos registrados."
-      activeFilters={countActiveFilters(list.filters.active, list.filters.lowStockOnly)}
+      filterValues={[list.filters.active, list.filters.lowStockOnly]}
       filters={(
         <>
           <DataTableFilter label="Estado" htmlFor="inventorymanagement-estado">
