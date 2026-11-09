@@ -245,7 +245,7 @@ export default function PaymentComplementList({
                             type="button"
                             className="btn btn-sm btn-outline-danger"
                             aria-label={`Cancelar complemento ${complement.number}`}
-                            disabled={reading}
+                            disabled={changing || reading}
                             onClick={() => setCancelling(complement)}
                           >
                             Cancelar complemento

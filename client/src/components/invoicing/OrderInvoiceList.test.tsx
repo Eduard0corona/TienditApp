@@ -193,6 +193,33 @@ describe('OrderInvoiceList', () => {
     expect(apiRequest).toHaveBeenCalledTimes(1);
   });
 
+  it('offers neither another cancellation nor a send while one is cancelled with relation', async () => {
+    vi.mocked(apiRequest).mockReset();
+    vi.mocked(apiRequest).mockReturnValue(new Promise(() => undefined) as never);
+    // Past the 72 hours, the replaced one offers to be cancelled with relation and without it.
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <OrderInvoiceList
+            orderId="o-1"
+            canCancel
+            whatsAppConnected
+            invoices={[
+              { ...F7, id: 'inv-8', number: 'F-8', replacesInvoiceId: 'inv-7', replacesNumber: 'F-7' },
+              { ...F7, replacedByInvoiceId: 'inv-8', replacedByNumber: 'F-8', awaitsReplacedCancellation: false },
+            ]}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Cancelar factura F-7' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar con relación la factura F-7' }));
+
+    expect(screen.getByRole('button', { name: 'Cancelar factura F-7' })).toBeDisabled();
+    for (const send of screen.getAllByRole('button', { name: /^Enviar por (correo|WhatsApp)/ })) expect(send).toBeDisabled();
+  });
+
   it('stays open while the cancellation is on its way, and closes with the answer before the invoicing is read again', async () => {
     const user = userEvent.setup();
     let cancelled: (value: unknown) => void = () => undefined;

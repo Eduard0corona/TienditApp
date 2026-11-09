@@ -8,6 +8,7 @@ import { CfdiEmailDocument, OutgoingMessageStatus } from '../../types';
 import { cfdiEmailLabel } from '../../utils/cfdi';
 import { endSentence, formatDateTime } from '../../utils/dates';
 import { isSamePhone, isTypedPhone, localPhone } from '../../utils/phones';
+import { useChangingOrderInvoicing } from './changingOrderInvoicing';
 
 interface CfdiWhatsAppStatusProps {
   /** The CFDI's latest WhatsApp messages, the newest first. */
@@ -78,8 +79,10 @@ export function SendCfdiWhatsAppButton({
   orderId, document, cfdiId, number, invoiceWhatsApp, latestWhatsApp, proposedWhatsApp,
 }: SendCfdiWhatsAppButtonProps) {
   const [open, setOpen] = useState(false);
-  // While the order's invoicing is read again (after a send, too), it waits: it proposes what the invoice keeps now.
+  // While the order's invoicing is read again (after a send, too), it waits: it proposes what the invoice keeps now. While
+  // a change of it is on its way, nothing else is sent from its dialog.
   const reading = useIsFetching({ queryKey: orderInvoicingKey(orderId) }) > 0;
+  const changing = useChangingOrderInvoicing(orderId);
   const label = cfdiEmailLabel(document, number);
   return (
     <>
@@ -87,7 +90,7 @@ export function SendCfdiWhatsAppButton({
         type="button"
         className="btn btn-sm btn-outline-secondary"
         aria-label={`Enviar por WhatsApp ${label}`}
-        disabled={reading}
+        disabled={changing || reading}
         onClick={() => setOpen(true)}
       >
         Enviar por WhatsApp

@@ -333,6 +333,21 @@ describe('CreditNoteList', () => {
     expect(apiRequest).toHaveBeenCalledTimes(1);
   });
 
+  it('offers neither a cancellation nor a send while a credit note is issued', async () => {
+    answer(() => new Promise(() => undefined));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CreditNoteList orderId="o-1" adjustments={[REFUND, WRITE_OFF]} invoices={[F3]} canCancel whatsAppConnected />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-1' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Emitir ahora la nota de crédito de la condonación/ }));
+
+    expect(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-1' })).toBeDisabled();
+    for (const send of screen.getAllByRole('button', { name: /^Enviar por (correo|WhatsApp)/ })) expect(send).toBeDisabled();
+  });
+
   it('stays open while the cancellation is on its way, and closes with the answer before the invoicing is read again', async () => {
     const user = userEvent.setup();
     let cancelled: (value: unknown) => void = () => undefined;

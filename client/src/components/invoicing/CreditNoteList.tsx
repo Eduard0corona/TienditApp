@@ -275,7 +275,7 @@ export default function CreditNoteList({
                             type="button"
                             className="btn btn-sm btn-outline-danger"
                             aria-label={`Cancelar nota de crédito ${note.number}`}
-                            disabled={reading}
+                            disabled={changing || reading}
                             onClick={() => setCancelling({ note, kind: adjustment.kind })}
                           >
                             Cancelar nota de crédito

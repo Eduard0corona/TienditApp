@@ -271,6 +271,21 @@ describe('PaymentComplementList', () => {
     expect(apiRequest).toHaveBeenCalledTimes(1);
   });
 
+  it('offers neither a cancellation nor a send while a complement is issued', async () => {
+    answer(() => new Promise(() => undefined));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <PaymentComplementList orderId="o-1" payments={[FIRST, SECOND]} inInstallments canCancel whatsAppConnected />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Cancelar complemento P-1' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Emitir ahora el complemento del cobro del/ }));
+
+    expect(screen.getByRole('button', { name: 'Cancelar complemento P-1' })).toBeDisabled();
+    for (const send of screen.getAllByRole('button', { name: /^Enviar por (correo|WhatsApp)/ })) expect(send).toBeDisabled();
+  });
+
   it('stays open while the cancellation is on its way, and closes with the answer before the invoicing is read again', async () => {
     const user = userEvent.setup();
     let cancelled: (value: unknown) => void = () => undefined;
