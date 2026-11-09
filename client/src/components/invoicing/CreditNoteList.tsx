@@ -24,6 +24,7 @@ import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
 import { CfdiWhatsAppStatus, SendCfdiWhatsAppButton } from './CfdiWhatsApps';
 import StuckStampNote from './StuckStampNote';
+import { useChangingOrderInvoicing } from './changingOrderInvoicing';
 
 interface CreditNoteListProps {
   orderId: string;
@@ -91,8 +92,10 @@ export default function CreditNoteList({
   const issue = useIssueCreditNote(orderId);
   const retry = useRetryCreditNote(orderId);
   const [cancelling, setCancelling] = useState<Cancelling | null>(null);
-  // While the order's invoicing is read again (after a cancellation, too), it is not offered from what it said before.
+  // While the order's invoicing is read again (after any change, which does not wait for it), nothing is offered from what
+  // it said before; while a change of it is on its way (from here or from a dialog opened before), nothing else is sent.
   const reading = useIsFetching({ queryKey: orderInvoicingKey(orderId) }) > 0;
+  const changing = useChangingOrderInvoicing(orderId);
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const issueFor = async (adjustment: OrderAdjustment) => {
@@ -147,7 +150,8 @@ export default function CreditNoteList({
       <ul className="list-unstyled mb-0">
         {adjustments.map((adjustment) => {
           const { name, ofIt } = adjustmentNames(adjustment);
-          const issuing = issue.isPending && issue.variables?.adjustmentId === adjustment.adjustmentId;
+          // «Emitiendo…» until the invoicing says how it went.
+          const issuing = issue.variables?.adjustmentId === adjustment.adjustmentId && (issue.isPending || (issue.isSuccess && reading));
           const issueLabel = adjustment.creditNotes.length === 0 ? 'Emitir ahora' : 'Emitir otra vez';
           const detail = adjustment.kind === CreditNoteAdjustment.Refund
             ? (adjustment.method != null ? getPaymentMethodLabel(adjustment.method) : null)
@@ -259,7 +263,7 @@ export default function CreditNoteList({
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-secondary"
-                            disabled={retry.isPending}
+                            disabled={changing || reading}
                             aria-label={`Volver a pedir el timbre de la nota de crédito ${note.number}`}
                             onClick={() => void askAgain(note)}
                           >
@@ -287,7 +291,7 @@ export default function CreditNoteList({
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-secondary mt-2"
-                  disabled={issue.isPending}
+                  disabled={changing || reading}
                   aria-label={`${issuing ? 'Emitiendo' : issueLabel} la nota de crédito ${ofIt}`}
                   onClick={() => void issueFor(adjustment)}
                 >

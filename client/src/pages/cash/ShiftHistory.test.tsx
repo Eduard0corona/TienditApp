@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Branch } from '../../api/branchesApi';
@@ -120,6 +120,62 @@ describe('ShiftHistory', () => {
     expect(within(detail).getByText('−$250.00')).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: 'Imprimir corte' })).toBeInTheDocument();
     expect(within(detail).queryByRole('button', { name: 'Cerrar esta caja' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['answers', (settle: { resolve: (value: unknown) => void }) => settle.resolve(listPage(shifts))],
+    ['fails', (settle: { reject: (reason: unknown) => void }) => settle.reject(new Error('Network Error'))],
+  ] as const)('shows the latest read, not one that %s late after the filters changed', async (_, finish) => {
+    const user = userEvent.setup();
+    const pedro = shift({ id: 'pedro', openedByName: 'Pedro', openedBy: 'pedro@cafelaesquina.mx', isMine: false, branchName: 'Playas' });
+    const settle = (): { promise: Promise<never>; resolve: (value: unknown) => void; reject: (reason: unknown) => void } => {
+      let resolve: (value: unknown) => void = () => undefined;
+      let reject: (reason: unknown) => void = () => undefined;
+      const promise = new Promise<never>((ok, fail) => { resolve = ok as (value: unknown) => void; reject = fail; });
+      return { promise, resolve, reject };
+    };
+    const late = settle();
+    const latest = settle();
+    vi.mocked(cashApi.getSessions)
+      .mockResolvedValueOnce(listPage(shifts))
+      .mockReturnValueOnce(late.promise)
+      .mockReturnValueOnce(latest.promise);
+    renderHistory();
+    await row('Luis');
+
+    await user.click(screen.getByLabelText('Solo con faltante o sobrante'));
+    await user.selectOptions(screen.getByLabelText('Sucursal'), 'b2');
+    await waitFor(() => expect(cashApi.getSessions).toHaveBeenCalledTimes(3));
+    // The read of the first filter comes back while the latest one is still on its way: the table keeps waiting.
+    finish(late as never);
+    await act(() => new Promise((resolve) => { setTimeout(resolve, 20); }));
+    expect(screen.queryByText('Luis')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
+
+    latest.resolve(listPage([pedro]));
+    expect(await screen.findByText('Pedro')).toBeInTheDocument();
+    expect(screen.queryByText('Luis')).not.toBeInTheDocument();
+  });
+
+  it('keeps the latest read when one of an earlier filter arrives after it', async () => {
+    const user = userEvent.setup();
+    const pedro = shift({ id: 'pedro', openedByName: 'Pedro', openedBy: 'pedro@cafelaesquina.mx', isMine: false, branchName: 'Playas' });
+    let late: (value: unknown) => void = () => undefined;
+    vi.mocked(cashApi.getSessions)
+      .mockResolvedValueOnce(listPage(shifts))
+      .mockReturnValueOnce(new Promise((resolve) => { late = resolve; }) as never)
+      .mockResolvedValue(listPage([pedro]));
+    renderHistory();
+    await row('Luis');
+
+    await user.click(screen.getByLabelText('Solo con faltante o sobrante'));
+    await user.selectOptions(screen.getByLabelText('Sucursal'), 'b2');
+    await row('Pedro');
+    late(listPage(shifts));
+
+    await act(() => new Promise((resolve) => { setTimeout(resolve, 20); }));
+    expect(screen.getByText('Pedro')).toBeInTheDocument();
+    expect(screen.queryByText('Luis')).not.toBeInTheDocument();
   });
 
   it('lets an owner close the drawer another cashier left open, and reads the shifts again', async () => {

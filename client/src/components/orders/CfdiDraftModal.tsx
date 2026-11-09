@@ -16,6 +16,7 @@ import { OrderInvoiceStatus } from '../../types';
 import { EMPTY_RECEIVER, isPlainEmail, normalizeReceiver, PAYMENT_FORMS, PAYMENT_METHODS } from '../../utils/cfdi';
 import { formatMoney } from '../../utils/money';
 import { isTypedPhone, localPhone } from '../../utils/phones';
+import { useChangingOrderInvoicing } from '../invoicing/changingOrderInvoicing';
 import CfdiReceiverFields from '../invoicing/CfdiReceiverFields';
 import OrderInvoiceList from '../invoicing/OrderInvoiceList';
 import CreditNoteList from '../invoicing/CreditNoteList';
@@ -90,19 +91,21 @@ export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSav
   const [read, setRead] = useState(false);
   if (!read && invoicing.isFetchedAfterMount && invoicing.isSuccess) setRead(true);
   const data = read ? invoicing.data : undefined;
-  // Here and not in the body, which starts over once read: the dialog does not close while an invoice is being stamped, so
-  // its answer reaches it, and the same invoice is not stamped again from a dialog opened after it. With the answer it can
-  // close: the invoices are read again behind it.
+  // Here and not in the body, which starts over once read.
   const issue = useIssueOrderInvoice(orderId);
   const substitute = useSubstituteOrderInvoice(orderId);
-  const stamping = issue.isPending || substitute.isPending;
+  // The dialog does not close while something it sent is on its way (stamping or replacing the invoice, issuing a complement
+  // or a credit note, asking the PAC again, cancelling or sending one), so its answer reaches it. Nothing else is sent
+  // meanwhile, from it or from one opened after it, so the same CFDI is not stamped twice. With the answer it can close:
+  // the invoices are read again behind it.
+  const changing = useChangingOrderInvoicing(orderId);
   const title = orderCancelled
     ? `Facturas de ${orderNumber}`
     : !data ? `Factura de ${orderNumber}` : data.available ? `Facturar ${orderNumber}` : `Factura de ${orderNumber} (vista previa)`;
 
   return (
-    <Modal show onHide={() => !stamping && onClose()} size="xl" centered fullscreen="md-down" aria-labelledby={titleId}>
-      <Modal.Header closeButton={!stamping}>
+    <Modal show onHide={() => !changing && onClose()} size="xl" centered fullscreen="md-down" aria-labelledby={titleId}>
+      <Modal.Header closeButton={!changing}>
         <Modal.Title id={titleId} as="h2" className="h5">{title}</Modal.Title>
       </Modal.Header>
       {!invoicing.isFetchedAfterMount ? (
@@ -119,6 +122,7 @@ export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSav
           issue={issue}
           substitute={substitute}
           reading={invoicing.isFetching}
+          changing={changing}
           onClose={onClose}
           loadError={invoicing.isError && (
             <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
@@ -149,13 +153,15 @@ interface InvoiceBodyProps {
   substitute: ReturnType<typeof useSubstituteOrderInvoice>;
   /** The order's invoicing is being read again: what it says (whether it can be invoiced, the invoice to replace) may be old. */
   reading: boolean;
+  /** A change of the order's invoicing is on its way, from it or from one opened before: it neither closes nor sends anything else. */
+  changing: boolean;
   onClose: () => void;
   /** Why the order's invoicing could not be read, with a way to try again. */
   loadError: ReactNode;
 }
 
 function InvoiceBody({
-  orderId, invoicing, canCancel, canSaveToCustomer, orderCancelled, issue, substitute, reading, onClose, loadError,
+  orderId, invoicing, canCancel, canSaveToCustomer, orderCancelled, issue, substitute, reading, changing, onClose, loadError,
 }: InvoiceBodyProps) {
   const toast = useToast();
   const proposed = invoicing?.proposedReceiver ?? null;
@@ -209,7 +215,7 @@ function InvoiceBody({
   // Only on this opening's preview and invoices: while they are read again (after stamping, without holding the dialog
   // open), what is on screen may be old, and the same invoice would be stamped twice.
   const readyToStamp = available && !!receiver && !edited && !!cfdi?.isReadyToStamp && !cfdi.isGeneralPublic && !draft.isFetching
-    && !reading && !issue.isPending && !substitute.isPending && emailValid && whatsAppValid;
+    && !reading && !changing && emailValid && whatsAppValid;
   const canStamp = readyToStamp && !substituting && !!invoicing?.canInvoice;
   const canReplace = readyToStamp && !!target?.canSubstitute;
 
@@ -562,7 +568,7 @@ function InvoiceBody({
         )}
       </Modal.Body>
       <Modal.Footer>
-        <button type="button" className="btn btn-light" onClick={onClose} disabled={issue.isPending || substitute.isPending}>Cerrar</button>
+        <button type="button" className="btn btn-light" onClick={onClose} disabled={changing}>Cerrar</button>
         {substituting ? (
           <button type="button" className="btn btn-primary" disabled={!canReplace} onClick={() => void replace()}>
             {substitute.isPending ? 'Timbrando…' : `Timbrar y sustituir la ${substituting.number}`}

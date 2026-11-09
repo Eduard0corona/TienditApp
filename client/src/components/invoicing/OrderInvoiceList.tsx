@@ -18,6 +18,7 @@ import { formatMoney } from '../../utils/money';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
 import { CfdiWhatsAppStatus, SendCfdiWhatsAppButton } from './CfdiWhatsApps';
 import StuckStampNote from './StuckStampNote';
+import { useChangingOrderInvoicing } from './changingOrderInvoicing';
 
 interface OrderInvoiceListProps {
   orderId: string;
@@ -55,8 +56,10 @@ export default function OrderInvoiceList({
   const retry = useRetryOrderInvoice(orderId);
   const cancelReplaced = useCancelReplacedOrderInvoice(orderId);
   const [cancelling, setCancelling] = useState<OrderInvoice | null>(null);
-  // While the order's invoicing is read again (after a cancellation, too), it is not offered from what it said before.
+  // While the order's invoicing is read again (after any change, which does not wait for it), nothing is offered from what
+  // it said before; while a change of it is on its way (from here or from a dialog opened before), nothing else is sent.
   const reading = useIsFetching({ queryKey: orderInvoicingKey(orderId) }) > 0;
+  const changing = useChangingOrderInvoicing(orderId);
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const download = async (invoice: OrderInvoice, kind: 'xml' | 'pdf') => {
@@ -202,7 +205,7 @@ export default function OrderInvoiceList({
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-secondary"
-                  disabled={retry.isPending}
+                  disabled={changing || reading}
                   aria-label={`Volver a pedir el timbre de la factura ${invoice.number}`}
                   onClick={() => void askAgain(invoice)}
                 >
@@ -224,7 +227,7 @@ export default function OrderInvoiceList({
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-danger"
-                  disabled={cancelReplaced.isPending}
+                  disabled={changing || reading}
                   aria-label={`Cancelar con relación la factura ${invoice.number}`}
                   onClick={() => void askToCancelReplaced(invoice)}
                 >

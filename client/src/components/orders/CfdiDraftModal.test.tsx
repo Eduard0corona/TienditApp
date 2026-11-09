@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest, type Schemas } from '../../api/typedClient';
 import { CfdiCancellationMotive, CreditNoteAdjustment, OrderInvoiceStatus } from '../../types';
@@ -107,6 +107,102 @@ describe('CfdiDraftModal', () => {
     expect(within(dialog).getByRole('button', { name: 'Cerrar' })).toBeEnabled();
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<[string, Invoicing, string | RegExp, unknown]>([
+    ['asking the PAC again for its invoice', {
+      ...INVOICING, canInvoice: false, problem: 'Este pedido ya tiene la factura F-1.',
+      invoices: [{ ...STAMPED, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, stampWindowEndsAt: '2999-01-01T00:00:00Z' }],
+    }, 'Volver a pedir el timbre de la factura F-1', STAMPED],
+    ['issuing the complement of a payment', {
+      ...INVOICING, canInvoice: false, problem: 'Este pedido ya tiene la factura F-1.',
+      invoices: [{ ...STAMPED, paymentForm: '99', paymentMethod: 'PPD' }],
+      payments: [{
+        orderPaymentId: 'pay-1', paidAt: '2026-10-04T17:00:00Z', method: 0, amount: 50, dueBy: '2999-11-05', canIssue: true,
+        problem: null, awaitsAutomaticIssue: true, complements: [],
+      }],
+    }, /^Emitir ahora el complemento del cobro del/, { ...STAMPED, id: 'pc-1', number: 'P-1' }],
+  ])('stays open while %s, and closes with the answer without waiting for the invoices', async (_, invoicing, name, answered) => {
+    const user = userEvent.setup();
+    let stamped: (value: unknown) => void = () => undefined;
+    let reads = 0;
+    serve(() => (++reads === 1 ? Promise.resolve(invoicing) : new Promise<Invoicing>(() => undefined)),
+      () => new Promise((resolve) => { stamped = resolve; }));
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CfdiDraftModal orderId="o-1" orderNumber="ORD-000001" canCancel canSaveToCustomer orderCancelled={false} onClose={onClose} />
+      </QueryClientProvider>,
+    );
+
+    await user.click(await screen.findByRole('button', { name }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Cerrar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Answered, it can close although the order's invoices never come back.
+    stamped(answered);
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cerrar' })).toBeEnabled());
+    expect(reads).toBe(2);
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<[string, Invoicing, string | RegExp, string | RegExp]>([
+    ['stamping its invoice', INVOICING, 'Timbrar factura', 'Timbrar factura'],
+    ['issuing the complement of a payment', {
+      ...INVOICING, canInvoice: false, problem: 'Este pedido ya tiene la factura F-1.',
+      invoices: [{ ...STAMPED, paymentForm: '99', paymentMethod: 'PPD' }],
+      payments: [{
+        orderPaymentId: 'pay-1', paidAt: '2026-10-04T17:00:00Z', method: 0, amount: 50, dueBy: '2999-11-05', canIssue: true,
+        problem: null, awaitsAutomaticIssue: true, complements: [],
+      }],
+    }, /^Emitir ahora el complemento del cobro del/, /^Emitir ahora el complemento del cobro del/],
+  ])('sends nothing else from a dialog opened again while %s is on its way', async (_, invoicing, name, again) => {
+    const user = userEvent.setup();
+    serve(invoicing, () => new Promise(() => undefined));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = (open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        {open && <CfdiDraftModal orderId="o-1" orderNumber="ORD-000001" canCancel canSaveToCustomer orderCancelled={false} onClose={() => {}} />}
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(true));
+    const button = await screen.findByRole('button', { name });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+
+    // The page leaves the dialog behind (the browser's back button, say) and opens it again.
+    rerender(view(false));
+    rerender(view(true));
+
+    const dialog = await screen.findByRole('dialog');
+    await act(() => new Promise((resolve) => { setTimeout(resolve, 20); }));
+    expect(within(dialog).getByRole('button', { name: again })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cerrar' })).toBeDisabled();
+    expect(vi.mocked(apiRequest).mock.calls.filter(([method]) => method === 'post')).toHaveLength(1);
+  });
+
+  it('says at once that it could not ask the PAC again without a connection, and can close', async () => {
+    const user = userEvent.setup();
+    serve({
+      ...INVOICING, canInvoice: false, problem: 'Este pedido ya tiene la factura F-1.',
+      invoices: [{ ...STAMPED, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, stampWindowEndsAt: '2999-01-01T00:00:00Z' }],
+    }, () => Promise.reject(new Error('Network Error')));
+    renderModal(true);
+    const retry = await screen.findByRole('button', { name: 'Volver a pedir el timbre de la factura F-1' });
+    onlineManager.setOnline(false);
+    try {
+      await user.click(retry);
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalled());
+      expect(screen.getByRole('button', { name: 'Cerrar' })).toBeEnabled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it('stamps the invoice for the proposed customer and keeps their data when asked', async () => {

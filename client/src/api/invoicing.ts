@@ -211,35 +211,33 @@ export function isWaiting(invoice: Pick<OrderInvoice, 'status' | 'stampWindowEnd
     || (invoice.status === OrderInvoiceStatus.Stamping && !isStuckStamping(invoice));
 }
 
+/** The changes of an order's invoicing, while they are on their way: its dialog waits for them to close. */
+export const orderInvoiceChangeKey = (orderId: string) => ['invoicing', 'orders', orderId, 'change'] as const;
+
 /**
- * Each change answers the invoice as it ended up; the order's invoicing and its draft are read again, and the change stays
- * pending until they are, so what it changed (a live invoice) is on screen before anything else can be pressed. The global
- * invoices are read again too: the detail of one lists the credit notes of its sales, and whether it can be cancelled.
- *
- * A dialog that closes with the answer passes `behind`: it does not close while the change is on its way, so it does not
- * wait for the lists either, which are read again behind it; what opens it waits for them instead.
+ * Each change answers the invoice as it ended up; the order's invoicing, its draft and the global invoices are read again
+ * (the detail of one lists the credit notes of its sales, and whether it can be cancelled). The change does not wait for
+ * them: the dialog of the order's invoices does not close while a change is on its way (`useChangingOrderInvoicing`), and
+ * waiting for them would keep it from closing until they arrive. What the change answered is offered again only once
+ * they do: each button waits for the order's invoicing read again.
  */
-function useInvoiceChange<TVariables, TResult = OrderInvoice>(
-  orderId: string,
-  change: (variables: TVariables) => Promise<TResult>,
-  { behind = false } = {},
-) {
+function useInvoiceChange<TVariables, TResult = OrderInvoice>(orderId: string, change: (variables: TVariables) => Promise<TResult>) {
   const client = useQueryClient();
-  const refresh = () => Promise.all([
-    client.invalidateQueries({ queryKey: orderInvoicingKey(orderId) }),
-    client.invalidateQueries({ queryKey: ['orders', orderId, 'cfdi-draft'] }),
-    client.invalidateQueries({ queryKey: globalInvoicesKey }),
-  ]);
   return useMutation({
+    mutationKey: orderInvoiceChangeKey(orderId),
+    // Without a connection it fails at once and says so, instead of waiting paused, with the dialog unable to close, to be
+    // sent on its own once the connection is back.
+    networkMode: 'always',
     mutationFn: change,
-    onSettled: () => (behind ? void refresh() : refresh()),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: orderInvoicingKey(orderId) });
+      void client.invalidateQueries({ queryKey: ['orders', orderId, 'cfdi-draft'] });
+      void client.invalidateQueries({ queryKey: globalInvoicesKey });
+    },
   });
 }
 
-/**
- * With an email, the customer gets its XML and PDF once it is stamped, and those of its complements and credit notes. Its
- * dialog does not close while it is on its way (`behind`), and its button waits for the order's invoicing read again.
- */
+/** With an email, the customer gets its XML and PDF once it is stamped, and those of its complements and credit notes. */
 export function useIssueOrderInvoice(orderId: string) {
   return useInvoiceChange(orderId, (body: {
     receiver: CfdiReceiver;
@@ -247,7 +245,7 @@ export function useIssueOrderInvoice(orderId: string) {
     receiverEmail?: string | null;
     receiverWhatsApp?: string | null;
   }) =>
-    apiRequest('post', '/api/v1/invoicing/orders/{orderId}/invoices', { path: { orderId }, body }), { behind: true });
+    apiRequest('post', '/api/v1/invoicing/orders/{orderId}/invoices', { path: { orderId }, body }));
 }
 
 export function useRetryOrderInvoice(orderId: string) {
@@ -257,7 +255,7 @@ export function useRetryOrderInvoice(orderId: string) {
 
 export function useCancelOrderInvoice(orderId: string) {
   return useInvoiceChange(orderId, ({ invoiceId, motive }: { invoiceId: string; motive: CfdiCancellationMotive }) =>
-    apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/cancel', { path: { invoiceId }, body: { motive } }), { behind: true });
+    apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/cancel', { path: { invoiceId }, body: { motive } }));
 }
 
 /**
@@ -271,7 +269,7 @@ export function useSubstituteOrderInvoice(orderId: string) {
     saveToCustomer: boolean;
     receiverEmail?: string | null;
     receiverWhatsApp?: string | null;
-  }) => apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/substitute', { path: { invoiceId }, body }), { behind: true });
+  }) => apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/substitute', { path: { invoiceId }, body }));
 }
 
 /** «Cancelar con relación»: asks the SAT again to cancel with motive 01 an invoice whose replacement is stamped. */
@@ -296,7 +294,7 @@ export function useRetryPaymentComplement(orderId: string) {
 
 export function useCancelPaymentComplement(orderId: string) {
   return useInvoiceChange(orderId, ({ complementId, motive }: { complementId: string; motive: CfdiCancellationMotive }) =>
-    apiRequest('post', '/api/v1/invoicing/payment-complements/{complementId}/cancel', { path: { complementId }, body: { motive } }), { behind: true });
+    apiRequest('post', '/api/v1/invoicing/payment-complements/{complementId}/cancel', { path: { complementId }, body: { motive } }));
 }
 
 /**
@@ -317,7 +315,7 @@ export function useRetryCreditNote(orderId: string) {
 
 export function useCancelCreditNote(orderId: string) {
   return useInvoiceChange(orderId, ({ creditNoteId, motive }: { creditNoteId: string; motive: CfdiCancellationMotive }) =>
-    apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/cancel', { path: { creditNoteId }, body: { motive } }), { behind: true });
+    apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/cancel', { path: { creditNoteId }, body: { motive } }));
 }
 
 /**
@@ -341,7 +339,7 @@ export function useSendCfdiByEmail(orderId: string) {
       default:
         return apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/email', { path: { invoiceId: cfdiId }, body });
     }
-  }, { behind: true });
+  });
 }
 
 /**
@@ -364,7 +362,7 @@ export function useSendCfdiByWhatsApp(orderId: string) {
       default:
         return apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/whatsapp', { path: { invoiceId: cfdiId }, body });
     }
-  }, { behind: true });
+  });
 }
 
 /** What Reportes › CFDI emitidos narrows the month to; empty, all of them. */
@@ -629,8 +627,8 @@ export function useGlobalInvoice(invoiceId: string) {
 
 /**
  * Each change answers the global invoice as it ended up. The global invoices are read again, and so is the invoicing of the
- * orders: a sale in a live global invoice is not invoiced alone. Like the changes of an order's invoicing, it waits for
- * them, unless its dialog closes with the answer (`behind`).
+ * orders: a sale in a live global invoice is not invoiced alone. The change waits for them (a button that stays on screen
+ * is offered again only once they say it changed), unless its dialog closes with the answer (`behind`).
  */
 function useGlobalInvoiceChange<TVariables>(change: (variables: TVariables) => Promise<GlobalInvoice>, { behind = false } = {}) {
   const client = useQueryClient();
