@@ -242,6 +242,7 @@ export default function ProductsList() {
                           type="checkbox"
                           className="form-check-input"
                           checked={product.isAvailable}
+                          aria-label={`Disponible: ${product.name}`}
                           onChange={() => handleToggleAvailability(product)}
                         />
                       </div>

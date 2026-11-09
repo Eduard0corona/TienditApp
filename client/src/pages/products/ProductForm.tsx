@@ -42,7 +42,16 @@ const UNIT_TYPE_OPTIONS = [
   { value: '41', label: 'Rollo' },
 ];
 
+/**
+ * Another product is another form: going from editing one to editing another (the global search does it) mounts it again,
+ * so nothing of the one before (its fields, its photo or its options) can be saved over the next one.
+ */
 export default function ProductForm() {
+  const { id } = useParams<{ id: string }>();
+  return <ProductFormContent key={id ?? 'new'} />;
+}
+
+function ProductFormContent() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEditing = !!id;
@@ -189,11 +198,18 @@ export default function ProductForm() {
       }
 
       if (optionsTouched && productId) {
-        await productsApi.setOptionGroups(productId, optionGroups.map((group) => ({
-          ...group,
-          name: group.name.trim(),
-          options: group.options.map((option) => ({ ...option, name: option.name.trim() })),
-        })));
+        try {
+          await productsApi.setOptionGroups(productId, optionGroups.map((group) => ({
+            ...group,
+            name: group.name.trim(),
+            options: group.options.map((option) => ({ ...option, name: option.name.trim() })),
+          })));
+        } catch (err: unknown) {
+          // Editing, saving again only updates: the form stays with its error. A product just created already exists,
+          // so trying again from here would create it twice: it goes on, as with its image, and says so.
+          if (isEditing) throw err;
+          toast.warning(`El producto se creó, pero sus opciones no se guardaron: ${getApiErrorMessage(err, 'Error al guardar las opciones.')} Revísalas desde Editar.`);
+        }
       }
 
       // Upload image if selected
@@ -225,6 +241,17 @@ export default function ProductForm() {
         <div className="text-center py-4">
           <div className="spinner-border text-primary" role="status"></div>
         </div>
+      </>
+    );
+  }
+
+  // Without the product there is nothing to edit: a form of empty fields would save them over it.
+  if (isEditing && !product) {
+    return (
+      <>
+        <PageTitle title="Editar producto" parent={{ label: 'Productos', to: '/products' }} />
+        <div className="alert alert-danger">{error || 'Error al cargar los datos.'}</div>
+        <Link to="/products" className="btn btn-light">Volver a Productos</Link>
       </>
     );
   }
@@ -512,7 +539,7 @@ export default function ProductForm() {
                   <div className="text-center mb-3">
                     <img
                       src={imagePreview}
-                      alt="preview"
+                      alt="Imagen del producto"
                       className="img-fluid rounded"
                       style={{ maxHeight: 200, objectFit: 'cover' }}
                     />
@@ -521,6 +548,7 @@ export default function ProductForm() {
 
                 <input
                   type="file"
+                  aria-label="Archivo de la imagen"
                   ref={fileInputRef}
                   className="d-none"
                   accept="image/jpeg,image/png,image/webp,image/gif"
