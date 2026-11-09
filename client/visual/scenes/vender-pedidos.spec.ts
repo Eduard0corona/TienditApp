@@ -648,6 +648,33 @@ test.describe('Orden detallada', () => {
     await snapPage(page, 'orden-detallada-telefono');
   });
 
+  /**
+   * A coffee machine to service and a bag of coffee: the cart mixes both, so the reception of the service opens with its
+   * piece and a point of its checklist, and the cart shows its lines and totals.
+   */
+  async function fillDetailedOrder(page: Page) {
+    await page.getByRole('button', { name: 'Servicio', exact: true }).click();
+    await page.getByRole('button', { name: /^Mantenimiento de cafetera espresso/ }).click();
+    await page.getByRole('button', { name: 'Venta de productos', exact: true }).click();
+    await page.getByRole('button', { name: /^Café de Chiapas 250 g/ }).click();
+    await page.getByLabel('Nombre de pieza *').fill('Cafetera Gaggia Classic');
+    await page.getByPlaceholder('Ejemplo: Sin manchas visibles').fill('Sin golpes en la carcasa');
+    await expect(page.getByRole('heading', { name: 'Recepción de servicio' })).toBeVisible();
+  }
+
+  test('Orden detallada con un servicio escritorio', async ({ page }) => {
+    await open(page, '/orders/cart');
+    await fillDetailedOrder(page);
+    await snapPage(page, 'orden-detallada-servicio-escritorio');
+  });
+
+  test('Orden detallada con un servicio teléfono', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/orders/cart');
+    await fillDetailedOrder(page);
+    await snapPage(page, 'orden-detallada-servicio-telefono');
+  });
+
   test.describe('Oscuro', () => {
     test.use({ colorMode: 'dark' });
 
