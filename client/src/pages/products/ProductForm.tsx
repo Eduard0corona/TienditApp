@@ -42,7 +42,16 @@ const UNIT_TYPE_OPTIONS = [
   { value: '41', label: 'Rollo' },
 ];
 
+/**
+ * Another product is another form: going from editing one to editing another (the global search does it) mounts it again,
+ * so nothing of the one before (its fields, its photo or its options) can be saved over the next one.
+ */
 export default function ProductForm() {
+  const { id } = useParams<{ id: string }>();
+  return <ProductFormContent key={id ?? 'new'} />;
+}
+
+function ProductFormContent() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEditing = !!id;
@@ -199,7 +208,7 @@ export default function ProductForm() {
           // Editing, saving again only updates: the form stays with its error. A product just created already exists,
           // so trying again from here would create it twice: it goes on, as with its image, and says so.
           if (isEditing) throw err;
-          toast.warning(`El producto se creó, pero sus opciones no se guardaron (${getApiErrorMessage(err, 'error al guardarlas')}). Revísalas desde Editar.`);
+          toast.warning(`El producto se creó, pero sus opciones no se guardaron: ${getApiErrorMessage(err, 'Error al guardar las opciones.')} Revísalas desde Editar.`);
         }
       }
 

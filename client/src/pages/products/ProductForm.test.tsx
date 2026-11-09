@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductOptionGroupInput } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
@@ -57,9 +57,16 @@ const bread = {
   optionGroups: [{ id: 'g1', name: 'Rebanado', minSelections: 0, maxSelections: 1, options: [{ id: 'o1', name: 'Sí', priceDelta: 0, isAvailable: true }] }],
 } as unknown as ProductDto;
 
-function renderForm(path = '/products/new') {
+/** What the global search does: it goes to the form of another product from wherever it is. */
+function GoTo({ to }: { to: string }) {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate(to)}>Ir a {to}</button>;
+}
+
+function renderForm(path = '/products/new', goTo?: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
+      {goTo && <GoTo to={goTo} />}
       <Routes>
         <Route path="/products/new" element={<ProductForm />} />
         <Route path="/products/:id/edit" element={<ProductForm />} />
@@ -233,14 +240,15 @@ describe('ProductForm', () => {
     expect(await screen.findByText('Lista de productos')).toBeInTheDocument();
   });
 
-  it('does not create the product twice when its options fail: it goes on and says so', async () => {
+  it('does not create the product twice when its options fail: it goes on with its photo and says so', async () => {
     const user = userEvent.setup();
-    vi.mocked(productsApi.setOptionGroups).mockRejectedValue({
-      isAxiosError: true, response: { status: 400, data: { error: 'El grupo "Tamaño" está repetido.' } },
-    });
+    vi.mocked(productsApi.setOptionGroups).mockRejectedValue(new Error('Network Error'));
+    vi.mocked(productsApi.uploadImage).mockResolvedValue({ data: { medium: '/uploads/latte-medium.webp' } } as never);
     renderForm();
     await screen.findByRole('option', { name: 'Panadería' });
 
+    const photo = new File([new Uint8Array(1024)], 'latte.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText('Archivo de la imagen'), photo);
     await user.type(field(/^Nombre/), 'Latte');
     await user.selectOptions(field(/^Categoría/), 'coffee');
     await user.clear(field(/^Precio \*/));
@@ -251,8 +259,10 @@ describe('ProductForm', () => {
     expect(await screen.findByText('Lista de productos')).toBeInTheDocument();
     expect(productsApi.create).toHaveBeenCalledTimes(1);
     expect(toast.warning).toHaveBeenCalledWith(
-      'El producto se creó, pero sus opciones no se guardaron (El grupo "Tamaño" está repetido.). Revísalas desde Editar.',
+      'El producto se creó, pero sus opciones no se guardaron: Error al guardar las opciones. Revísalas desde Editar.',
     );
+    expect(productsApi.uploadImage).toHaveBeenCalledWith('new-id', photo);
+    expect(toast.success).toHaveBeenCalledWith('Producto creado.');
   });
 
   it('stays on the form when the options of a product being edited fail, to try again', async () => {
@@ -307,6 +317,25 @@ describe('ProductForm', () => {
     expect(await screen.findByText('Lista de productos')).toBeInTheDocument();
   });
 
+  it('keeps what was written when a new product could not be created', async () => {
+    const user = userEvent.setup();
+    vi.mocked(productsApi.create).mockRejectedValue({
+      isAxiosError: true, response: { status: 409, data: { error: 'Ya existe un producto con el SKU LAT-01.' } },
+    });
+    renderForm();
+    await screen.findByRole('option', { name: 'Panadería' });
+
+    await user.type(field(/^Nombre/), 'Latte');
+    await user.selectOptions(field(/^Categoría/), 'coffee');
+    await user.clear(field(/^Precio \*/));
+    await user.type(field(/^Precio \*/), '55');
+    await user.click(screen.getByRole('button', { name: 'Crear producto' }));
+
+    expect(await screen.findByText('Ya existe un producto con el SKU LAT-01.')).toBeInTheDocument();
+    expect(field(/^Nombre/)).toHaveValue('Latte');
+    expect(screen.getByRole('button', { name: 'Crear producto' })).toBeEnabled();
+  });
+
   it('shows why the server did not save, and stays on the form', async () => {
     const user = userEvent.setup();
     vi.mocked(productsApi.update).mockRejectedValue({
@@ -333,6 +362,33 @@ describe('ProductForm', () => {
     } as unknown as ReturnType<typeof useAuth>);
     renderForm('/products/bread/edit');
     expect(await screen.findByText('Existencias: puede ajustar')).toBeInTheDocument();
+  });
+
+  it('starts over when it goes from one product to another, so the one before is never saved over the next one', async () => {
+    const user = userEvent.setup();
+    const cake = { ...bread, id: 'cake', name: 'Pastel de zanahoria', images: undefined, optionGroups: [] };
+    vi.mocked(productsApi.getById).mockImplementation(async (id) => {
+      if (id === 'other') throw new Error('Network Error');
+      return { data: id === 'cake' ? cake : bread } as never;
+    });
+    const { unmount } = renderForm('/products/bread/edit', '/products/other/edit');
+    await screen.findByDisplayValue('Pan de masa madre');
+
+    // The next one could not be read: no form, and nothing of the bread to save under its id.
+    await user.click(screen.getByRole('button', { name: 'Ir a /products/other/edit' }));
+    expect(await screen.findByText('Error al cargar los datos.')).toBeInTheDocument();
+    expect(productsApi.getById).toHaveBeenLastCalledWith('other');
+    expect(screen.queryByRole('button', { name: 'Guardar cambios' })).not.toBeInTheDocument();
+    expect(productsApi.update).not.toHaveBeenCalled();
+    unmount();
+
+    // Read: it shows only what the next one has, not the photo or the options of the one before.
+    renderForm('/products/bread/edit', '/products/cake/edit');
+    await screen.findByDisplayValue('Pan de masa madre');
+    await user.click(screen.getByRole('button', { name: 'Ir a /products/cake/edit' }));
+    expect(await screen.findByDisplayValue('Pastel de zanahoria')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Imagen del producto' })).not.toBeInTheDocument();
+    expect(screen.getByText('0 grupos de opciones')).toBeInTheDocument();
   });
 
   it('says when the product could not be read, and offers no form that would save empty fields over it', async () => {
