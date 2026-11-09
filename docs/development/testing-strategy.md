@@ -2607,6 +2607,15 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - las reseñas de la plataforma y Precios en apps escondían el selector de qué lista es;
     - la acción podía compartir renglón con la búsqueda;
     - las escenas también encontraban «Limpiar filtros».
+- Fase 30H, Pedidos dividido en partes (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Qué cambia:** `OrdersList.tsx` baja de 1,431 a 649 líneas. La fila, el detalle (con su sección de servicio y sus registros de dinero), el cobro y el recibo viven en su archivo; lo que no depende de React, en `ordersListModel.ts`. No cambia lo que se ve ni lo que hace.
+  - **Cliente:** 210 archivos y 1,618 pruebas, lint y build en verde.
+    - `ordersListModel.test.ts` (7, nuevo): los tipos de pedido del negocio, los estados de cada tipo, «En camino», lo que cobró la plataforma, la forma de pago con el folio de su app, la cotización que conserva un pedido y a dónde pasa una pieza.
+    - `OrdersList.test.tsx` (+1): cobrar desde la lista con efectivo deja el recibo con el cambio, el ticket del negocio de la sesión, el envío por WhatsApp y la consulta de autofactura; «Listo» lo cierra. Ninguna prueba ni escena cubría el recibo de Pedidos.
+    - **Mutaciones:** el recibo sin el negocio de la sesión o sin la consulta de autofactura hace fallar la prueba.
+  - **Escenas:** contra la 30G (`8fb3e05`), las 813 pasan sin diferencias.
+  - **Primera visita:** 180,338 B, de un presupuesto de 180,400 B (la 30G: 180,340 B). Pedidos se carga aparte.
+  - **Revisión independiente:** comparó el JSX bloque por bloque contra el original y no encontró diferencias de comportamiento ni de DOM, salvo el texto de los `id` de los diálogos (cada modal genera el suyo y sigue ligado a su título). Señaló el recibo sin prueba y los docs que exageraban qué fija `OrdersList.test.tsx` o dejaban fuera a `SellPage.tsx`; quedaron corregidos.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
