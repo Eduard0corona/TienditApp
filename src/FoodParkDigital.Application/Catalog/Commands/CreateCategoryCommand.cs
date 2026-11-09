@@ -22,7 +22,10 @@ public class CreateCategoryCommandValidator : AbstractValidator<CreateCategoryCo
 {
     public CreateCategoryCommandValidator()
     {
+        // The same rules as editing it: what could not be saved by an edit must not get in by creating it.
         RuleFor(x => x.Name).NotEmpty().MaximumLength(150);
+        RuleFor(x => x.Description).MaximumLength(500);
+        RuleFor(x => x.SortOrder).GreaterThanOrEqualTo(0);
     }
 }
 
