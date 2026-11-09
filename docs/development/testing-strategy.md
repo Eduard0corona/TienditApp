@@ -2588,7 +2588,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **5** por el código: WhatsApp y las plantillas de aviso;
     - **16 del muestrario:** el estilo calculado del error en los 8 temas y los dos modos, y su imagen.
   - **Escenas nuevas:** el foco del teclado en el menú condensado, en claro y en oscuro. «Pedidos» crece con su nombre y, ya usado, vuelve al ícono con su anillo. Las 7 escenas del menú condensado pasan dos corridas seguidas. Las que pasan el puntero sobre el menú no cambian.
-  - **Primera visita:** 180,277 B (+45 B, el estado de `LeftSidebar`); CSS global: 63,144 B (+67 B). Los dos caben en su presupuesto.
+  - **Primera visita:** 180,333 B (`master` en `e6f4517`: 180,232 B, +101 B por el estado de `LeftSidebar`, que va en la entrada con el menú). El presupuesto sube de 180,300 a 180,400 B. CSS global: 63,144 B (+67 B), dentro de su presupuesto.
   - **Revisión independiente:** encontró que un enlace usado con el teclado se quedaba crecido sobre la página nueva tomando sus clics, porque nada mueve el foco al navegar. También que los puntos entre páginas, atenuados, quedaban a 2.7:1, y que una prueba pasaba sin las reglas que muestran el nombre. Los tres están corregidos.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
