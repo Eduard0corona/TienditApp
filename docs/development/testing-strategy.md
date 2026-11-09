@@ -2919,6 +2919,53 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - claude-review encontró, como menor, que «Cancelar factura» (y «Cancelar» de complementos y notas de crédito, y los envíos por correo y WhatsApp) seguían ofreciéndose con un cambio en camino: con «Cancelar con relación» en camino se podía mandar la cancelación de la misma factura con el motivo 02. Ahora esperan también, con pruebas que fallan sin el arreglo.
     - Dejó sin comprobar una petición colgada sin respuesta (axios no tiene tiempo límite: el diálogo esperaría, como los demás de la convención) y que la API rechace un envío duplicado.
   - **Cliente:** 231 archivos y 1,884 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati. Primera visita: 180,383 B de 180,400 B.
+- Fase 30V, pruebas de Mi perfil y Primeros pasos (punto 10; sin ADR):
+  - **Pruebas nuevas:**
+    - `Profile.test.tsx` cubre:
+      - los datos de la persona: nombre, correo, teléfono, rol, verificación en dos pasos y desde cuándo, en la zona del negocio;
+      - guardar el nombre: el aviso, el foco y no cancelar mientras guarda; el error que dice la API; el nombre y el apellido vacíos o con solo espacios;
+      - la foto: subir, eliminar, y eliminar solo si hay una;
+      - cambiar la contraseña: pide las dos y anuncia el error en cada campo; cierra la sesión 3 segundos después y no la cierra si falla;
+      - desactivar la verificación en dos pasos con el código de la app o uno de recuperación;
+      - el teléfono: cambiarlo y confirmarlo; el número al que se mandó el código; el foco en cada paso; lo que se borra al volver o cancelar;
+      - a quién se ofrecen los avisos por correo, con el texto exacto.
+    - `SetupPage.test.tsx` cubre:
+      - los módulos y la política de IVA, que se conserva al volver;
+      - el catálogo de ejemplo: el orden, instalar, el error, capturar los propios y el negocio que ya tiene productos;
+      - el último paso;
+      - omitir;
+      - leer otra vez;
+      - qué pasa si la persona se va a mitad de algo.
+  - **Qué arreglan:**
+    - **Mi perfil:**
+      - Los avisos de éxito y de error no se anunciaban. Ahora cada sección tiene un `role="status"` siempre en la página, y los errores van en `role="alert"`.
+      - «Guardar cambios» no hacía nada con el nombre o el apellido vacíos, y aceptaba solo espacios. Ahora lo dice junto al campo; además limita el campo a 100 caracteres, como el servidor.
+      - «Cancelar» no descartaba lo escrito.
+      - Al guardar, el foco se perdía. Ahora vuelve a «Editar perfil».
+      - El aviso anterior seguía al cambiar de modo.
+      - Eliminar la foto mostraba «Subiendo avatar», y su error no decía lo que respondió la API.
+      - Los campos de la contraseña no anunciaban su error.
+      - Los dos «Cancelar» de la página se distinguen: «Cancelar la edición del perfil» y «Cancelar el cambio de número».
+    - **Teléfono** (`PhoneChangeCard`):
+      - El número que se escribía mientras se mandaba el código cambiaba adónde se confirmaba. Ahora se confirma el número al que se mandó.
+      - Al volver o cancelar seguían el aviso anterior y el código escrito.
+      - El foco se perdía en cada paso. Ahora va al campo nuevo, o a «Cambiar número» al terminar.
+    - **Primeros pasos:**
+      - Los errores no se anunciaban.
+      - Se podía omitir el arranque o volver al paso anterior mientras se instalaba una plantilla, e instalar una mientras se omitía.
+      - Una respuesta que llegaba después de que la persona se fue la sacaba de la página adonde había ido, o la desplazaba.
+      - «Reintentar» no decía que leía, y mandaba una petición por clic.
+      - La tasa de IVA elegida y no guardada se perdía al volver a cambiar los módulos.
+      - Si leer el arranque otra vez fallaba después de instalar una plantilla, toda la página se volvía un error.
+      - El error de una plantilla quedaba fuera de la vista.
+  - **Mutaciones:** de 38, fallan las pruebas en las 38. Dos de las que sobrevivían señalaron una limpieza que repetía otra (el código al volver, que ya borra el envío), y se quitó.
+  - **Revisión independiente:**
+    - Con pruebas sonda y mutaciones encontró, como hallazgo mayor, que el arreglo de «Cancelar» dejaba guardar el nombre dos veces: cancelar mientras guardaba devolvía el formulario a su estado inicial con el envío todavía en camino.
+    - Como menores encontró casi todo lo demás de la lista de arriba, y pruebas que prometían más de lo que comprobaban: la región de avisos comparada por subcadena, el rol sin revisar, el apellido, los textos de los errores y «Vender».
+    - Todo quedó corregido, salvo dos que ya existían y quedan fuera: `saveModules` manda el negocio tal como está en el contexto, y los anuncios con un lector de pantalla real no se comprobaron.
+  - **Cliente:**
+    - 233 archivos y 1,927 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - Primera visita: 180,400 B de 180,400 B. El código de la primera visita no cambia: la diferencia de 17 B con master sale de los nombres con hash de los chunks que cambiaron, que el chunk de entrada referencia y que comprimen distinto.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

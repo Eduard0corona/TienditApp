@@ -19,6 +19,25 @@ interface DisableTwoFactorForm {
   code: string;
 }
 
+type Message = { type: string; text: string } | null;
+
+/**
+ * What a section has to say. A failure is announced as it happens (`role="alert"`); the rest in a `role="status"` that
+ * is always on the page, empty while there is nothing to say, so screen readers announce what appears in it.
+ */
+function SectionNotice({ message }: { message: Message }) {
+  return (
+    <>
+      <div role="status">
+        {message && message.type !== 'danger' && <div className={`alert alert-${message.type}`}>{message.text}</div>}
+      </div>
+      {message?.type === 'danger' && <div className="alert alert-danger" role="alert">{message.text}</div>}
+    </>
+  );
+}
+
+const NAME_MAX_LENGTH = 100;
+
 export default function Profile() {
   const { user, refreshProfile, logout } = useAuth();
   const { tenant, capabilities } = useTenant();
@@ -31,31 +50,35 @@ export default function Profile() {
   // Fase 30B: whoever confirms the orders, the online orders their customers cancel.
   const confirmsOrders = onTheTeam && access.orders;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  // Saved, the form it was in goes away: the focus goes back to what opened it, once it is enabled again.
+  const focusEditButton = useRef(false);
   const signOutTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(signOutTimeoutRef.current), []);
 
   // Edit profile state
   const [editMode, setEditMode] = useState(false);
-  const [profileMsg, setProfileMsg] = useState<{ type: string; text: string } | null>(null);
+  const [profileMsg, setProfileMsg] = useState<Message>(null);
 
   // Avatar state
   const [avatarLoading, setAvatarLoading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [avatarMsg, setAvatarMsg] = useState<{ type: string; text: string } | null>(null);
+  const [avatarMsg, setAvatarMsg] = useState<Message>(null);
 
   // Password state
-  const [passwordMsg, setPasswordMsg] = useState<{ type: string; text: string } | null>(null);
+  const [passwordMsg, setPasswordMsg] = useState<Message>(null);
 
   // Two-factor state
-  const [twoFactorMsg, setTwoFactorMsg] = useState<{ type: string; text: string } | null>(null);
+  const [twoFactorMsg, setTwoFactorMsg] = useState<Message>(null);
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
 
   // Profile form
   const {
     register: regProfile,
     handleSubmit: handleProfile,
-    formState: { isSubmitting: profileSubmitting },
+    reset: resetProfile,
+    formState: { errors: profileErrors, isSubmitting: profileSubmitting },
   } = useForm<UpdateProfileRequest>({
     values: {
       firstName: user?.firstName || '',
@@ -79,6 +102,12 @@ export default function Profile() {
     formState: { errors: twoFactorErrors, isSubmitting: twoFactorSubmitting },
   } = useForm<DisableTwoFactorForm>();
 
+  useEffect(() => {
+    if (!focusEditButton.current || profileSubmitting) return;
+    focusEditButton.current = false;
+    editButtonRef.current?.focus();
+  }, [editMode, profileSubmitting]);
+
   const onUpdateProfile = async (data: UpdateProfileRequest) => {
     setProfileMsg(null);
     try {
@@ -86,6 +115,7 @@ export default function Profile() {
       await refreshProfile();
       setEditMode(false);
       setProfileMsg({ type: 'success', text: 'Perfil actualizado correctamente.' });
+      focusEditButton.current = true;
     } catch (err: unknown) {
       const msg = getApiErrorMessage(err, 'Error al actualizar el perfil.');
       setProfileMsg({ type: 'danger', text: msg });
@@ -119,8 +149,8 @@ export default function Profile() {
       await profileApi.deleteAvatar();
       await refreshProfile();
       setAvatarMsg({ type: 'success', text: 'Avatar eliminado.' });
-    } catch {
-      setAvatarMsg({ type: 'danger', text: 'Error al eliminar el avatar.' });
+    } catch (err: unknown) {
+      setAvatarMsg({ type: 'danger', text: getApiErrorMessage(err, 'Error al eliminar el avatar.') });
     } finally {
       setAvatarLoading(false);
     }
@@ -169,10 +199,23 @@ export default function Profile() {
 
   const avatarSrc = user?.avatarImages?.medium || '/images/placeholders/avatar.svg';
 
+  // Not while the name is being saved: its answer reaches the form that sent it. What the previous mode said goes away.
+  const toggleEdit = () => {
+    if (editMode) resetProfile();
+    setProfileMsg(null);
+    setEditMode(!editMode);
+  };
+
+  const nameRules = (missing: string) => ({
+    validate: (value: string) => !!value.trim() || missing,
+    maxLength: { value: NAME_MAX_LENGTH, message: `Escribe hasta ${NAME_MAX_LENGTH} caracteres.` },
+  });
+
   return (
     <>
+      {/* Only while a photo uploads: deleting one only disables its buttons. */}
       <UploadLoadingModal
-        show={avatarLoading || avatarUploading}
+        show={avatarUploading}
         title="Subiendo avatar"
         description="Estamos actualizando tu foto de perfil."
       />
@@ -228,9 +271,13 @@ export default function Profile() {
                 <div className="col-sm-4">
                   <div className="text-center mt-sm-0 mt-3 text-sm-end">
                     <button
+                      ref={editButtonRef}
                       type="button"
                       className="btn btn-light"
-                      onClick={() => setEditMode(!editMode)}
+                      // Cancelled, what was typed is forgotten: the next edit starts from the profile.
+                      onClick={toggleEdit}
+                      disabled={profileSubmitting}
+                      aria-label={editMode ? 'Cancelar la edición del perfil' : undefined}
                     >
                       <i className="ri-user-settings-line me-1" aria-hidden="true"></i>
                       {editMode ? 'Cancelar' : 'Editar perfil'}
@@ -251,27 +298,37 @@ export default function Profile() {
             <div className="card-body">
               <h4 className="header-title mt-0 mb-3">Información personal</h4>
 
-              {profileMsg && (
-                <div className={`alert alert-${profileMsg.type}`}>{profileMsg.text}</div>
-              )}
+              <SectionNotice message={profileMsg} />
 
               {editMode ? (
                 <form onSubmit={handleProfile(onUpdateProfile)}>
                   <div className="mb-3">
                     <label htmlFor="profile-nombre" className="form-label">Nombre</label>
                     <input id="profile-nombre"
-                      className="form-control"
+                      className={`form-control ${profileErrors.firstName ? 'is-invalid' : ''}`}
                       type="text"
-                      {...regProfile('firstName', { required: true })}
+                      aria-invalid={profileErrors.firstName ? 'true' : undefined}
+                      aria-describedby={profileErrors.firstName ? 'profile-nombre-error' : undefined}
+                      maxLength={NAME_MAX_LENGTH}
+                      {...regProfile('firstName', nameRules('Escribe tu nombre.'))}
                     />
+                    {profileErrors.firstName && (
+                      <div id="profile-nombre-error" className="invalid-feedback">{profileErrors.firstName.message}</div>
+                    )}
                   </div>
                   <div className="mb-3">
                     <label htmlFor="profile-apellido" className="form-label">Apellido</label>
                     <input id="profile-apellido"
-                      className="form-control"
+                      className={`form-control ${profileErrors.lastName ? 'is-invalid' : ''}`}
                       type="text"
-                      {...regProfile('lastName', { required: true })}
+                      aria-invalid={profileErrors.lastName ? 'true' : undefined}
+                      aria-describedby={profileErrors.lastName ? 'profile-apellido-error' : undefined}
+                      maxLength={NAME_MAX_LENGTH}
+                      {...regProfile('lastName', nameRules('Escribe tu apellido.'))}
                     />
+                    {profileErrors.lastName && (
+                      <div id="profile-apellido-error" className="invalid-feedback">{profileErrors.lastName.message}</div>
+                    )}
                   </div>
                   <button
                     className="btn btn-primary"
@@ -344,9 +401,7 @@ export default function Profile() {
             <div className="card-body">
               <h4 className="header-title mt-0 mb-3">Foto de perfil</h4>
 
-              {avatarMsg && (
-                <div className={`alert alert-${avatarMsg.type}`}>{avatarMsg.text}</div>
-              )}
+              <SectionNotice message={avatarMsg} />
 
               <div className="text-center mb-3">
                 <img
@@ -396,9 +451,7 @@ export default function Profile() {
             <div className="card-body">
               <h4 className="header-title mt-0 mb-3">Cambiar contraseña</h4>
 
-              {passwordMsg && (
-                <div className={`alert alert-${passwordMsg.type}`}>{passwordMsg.text}</div>
-              )}
+              <SectionNotice message={passwordMsg} />
 
               <form onSubmit={handlePassword(onChangePassword)}>
                 <div className="row">
@@ -408,10 +461,12 @@ export default function Profile() {
                       <input id="profile-contrasena-actual"
                         type="password"
                         className={`form-control ${passwordErrors.currentPassword ? 'is-invalid' : ''}`}
+                        aria-invalid={passwordErrors.currentPassword ? 'true' : undefined}
+                        aria-describedby={passwordErrors.currentPassword ? 'profile-contrasena-actual-error' : undefined}
                         {...regPassword('currentPassword', { required: 'Requerido' })}
                       />
                       {passwordErrors.currentPassword && (
-                        <div className="invalid-feedback">
+                        <div id="profile-contrasena-actual-error" className="invalid-feedback">
                           {passwordErrors.currentPassword.message}
                         </div>
                       )}
@@ -423,13 +478,15 @@ export default function Profile() {
                       <input id="profile-nueva-contrasena"
                         type="password"
                         className={`form-control ${passwordErrors.newPassword ? 'is-invalid' : ''}`}
+                        aria-invalid={passwordErrors.newPassword ? 'true' : undefined}
+                        aria-describedby={passwordErrors.newPassword ? 'profile-nueva-contrasena-error' : undefined}
                         {...regPassword('newPassword', {
                           required: 'Requerido',
                           pattern: newPasswordPattern,
                         })}
                       />
                       {passwordErrors.newPassword && (
-                        <div className="invalid-feedback">
+                        <div id="profile-nueva-contrasena-error" className="invalid-feedback">
                           {passwordErrors.newPassword.message}
                         </div>
                       )}
@@ -457,11 +514,7 @@ export default function Profile() {
               <div className="card-body">
                 <h4 className="header-title mt-0 mb-3">Verificación en dos pasos</h4>
 
-                {twoFactorMsg && (
-                  <div className={`alert alert-${twoFactorMsg.type}`} role="alert">
-                    {twoFactorMsg.text}
-                  </div>
-                )}
+                <SectionNotice message={twoFactorMsg} />
 
                 {user?.twoFactorEnabled && (
                   <form onSubmit={handleTwoFactor(onDisableTwoFactor)}>

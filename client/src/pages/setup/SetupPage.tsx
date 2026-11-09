@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { tenantApi } from '../../api/tenantApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -49,20 +49,37 @@ export default function SetupPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [installingId, setInstallingId] = useState('');
+  // Once read, a read again (after saving the modules or installing a template) keeps the page: a failure is said in it.
+  const read = useRef(false);
+  // An answer that arrives once the person left (a link, the menu) does not move them, nor this page.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const loadSetup = useCallback(async () => {
     try {
       const { data } = await tenantApi.getSetup();
       setSetup(data);
       setCapabilities(data.capabilities);
-      setPolicy((current) => ({ ...current, pricesIncludeTax: data.pricesIncludeTax, defaultTaxRate: data.defaultTaxRate }));
+      // The IVA chosen and not saved yet stays when the setup is read again.
+      if (!read.current) setPolicy((current) => ({ ...current, pricesIncludeTax: data.pricesIncludeTax, defaultTaxRate: data.defaultTaxRate }));
+      read.current = true;
       setLoadError('');
     } catch (err: unknown) {
-      setLoadError(getApiErrorMessage(err, 'No se pudo cargar el arranque guiado.'));
+      const message = getApiErrorMessage(err, 'No se pudo cargar el arranque guiado.');
+      if (read.current) setError(message);
+      else setLoadError(message);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const retry = () => {
+    setLoading(true);
+    void loadSetup();
+  };
 
   useEffect(() => {
     void loadSetup();
@@ -131,10 +148,13 @@ export default function SetupPage() {
     try {
       const { data } = await tenantApi.installStarterCatalog(catalog.id);
       toast.success(`Listo: ${data.productsCreated} productos de ejemplo de ${data.templateName}. Edita los precios cuando quieras.`);
+      if (!mounted.current) return;
       await loadSetup();
       goTo(3);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo instalar la plantilla.'));
+      // Said above the steps: the page goes up to it.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setInstallingId('');
     }
@@ -146,7 +166,7 @@ export default function SetupPage() {
     try {
       await tenantApi.completeSetup();
       await refreshTenant();
-      navigate(path);
+      if (mounted.current) navigate(path);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo terminar el arranque guiado.'));
       setSaving(false);
@@ -163,9 +183,9 @@ export default function SetupPage() {
 
   if (loadError || !setup) {
     return (
-      <div className="alert alert-danger mt-3 d-flex justify-content-between align-items-center gap-2">
+      <div className="alert alert-danger mt-3 d-flex justify-content-between align-items-center gap-2" role="alert">
         <span>{loadError || 'No se pudo cargar el arranque guiado.'}</span>
-        <button type="button" className="btn btn-sm btn-light" onClick={() => void loadSetup()}>Reintentar</button>
+        <button type="button" className="btn btn-sm btn-light" onClick={retry}>Reintentar</button>
       </div>
     );
   }
@@ -193,7 +213,7 @@ export default function SetupPage() {
             type="button"
             className="btn btn-outline-primary btn-touch mt-auto"
             onClick={() => void installCatalog(catalog)}
-            disabled={!!installingId}
+            disabled={!!installingId || saving}
           >
             {installingId === catalog.id ? 'Instalando…' : 'Usar esta plantilla'}
           </button>
@@ -209,7 +229,8 @@ export default function SetupPage() {
           <h1 className="h3 mb-1">Prepara {tenant?.name ?? 'tu negocio'}</h1>
           <p className="text-muted mb-0">Cuatro pasos para llegar a tu primera venta. Puedes cambiar todo después.</p>
         </div>
-        <button type="button" className="btn btn-link" onClick={() => void finish('/')} disabled={saving}>
+        {/* Not while a template installs: its answer takes the setup to its last step. */}
+        <button type="button" className="btn btn-link" onClick={() => void finish('/')} disabled={saving || !!installingId}>
           Omitir por ahora
         </button>
       </div>
@@ -223,7 +244,7 @@ export default function SetupPage() {
         ))}
       </ol>
 
-      {error && <div className="alert alert-danger">{error}</div>}
+      {error && <div className="alert alert-danger" role="alert">{error}</div>}
 
       {step === 0 && (
         <div className="card">
@@ -308,8 +329,10 @@ export default function SetupPage() {
                 </details>
               )}
               <div className="d-flex justify-content-between mt-3">
-                <button type="button" className="btn btn-light btn-touch" onClick={() => goTo(1)}>Atrás</button>
-                <button type="button" className="btn btn-link" onClick={() => goTo(3)}>Prefiero capturar mis productos</button>
+                <button type="button" className="btn btn-light btn-touch" onClick={() => goTo(1)} disabled={!!installingId || saving}>Atrás</button>
+                <button type="button" className="btn btn-link" onClick={() => goTo(3)} disabled={!!installingId || saving}>
+                  Prefiero capturar mis productos
+                </button>
               </div>
             </>
           )}
