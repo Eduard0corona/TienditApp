@@ -2749,6 +2749,38 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Mutaciones:** de 57, fallan las pruebas en 56. Sobrevive mostrar la existencia de un producto que no la controla, que da lo mismo: el servidor no le manda existencia (`ProductStockReader`).
   - **Revisión independiente:** dos rondas. La primera corrió las suites en cinco zonas horarias con tres órdenes aleatorios y 29 mutaciones propias; encontró los campos que editar podía vaciar sin que fallara una prueba (ahora se compara todo lo que se manda), el objeto de impuesto que no se comprobaba, los colores de la existencia y las dos primeras fallas del formulario. La segunda revisó esas correcciones con 10 mutaciones más: encontró que nada probaba que el producto creado siguiera con su foto, ni que un fallo al crear conservara lo escrito, y la tercera falla. Todo quedó corregido.
   - **Cliente:** 220 archivos y 1,707 pruebas, lint y build en verde.
+- Fase 30O, pruebas de Clientes y Proveedores (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Qué cambia:** la lista de clientes (`CustomersList`) y la de proveedores (`SuppliersList`) no tenían pruebas propias; Cuentas por cobrar y los diálogos de un cliente (ficha, fiado y datos fiscales) ya las tenían. Ahora se prueban montadas, con la API simulada. Las pruebas encontraron dos fallas, que quedan corregidas:
+    - en las dos, el error al guardar (incluidos «El teléfono es obligatorio.» cuando el teléfono son espacios y «El nombre del proveedor es obligatorio.») se mostraba en la página, detrás del diálogo abierto, donde no se veía. Ahora cada diálogo tiene su propio error: se ve dentro de él y empieza limpio cada vez que se abre, sin tocar los errores de la lista. Y la respuesta del servidor para un diálogo ya cerrado (puede llegar con otro abierto) ni muestra su error ni cierra el que está abierto: solo vuelve a leer la lista;
+    - en Proveedores, un error al leer la lista seguía en pantalla aunque la siguiente lectura funcionara.
+  - **`CustomersList.test.tsx` (14, nuevo):**
+    - cada cliente, columna por columna: cuánto puede deber y en qué plazo, su RFC, su contacto, su tipo (registrado o público general) y si está activo;
+    - la venta al público general no se toca: su ficha, editar, fiado, desactivar y eliminar están deshabilitados;
+    - abre con lo que trajo la búsqueda global (recortado), y el estado y la búsqueda van al servidor desde la primera página;
+    - crear un cliente con el teléfono recortado, y volver a leer la lista;
+    - lo que falta antes de mandar (nombre y un teléfono que no sean espacios), dentro del diálogo y una sola vez;
+    - editar un cliente desde lo que tiene, con sus datos fiscales y el correo de sus facturas;
+    - los datos fiscales se cambian en su propio diálogo solo con los cambios del cliente guardados, y la lista se vuelve a leer solo si cambiaron;
+    - el fiado, solo para el dueño y para un cliente con teléfono, y la lista se vuelve a leer al cerrarlo;
+    - la ficha de un cliente;
+    - activar o desactivar, y el motivo del servidor si no se puede, que sigue a la vista aunque se abra y se cierre un diálogo;
+    - lo que responde el servidor para un diálogo ya cerrado, con otro abierto: su error no aparece en el que está abierto, y si guardó, la lista se vuelve a leer sin cerrar el diálogo nuevo ni perder lo escrito;
+    - eliminar solo tras confirmar;
+    - el error del servidor dentro del diálogo, una sola vez, que no reaparece al volver a abrirlo;
+    - un error al leer la lista, que sigue a la vista aunque se abra y se cierre un diálogo.
+  - **`SuppliersList.test.tsx` (9, nuevo):**
+    - cada proveedor, columna por columna: su RFC, su contacto y su dirección, su correo y su teléfono, y si está activo;
+    - el estado y la búsqueda van al servidor desde la primera página;
+    - crear un proveedor con lo escrito recortado y nada para lo vacío, el aviso, y volver a leer la lista;
+    - editar un proveedor desde lo que tiene;
+    - el nombre que falta, dentro del diálogo, que no reaparece al volver a abrirlo;
+    - el error del servidor dentro del diálogo, una sola vez, con el botón listo para reintentar;
+    - lo que responde el servidor para un diálogo ya cerrado, con otro abierto: ni su error ni su aviso aparecen, y si guardó, la lista se vuelve a leer sin cerrar el diálogo nuevo;
+    - activar o desactivar con su aviso, y el motivo del servidor si no se puede;
+    - un error al leer la lista sigue a la vista aunque se abra un diálogo y se mande sin nombre, y deja de verse cuando una lectura funciona.
+  - **Mutaciones:** de 62, fallan las pruebas en 57. Sobreviven cinco que dan lo mismo: limpiar el error del diálogo al cerrarlo (en las dos listas) o al guardar bien un proveedor, porque ya se limpia al abrirlo y al mandarlo; y contar un intento nuevo solo al abrir o solo al cerrar el diálogo, porque nunca se abre uno sin cerrar el anterior.
+  - **Revisión independiente:** corrió las suites en cuatro zonas horarias con dos órdenes aleatorios, y 29 mutaciones propias. Encontró un fixture que no compilaba con `tsc` (el teléfono como `null`), el error de una respuesta que llegaba tras cerrar el diálogo y aparecía en el siguiente, mensajes que podían salir dos veces, caminos donde el error de la lista no estaba protegido y una prueba que prometía más de lo que comprobaba. Quedaron corregidos. Luego claude-review encontró que la respuesta podía llegar con el siguiente diálogo ya abierto y mostrar ahí su error, o cerrarlo si había guardado; ahora cada apertura y cierre es un intento nuevo y la respuesta de uno anterior se descarta, salvo para volver a leer la lista.
+  - **Cliente:** 222 archivos y 1,730 pruebas, lint y build en verde.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
