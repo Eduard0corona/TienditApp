@@ -26,6 +26,8 @@ export default function OperationalReports() {
 
   const loadReport = useCallback(async () => {
     setLoading(true);
+    // A failure of the previous read stops being true once this one is asked for.
+    setError('');
     try {
       const params: { fromDate?: string; toDate?: string } = {};
       if (fromDate) params.fromDate = businessDayStart(fromDate);

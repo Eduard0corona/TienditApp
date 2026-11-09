@@ -2682,6 +2682,42 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Mutaciones:** de 60, fallan las pruebas en 59. Sobrevive mostrar la salida de una línea de entrada como «-» por otra condición, que da lo mismo porque una línea es entrada o salida.
   - **Revisión independiente:** corrió las suites en cinco zonas horarias y en orden aleatorio, y 29 mutaciones propias. Señaló lo que sobrevivía: las recargas al desactivar un insumo, el historial leído al abrir otras pestañas, las acciones de una pestaña en otra, los filtros que no regresaban a la primera página, las cifras que se podrían calcular en pantalla, el detalle que no se distinguía de la lista, las columnas cruzadas, el encabezado del detalle, el doble envío, los campos mal conectados, los motivos que no se comparaban como lista y el orden del código y el SKU. Quedaron cubiertas. Siguen sin pruebas Recetas, Ubicaciones, Alertas y las listas de Transferencias y Conteos.
   - **Cliente:** 215 archivos y 1,662 pruebas, lint y build en verde.
+- Fase 30M, pruebas de Reportes y de Servicios (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Qué cambia:** Reportes (`OperationalReports`), el Taller (`ServiceBoard`) y la lista de servicios (`ServicesList`) no tenían pruebas propias. Ahora se prueban montadas, con la API simulada. Las pruebas encontraron cuatro fallas, que quedan corregidas:
+    - en Reportes, si la carga fallaba y luego «Actualizar» sí leía el reporte, el error seguía en pantalla;
+    - en Servicios, el error al guardar se mostraba en la página, detrás del diálogo abierto, donde no se veía. Ahora el diálogo tiene su propio error: se ve dentro de él y se olvida al cerrarlo, sin tocar los errores de la lista (un error al leerla sigue a la vista aunque se abra y se cierre el diálogo);
+    - el interruptor de disponibilidad de cada servicio no tenía nombre para un lector de pantalla. Ahora dice «Disponible: <servicio>»;
+    - el Taller ofrecía «Tomar servicio» en piezas completadas o canceladas, que el servidor rechaza, y «Liberar», que borraría quién la trabajó. Ahora solo una pieza abierta se toma o se libera.
+  - **`OperationalReports.test.tsx` (5, nuevo):**
+    - las cifras que manda el servidor (la utilidad bruta no se calcula en pantalla), la operación y lo que entró por cada método de pago, con su nombre;
+    - el rango por días del negocio (Cancún, de las 05:00 UTC a las 04:59:59 UTC del día siguiente) y «Actualizar»;
+    - un periodo sin pagos;
+    - el acceso a Campañas, solo para quien puede mandarlas;
+    - una falla del servidor dice lo que la página no pudo hacer, no lo que escribió el servidor, y deja de decirlo cuando «Actualizar» lee el reporte.
+  - **`ServiceBoard.test.tsx` (8, nuevo):**
+    - cada pieza en la columna de su estado; el total de piezas es el del servidor, y se cuentan las activas, las atrasadas y las que vencen en menos de una hora (una pieza sin fecha prometida no vence);
+    - en cada pieza, su prioridad (urgente desde 4, baja solo en 1; la normal no lleva distintivo), su ingreso y su promesa en la zona del negocio, cuánto falta para entregarla o cuánto lleva de atraso, su nota y quién la tiene;
+    - una pieza pasa solo al estado que le sigue (aceptada a en progreso o cancelada; en progreso a completada o cancelada), y se vuelve a leer el tablero; una completada o cancelada no se toma ni se libera;
+    - tomar una pieza y liberarla;
+    - la búsqueda (recortada) y los filtros «Mis servicios», «Mostrar completadas» y «Mostrar canceladas» van al servidor, cada uno a su parámetro;
+    - un cambio en otra parte vuelve a leer el tablero; varios a la vez son una sola lectura, y mientras lee no se borra el tablero;
+    - el detalle de una pieza;
+    - el motivo del servidor cuando una pieza no puede cambiar, un error al leer y el tablero vacío.
+  - **`ServicesList.test.tsx` (11, nuevo):**
+    - cada servicio, columna por columna (categoría, precio, unidad, horario, duración, si se rastrea y si se avisa al cliente), y su disponibilidad;
+    - los filtros por categoría y disponibilidad y la búsqueda van al servidor y regresan a la primera página;
+    - crear un servicio: los números, horarios, IVA, objeto de impuesto y claves del SAT que toma la API, y se vuelve a leer la lista;
+    - «Notificar al cliente» necesita que el servicio se rastree, y se apaga al dejar de rastrearlo;
+    - editar un servicio desde lo que tiene, y mandar otra vez su tasa, su objeto de impuesto y sus claves;
+    - un servicio cuya categoría ya no existe pide elegir otra;
+    - lo que falta antes de mandar;
+    - el error del servidor dentro del diálogo, que se olvida al cerrarlo;
+    - eliminar solo tras confirmar;
+    - prender o apagar un servicio, y el aviso si no se puede;
+    - un error al leer los servicios, que sigue a la vista aunque se abra y se cierre un diálogo.
+  - **Mutaciones:** de 57, fallan las pruebas en 55. Sobreviven dos que dan lo mismo con lo que manda el servidor, que no da minutos para la fecha prometida a una pieza atrasada: contar como «por vencer» una atrasada, y mostrar «Entrega en» en una atrasada.
+  - **Revisión independiente:** corrió las suites en cinco zonas horarias con tres órdenes aleatorios, y 32 mutaciones propias. Encontró que el primer arreglo de Servicios borraba el error de la lista al abrir el diálogo (ahora el diálogo tiene su propio error), que la prueba del Taller fijaba «Tomar servicio» en piezas cerradas, que las prioridades del fixture no eran las que se guardan (1, 3 y 5), el objeto de impuesto que no se comprobaba y dos filtros que se activaban juntos. Quedaron corregidos.
+  - **Cliente:** 218 archivos y 1,686 pruebas, lint y build en verde.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

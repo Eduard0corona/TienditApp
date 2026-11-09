@@ -82,6 +82,8 @@ export default function ServicesList() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // What the dialog could not save: shown inside it, where it can be seen, and apart from the errors of the list.
+  const [saveError, setSaveError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingService, setEditingService] = useState<ProductDto | null>(null);
   const [filterCategory, setFilterCategory] = useState('');
@@ -213,12 +215,13 @@ export default function ServicesList() {
   };
 
   const closeModal = () => {
+    setSaveError('');
     setShowModal(false);
     setEditingService(null);
   };
 
   const onSubmit = async (form: ServiceFormData) => {
-    setError('');
+    setSaveError('');
 
     const payload: CreateProductRequest = {
       categoryId: form.categoryId,
@@ -254,8 +257,7 @@ export default function ServicesList() {
       closeModal();
       await loadServices();
     } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'Error al guardar el servicio.');
-      setError(msg);
+      setSaveError(getApiErrorMessage(err, 'Error al guardar el servicio.'));
     }
   };
 
@@ -396,6 +398,7 @@ export default function ServicesList() {
                           type="checkbox"
                           className="form-check-input"
                           checked={service.isAvailable}
+                          aria-label={`Disponible: ${service.name}`}
                           onChange={() => handleToggleAvailability(service)}
                         />
                       </div>
@@ -432,6 +435,7 @@ export default function ServicesList() {
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
+            {saveError && <div className="alert alert-danger" role="alert">{saveError}</div>}
             <div className="mb-3">
               <label htmlFor="serviceslist-nombre" className="form-label">Nombre <span className="text-danger">*</span></label>
               <input id="serviceslist-nombre"

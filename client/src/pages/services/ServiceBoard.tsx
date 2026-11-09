@@ -416,27 +416,31 @@ export default function ServiceBoard() {
                             )}
                           </div>
 
-                          <div className="d-flex gap-1 mt-2">
-                            {!piece.assignedToUserId ? (
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-primary flex-fill"
-                                disabled={isProcessing}
-                                onClick={() => void handleAssignToMe(piece.pieceId)}
-                              >
-                                Tomar servicio
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-secondary flex-fill"
-                                disabled={isProcessing}
-                                onClick={() => void handleRelease(piece.pieceId)}
-                              >
-                                Liberar
-                              </button>
-                            )}
-                          </div>
+                          {/* Only an open piece is taken or let go: the server refuses a completed or cancelled one, and
+                              letting it go would lose who worked it. */}
+                          {transitions.length > 0 && (
+                            <div className="d-flex gap-1 mt-2">
+                              {!piece.assignedToUserId ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-primary flex-fill"
+                                  disabled={isProcessing}
+                                  onClick={() => void handleAssignToMe(piece.pieceId)}
+                                >
+                                  Tomar servicio
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-secondary flex-fill"
+                                  disabled={isProcessing}
+                                  onClick={() => void handleRelease(piece.pieceId)}
+                                >
+                                  Liberar
+                                </button>
+                              )}
+                            </div>
+                          )}
 
                           {transitions.length > 0 && (
                             <div className="d-flex gap-1 mt-2">
