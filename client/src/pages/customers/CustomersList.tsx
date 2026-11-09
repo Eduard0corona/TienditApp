@@ -204,6 +204,7 @@ export default function CustomersList() {
                 loading={loading}
                 emptyMessage="No hay clientes registrados."
                 searchPlaceholder="Nombre, teléfono o correo"
+                filterValues={[filterActive]}
                 filters={(
                   <DataTableFilter label="Estado" htmlFor="customers-status">
                     <select

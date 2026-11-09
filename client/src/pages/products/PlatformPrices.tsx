@@ -273,8 +273,8 @@ export default function PlatformPrices() {
             searchFilter={(row, search) =>
               row.item.name.toLowerCase().includes(search) || row.item.categoryName.toLowerCase().includes(search)}
             pageSizeOptions={PAGE_SIZES}
-            filters={(
-              <>
+            // The platform whose prices are being edited is which list this is, not a filter: in sight on a phone.
+            views={(
                 <DataTableFilter label="Plataforma" htmlFor={`${filterId}-platform`}>
                   <select
                     id={`${filterId}-platform`}
@@ -290,6 +290,9 @@ export default function PlatformPrices() {
                     ))}
                   </select>
                 </DataTableFilter>
+            )}
+            filterValues={[category]}
+            filters={(
                 <DataTableFilter label="Categoría" htmlFor={`${filterId}-category`}>
                   <select
                     id={`${filterId}-category`}
@@ -301,7 +304,6 @@ export default function PlatformPrices() {
                     {categories.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                   </select>
                 </DataTableFilter>
-              </>
             )}
             toolbarEnd={(
               <button

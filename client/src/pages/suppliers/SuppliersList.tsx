@@ -176,6 +176,7 @@ export default function SuppliersList() {
             loading={loading}
             emptyMessage="No hay proveedores registrados."
             searchPlaceholder="Nombre, contacto, teléfono o correo"
+            filterValues={[activeFilter]}
             filters={(
               <DataTableFilter label="Estado" htmlFor="supplierslist-estado">
                 <select id="supplierslist-estado"

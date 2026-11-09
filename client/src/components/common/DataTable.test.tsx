@@ -43,6 +43,88 @@ describe('DataTable', () => {
     expect(screen.getByRole('combobox', { name: 'Por página' })).toHaveValue('10');
   });
 
+  // Fase 30G: on a phone the filters wait behind «Filtros» (DataTable.css shows the button and hides the box only there).
+  it('opens and closes the filters with «Filtros», which says whether they are open and names their box', async () => {
+    const user = userEvent.setup();
+    renderTable(rows(3));
+
+    const toggle = screen.getByRole('button', { name: 'Filtros' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const box = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect(box).toHaveClass('datatable-filters');
+    expect(box).not.toHaveClass('is-open');
+    expect(within(box).getByRole('combobox', { name: 'Estado' })).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(box).toHaveClass('is-open');
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(box).not.toHaveClass('is-open');
+  });
+
+  it('keeps what the list shows out of the filters box, in sight on a phone', () => {
+    render(
+      <DataTable
+        data={rows(3)}
+        columns={[{ header: 'Nombre' }]}
+        keyExtractor={(row) => row.id}
+        renderRow={(row) => <td>{row.name}</td>}
+        views={<button type="button">Próximas</button>}
+        filters={(
+          <DataTableFilter label="Estado" htmlFor="test-status-views">
+            <select id="test-status-views" className="form-select form-select-sm"><option>Todos</option></select>
+          </DataTableFilter>
+        )}
+      />,
+    );
+
+    const box = document.getElementById(screen.getByRole('button', { name: 'Filtros' }).getAttribute('aria-controls')!)!;
+    const views = screen.getByRole('button', { name: 'Próximas' });
+    expect(box).not.toContainElement(views);
+    expect(views.closest('.datatable-views')).not.toBeNull();
+    expect(within(screen.getByRole('search')).getByRole('button', { name: 'Próximas' })).toBe(views);
+  });
+
+  it('says on «Filtros» how many filters are set, as they wait behind it on a phone', () => {
+    const table = (filterValues?: unknown[]) => (
+      <DataTable
+        data={rows(3)}
+        columns={[{ header: 'Nombre' }]}
+        keyExtractor={(row) => row.id}
+        renderRow={(row) => <td>{row.name}</td>}
+        filterValues={filterValues}
+        filters={(
+          <DataTableFilter label="Estado" htmlFor="test-status-count">
+            <select id="test-status-count" className="form-select form-select-sm"><option>Todos</option></select>
+          </DataTableFilter>
+        )}
+      />
+    );
+    // Set: a date, a switch that is on, and zero (the first value of many enums, OrderStatus.Pending).
+    const { rerender } = render(table(['2026-10-04', true, 0, '', null, undefined, false]));
+    expect(screen.getByRole('button', { name: 'Filtros (3)' })).toBeInTheDocument();
+
+    rerender(table(['', null, undefined, false]));
+    expect(screen.getByRole('button', { name: 'Filtros' })).toBeInTheDocument();
+    rerender(table());
+    expect(screen.getByRole('button', { name: 'Filtros' })).toBeInTheDocument();
+  });
+
+  it('shows no «Filtros» button for a list without filters', () => {
+    render(
+      <DataTable
+        data={rows(3)}
+        columns={[{ header: 'Nombre' }]}
+        keyExtractor={(row) => row.id}
+        renderRow={(row) => <td>{row.name}</td>}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Filtros' })).not.toBeInTheDocument();
+  });
+
   it('moves through the pages with named buttons and marks the current one', async () => {
     const user = userEvent.setup();
     renderTable(rows(30));

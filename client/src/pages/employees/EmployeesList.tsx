@@ -138,6 +138,7 @@ export default function EmployeesList() {
             loading={employees.isLoading}
             emptyMessage="Nadie en el equipo con ese filtro."
             searchPlaceholder="Nombre, correo o teléfono"
+            filterValues={[status]}
             filters={(
               <DataTableFilter label="Estado" htmlFor="employees-status">
                 <select

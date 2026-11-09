@@ -87,6 +87,7 @@ export default function AuditLogs() {
             keyExtractor={(item) => item.id}
             loading={loading}
             emptyMessage="No hay actividad registrada con estos filtros."
+            filterValues={[entityName, action, fromDate, toDate]}
             filters={(
               <>
                 <DataTableFilter label="Entidad" htmlFor="auditlogs-entidad">

@@ -108,6 +108,14 @@ describe('AppointmentsList', () => {
     vi.mocked(employeesApi.getAll).mockResolvedValue({ data: page([]) } as never);
   });
 
+  // Fase 30G: from the requests notice the list opens filtered by state, which on a phone waits behind «Filtros».
+  it('says on «Filtros» the state filter the requests notice set, while the views stay out of it', async () => {
+    renderAgenda([appointment({ id: 'a1' })], { path: '/appointments?estado=por-confirmar' });
+    expect(await screen.findByRole('button', { name: 'Filtros (1)' })).toBeInTheDocument();
+    const box = document.getElementById(screen.getByRole('button', { name: 'Filtros (1)' }).getAttribute('aria-controls')!)!;
+    expect(box).not.toContainElement(screen.getByRole('button', { name: 'Anteriores' }));
+  });
+
   it('reads the list and the requests again, without a spinner, when a request arrives (Fase 29N)', async () => {
     renderAgenda([appointment({ id: 'a1' })], { requests: 0 });
     await screen.findByText('Ana Ruiz');

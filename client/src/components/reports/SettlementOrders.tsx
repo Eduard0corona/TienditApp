@@ -75,6 +75,7 @@ export default function SettlementOrders({ platform, orders, from, to, saved, pi
         || (order.externalOrderId ?? '').toLowerCase().includes(search)
         || order.orderNumber.toLowerCase().includes(search)}
       pageSizeOptions={PAGE_SIZES}
+      filterValues={[shown === 'all' ? null : shown]}
       filters={picking && (
         <DataTableFilter label="Mostrar" htmlFor={`${id}-shown`}>
           <select id={`${id}-shown`} className="form-select form-select-sm" value={shown} onChange={(event) => setShown(event.target.value as Shown)}>

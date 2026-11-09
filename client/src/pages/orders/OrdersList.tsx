@@ -590,6 +590,7 @@ export default function OrdersList() {
                   : fromDate || toDate ? 'No hay pedidos en estas fechas.' : 'No hay pedidos con estos filtros.'}
                 searchPlaceholder="Folio, cliente o teléfono"
                 initialSearch={initialSearch}
+                filterValues={[selectedOrderType, selectedStatus, selectedChannel, fromDate, toDate]}
                 filters={(
                   <>
                     {mixesOrderTypes && (

@@ -211,6 +211,7 @@ export default function CategoriesList() {
                 loading={categoriesQuery.isLoading}
                 emptyMessage={showArchived ? 'No hay categorías registradas.' : 'No hay categorías activas.'}
                 searchPlaceholder="Nombre o descripción"
+                filterValues={[showArchived]}
                 filters={(
                   <div className="form-check form-switch mb-1">
                     <input

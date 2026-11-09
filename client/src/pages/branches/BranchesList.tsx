@@ -366,6 +366,7 @@ export default function BranchesList() {
             loading={branches.isLoading}
             emptyMessage="No hay sucursales."
             searchPlaceholder="Nombre, clave o ciudad"
+            filterValues={[activeFilter]}
             filters={(
               <DataTableFilter label="Estado" htmlFor="branches-filter">
                 <select

@@ -33,6 +33,7 @@ export default function KardexTab({ list, supplyOptions, locations }: KardexTabP
       keyExtractor={(item) => item.movementLineId}
       loading={list.loading}
       emptyMessage="No hay movimientos para los filtros seleccionados."
+      filterValues={[list.filters.supplyId, list.filters.locationId, list.filters.fromDate, list.filters.toDate]}
       filters={(
         <>
           <DataTableFilter label="Insumo" htmlFor="inventorymanagement-insumo">

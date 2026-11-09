@@ -166,6 +166,7 @@ export default function QuotesList() {
             emptyMessage={filter === QuoteListFilter.Open
               ? 'No tienes cotizaciones abiertas. Empieza una aquí o desde la cita de una visita en la Agenda.'
               : 'No hay cotizaciones con ese estado.'}
+            filterValues={[filter === QuoteListFilter.All ? null : filter]}
             filters={(
               <DataTableFilter label="Estado" htmlFor="quotes-filter">
                 <select

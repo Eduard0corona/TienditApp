@@ -134,6 +134,7 @@ export default function PlatformSettlements() {
               },
               onSearchChange: (search) => filter({ search }),
             }}
+            filterValues={[filters.channel, filters.status]}
             filters={(
               <>
                 <DataTableFilter label="Plataforma" htmlFor={`${id}-platform`}>

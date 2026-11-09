@@ -253,6 +253,7 @@ export default function PurchaseOrdersList() {
             keyExtractor={(item) => item.id}
             loading={loading}
             emptyMessage="No hay compras registradas."
+            filterValues={[statusFilter]}
             filters={(
               <DataTableFilter label="Estado" htmlFor="purchaseorderslist-estado">
                 <select id="purchaseorderslist-estado"

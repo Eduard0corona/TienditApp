@@ -42,6 +42,7 @@ export default function CountsTab({ locations, filter, onFilterChange: setFilter
           ? 'Ningún conteo coincide con los filtros.'
           : 'Todavía no hay conteos. Empieza uno para cuadrar lo que hay en el anaquel con lo que dice el sistema.'}
         searchPlaceholder="Buscar por folio o ubicación"
+        filterValues={[filter.status, filter.locationId]}
         filters={(
           <>
             <DataTableFilter label="Estado" htmlFor="conteos-estado">

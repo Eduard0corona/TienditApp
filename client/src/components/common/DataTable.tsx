@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import './DataTable.css';
 
 export interface DataTableColumn {
@@ -38,8 +38,20 @@ interface DataTableProps<T> {
   initialSearch?: string;
   /** The longest search the API takes: the box does not let more be typed. */
   searchMaxLength?: number;
+  /**
+   * What the list shows (Próximas, Anteriores), before the filters in the same bar. Unlike them it stays in sight on a
+   * phone: it is not a filter but which list this is.
+   */
+  views?: ReactNode;
   /** The screen's own filters, in the same bar as the search box (each one a `DataTableFilter`). */
   filters?: ReactNode;
+  /**
+   * The values of those filters. On a phone, where they wait behind «Filtros», the button says how many are set: a list
+   * filtered out of sight («Desde» today in Pedidos) does not look complete. Set is what is not empty, null, undefined or
+   * false (a switch that is off); zero is set, as it is the first value of many enums. A «Todos» of another value is
+   * passed as null.
+   */
+  filterValues?: unknown[];
   /** The action of the list (Nuevo producto) or a control of the screen, at the end of that bar. */
   toolbarEnd?: ReactNode;
 }
@@ -69,10 +81,16 @@ export default function DataTable<T>({
   searchPlaceholder = 'Buscar…',
   initialSearch = '',
   searchMaxLength,
+  views,
   filters,
+  filterValues = [],
   toolbarEnd,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState(initialSearch);
+  // On a phone the filters wait behind «Filtros» (Fase 30G): with 16 px fields they took up to five rows above the list.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersId = useId();
+  const activeFilters = filterValues.filter((value) => value !== '' && value !== null && value !== undefined && value !== false).length;
   const [clientPage, setClientPage] = useState(1);
   const [clientPageSize, setClientPageSize] = useState(pageSizeOptions[0]);
 
@@ -178,7 +196,23 @@ export default function DataTable<T>({
               onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
-          {filters}
+          {filters && (
+            <>
+              {/* From a tablet up the filters are in the bar and this button does not show (DataTable.css). */}
+              <button
+                type="button"
+                className={`btn btn-light btn-sm datatable-filters-toggle${filtersOpen ? ' active' : ''}`}
+                aria-expanded={filtersOpen}
+                aria-controls={filtersId}
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                <i className="ri-filter-3-line" aria-hidden="true"></i>
+                {activeFilters > 0 ? `Filtros (${activeFilters})` : 'Filtros'}
+              </button>
+            </>
+          )}
+          {views && <div className="datatable-views">{views}</div>}
+          {filters && <div id={filtersId} className={`datatable-filters${filtersOpen ? ' is-open' : ''}`}>{filters}</div>}
         </div>
         {toolbarEnd && <div className="datatable-toolbar-end">{toolbarEnd}</div>}
       </div>

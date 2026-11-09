@@ -200,6 +200,7 @@ export default function BusinessReviewsPage() {
               onPageChange: setPage,
               onPageSizeChange: (size) => { setPageSize(size); setPage(1); },
             }}
+            filterValues={[filter === BusinessReviewsFilter.All ? null : filter]}
             filters={(
               <DataTableFilter label="Mostrar" htmlFor="reviews-filter">
                 <select

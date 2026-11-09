@@ -155,6 +155,7 @@ export default function LedgerReview({ locations, filter, onFilterChange: setFil
         loading={review.isLoading}
         emptyMessage={review.isError ? 'No se pudo revisar el historial.' : filtered ? 'Nada que no cuadre coincide con la búsqueda.' : 'Todo cuadra.'}
         searchPlaceholder="Buscar artículo o ubicación"
+        filterValues={[filter.locationId]}
         filters={(
           <DataTableFilter label="Ubicación" htmlFor="cuadre-ubicacion">
             <select

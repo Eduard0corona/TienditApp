@@ -144,6 +144,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
           keyExtractor={(session) => session.id}
           loading={loading}
           emptyMessage="No hay turnos con estos filtros."
+          filterValues={[fromDate, toDate, branchId, onlyWithDifference]}
           filters={(
             <>
               <DataTableFilter label="Desde" htmlFor="shifts-from">

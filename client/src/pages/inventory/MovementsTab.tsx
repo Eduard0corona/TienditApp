@@ -35,6 +35,7 @@ export default function MovementsTab({ list, onOpenDetail }: MovementsTabProps) 
       keyExtractor={(item) => item.id}
       loading={list.loading}
       emptyMessage="No hay movimientos registrados."
+      filterValues={[list.filters.type, list.filters.reason, list.filters.fromDate, list.filters.toDate]}
       filters={(
         <>
           <DataTableFilter label="Tipo" htmlFor="inventorymanagement-tipo">

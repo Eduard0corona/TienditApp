@@ -122,6 +122,7 @@ export default function ReceivablesPage() {
               : search ? 'Nadie que coincida te debe.' : 'Nadie te debe: los pedidos entregados están pagados.'}
             searchPlaceholder="Nombre o teléfono"
             searchMaxLength={100}
+            filterValues={[overdueOnly]}
             filters={(
               <>
                 <DataTableFilter label="Ordenar" htmlFor="receivables-sort">

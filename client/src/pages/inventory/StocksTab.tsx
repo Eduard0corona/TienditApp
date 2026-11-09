@@ -30,6 +30,7 @@ export default function StocksTab({ list, locations }: StocksTabProps) {
       keyExtractor={(item) => item.stockId}
       loading={list.loading}
       emptyMessage="No hay existencias registradas."
+      filterValues={[list.filters.locationId, list.filters.lowStockOnly]}
       filters={(
         <>
           <DataTableFilter label="Ubicación" htmlFor="inventorymanagement-ubicacion">

@@ -95,7 +95,8 @@ export default function PlatformReviewsPage() {
               onPageChange: setPage,
               onPageSizeChange: (size) => { setPageSize(size); setPage(1); },
             }}
-            filters={(
+            // Reportadas or Ocultas are two lists, not a filter of one: in sight on a phone (Fase 30G).
+            views={(
               <DataTableFilter label="Mostrar" htmlFor="platform-reviews-filter">
                 <select
                   id="platform-reviews-filter"

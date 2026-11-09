@@ -284,6 +284,7 @@ export default function IssuedCfdis() {
             searchPlaceholder="Buscar folio, UUID, RFC, nombre o pedido"
             searchMaxLength={MAX_SEARCH_LENGTH}
             pageSizeOptions={PAGE_SIZES}
+            filterValues={[kind, status]}
             filters={(
               <>
                 <DataTableFilter label="Tipo" htmlFor="issued-cfdis-kind">

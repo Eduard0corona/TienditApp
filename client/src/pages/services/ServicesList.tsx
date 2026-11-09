@@ -309,6 +309,7 @@ export default function ServicesList() {
                 loading={loading}
                 emptyMessage="No hay servicios registrados."
                 searchPlaceholder="Nombre del servicio"
+                filterValues={[filterCategory, filterAvailability]}
                 filters={(
                   <>
                     <DataTableFilter label="Categoría" htmlFor="services-category">

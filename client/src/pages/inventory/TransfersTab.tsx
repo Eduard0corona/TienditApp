@@ -43,6 +43,7 @@ export default function TransfersTab({ locations, filter, onFilterChange: setFil
           ? 'Ninguna transferencia coincide con los filtros.'
           : 'Todavía no hay transferencias. Haz una para llevar artículos de una ubicación a otra.'}
         searchPlaceholder="Buscar por folio o ubicación"
+        filterValues={[filter.locationId]}
         filters={(
           <DataTableFilter label="Ubicación" htmlFor="transferencias-ubicacion">
             <select

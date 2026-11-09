@@ -641,9 +641,10 @@ export default function AppointmentsList() {
             loading={loading}
             emptyMessage={view === 'upcoming' ? 'No hay citas de hoy en adelante.' : 'No hay citas anteriores.'}
             searchPlaceholder="Cliente, teléfono, servicio o persona"
+            views={viewPicker}
+            filterValues={[placeFilter, statusFilter]}
             filters={(
               <>
-                {viewPicker}
                 <DataTableFilter label="Dónde" htmlFor="appointments-place">
                   <select
                     id="appointments-place"

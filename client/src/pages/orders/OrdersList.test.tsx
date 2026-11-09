@@ -126,6 +126,17 @@ describe('OrdersList', () => {
     expect(screen.getByRole('combobox', { name: 'Canal' })).toHaveValue('');
   });
 
+  // Fase 30G: on a phone the filters wait behind «Filtros»; today's dates, set on opening, are counted there.
+  it('says on «Filtros» that the dates of today are set, and how many filters are once one more is picked', async () => {
+    const user = userEvent.setup();
+    renderOrders(TenantCapability.Food);
+    await screen.findByText('ORD-000001');
+    expect(screen.getByRole('button', { name: 'Filtros (2)' })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Estado' }), screen.getAllByRole('option', { name: 'Pendiente' })[0]);
+    expect(await screen.findByRole('button', { name: 'Filtros (3)' })).toBeInTheDocument();
+  });
+
   it('opens the online orders still to confirm, of any day, from the bell (Fase 29X)', async () => {
     renderOrders(TenantCapability.Food, [order({})], '/orders?estado=por-confirmar');
     await screen.findByText('ORD-000001');

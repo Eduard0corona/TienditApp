@@ -31,6 +31,7 @@ export default function SuppliesTab({ list, onEdit, onToggleActive }: SuppliesTa
       keyExtractor={(item) => item.id}
       loading={list.loading}
       emptyMessage="No hay insumos registrados."
+      filterValues={[list.filters.active, list.filters.lowStockOnly]}
       filters={(
         <>
           <DataTableFilter label="Estado" htmlFor="inventorymanagement-estado">

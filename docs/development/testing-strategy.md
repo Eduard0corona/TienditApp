@@ -2590,6 +2590,23 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas nuevas:** el foco del teclado en el menú condensado, en claro y en oscuro. «Pedidos» crece con su nombre y, ya usado, vuelve al ícono con su anillo. Las 7 escenas del menú condensado pasan dos corridas seguidas. Las que pasan el puntero sobre el menú no cambian.
   - **Primera visita:** 180,333 B (`master` en `e6f4517`: 180,232 B, +101 B por el estado de `LeftSidebar`, que va en la entrada con el menú). El presupuesto sube de 180,300 a 180,400 B. CSS global: 63,144 B (+67 B), dentro de su presupuesto.
   - **Revisión independiente:** encontró que un enlace usado con el teclado se quedaba crecido sobre la página nueva tomando sus clics, porque nada mueve el foco al navegar. También que los puntos entre páginas, atenuados, quedaban a 2.7:1, y que una prueba pasaba sin las reglas que muestran el nombre. Los tres están corregidos.
+- Fase 30G, en el teléfono los filtros de una lista esperan detrás de «Filtros» (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Cliente:** 209 archivos y 1,610 pruebas, lint y build en verde.
+    - `DataTable.test.tsx` (+4): «Filtros» abre y cierra la caja que nombra (`aria-expanded`, `aria-controls`); dice cuántos filtros tienen un valor (una fecha, un interruptor prendido y el cero de un enum cuentan; vacío, `null` y apagado no); lo que elige qué lista es (`views`) queda fuera de la caja; sin filtros no hay botón.
+    - `OrdersList.test.tsx` (+1): Pedidos abre con «Filtros (2)» por las fechas de hoy, y con un estado elegido dice «Filtros (3)».
+    - `AppointmentsList.test.tsx` (+1): desde el aviso de solicitudes la Agenda dice «Filtros (1)», y Próximas, Anteriores y Ruta del día quedan fuera de la caja.
+    - **Mutaciones:** contar Pedidos sin las fechas y la Agenda sin el estado hacen fallar su prueba.
+  - **Escenas:** contra `master` en `cdbcf03` (813 escenas):
+    - **Teléfono:** cambian 40, todas pantallas con filtros. Ahora llevan «Filtros» junto a la búsqueda, con su número cuando hay alguno con valor, y la acción de la lista va en su propio renglón.
+    - **Escritorio y tablet:** ninguna escena cambia; la caja de los filtros no se dibuja.
+    - **Escena nueva:** Pedidos en el teléfono con los filtros abiertos; pasa dos corridas seguidas.
+    - **Citas a domicilio:** la escena abre los filtros antes de elegir dónde. La Ruta del día no cambia: su selector quedó a la vista.
+  - **Primera visita:** 180,340 B, de un presupuesto de 180,400 B (`master`: 180,333 B, +7 B). La primera versión contaba con un ayudante en su propio módulo y sumaba 45 B al mapa de precarga de la entrada; ahora cuenta `DataTable`.
+  - **Revisión independiente:** encontró problemas, corregidos en la rama:
+    - un filtro con valor no se notaba detrás del botón (Pedidos abre con las fechas de hoy);
+    - las reseñas de la plataforma y Precios en apps escondían el selector de qué lista es;
+    - la acción podía compartir renglón con la búsqueda;
+    - las escenas también encontraban «Limpiar filtros».
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

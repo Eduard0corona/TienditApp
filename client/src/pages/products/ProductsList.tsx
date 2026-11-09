@@ -129,6 +129,7 @@ export default function ProductsList() {
                 loading={loading}
                 emptyMessage="No hay productos registrados."
                 searchPlaceholder="Nombre, SKU o código de barras"
+                filterValues={[filterCategory, filterAvailability]}
                 filters={(
                   <>
                     <DataTableFilter label="Categoría" htmlFor="products-category">

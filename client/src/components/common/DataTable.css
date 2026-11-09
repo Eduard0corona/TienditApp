@@ -35,6 +35,21 @@
   padding-left: 2rem;
 }
 
+/*
+ * What the list shows and the screen's filters. From a tablet up their boxes are not drawn (display: contents): each is
+ * one more control of the bar, as before the Fase 30G. On a phone the views take a row of their own and the filters
+ * wait behind «Filtros», on their own rows once it opens.
+ */
+.datatable-views,
+.datatable-filters {
+  display: contents;
+}
+
+/* Beside the search box, so it wins over .btn whatever order the stylesheets load in. */
+.datatable-search-area .datatable-filters-toggle {
+  display: none;
+}
+
 /* Filters keep their label above, so they line up with the search box at the bottom. */
 .datatable-filter {
   display: flex;
@@ -108,8 +123,33 @@
 }
 
 @media (max-width: 767.98px) {
+  /* The search box takes the row, beside «Filtros» when the list has filters. */
   .datatable-search {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .datatable-search-area .datatable-filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .datatable-views {
+    display: flex;
     flex-basis: 100%;
+  }
+
+  .datatable-filters {
+    display: none;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .datatable-filters.is-open {
+    display: flex;
   }
 
   /* The table scrolls sideways on a phone: headers in one line keep the rows short. */
@@ -117,7 +157,9 @@
     white-space: nowrap;
   }
 
+  /* Its own row, as when the filters filled the one above: hidden behind «Filtros», they no longer do. */
   .datatable-toolbar-end {
+    flex-basis: 100%;
     margin-left: 0;
   }
 }
