@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -252,23 +252,39 @@ describe('CustomersList', () => {
     expect(screen.getByText('Marta Ruiz tiene pedidos fiados sin pagar.')).toBeInTheDocument();
   });
 
-  it('does not show in the next dialog what the server answered after the previous one was closed', async () => {
+  it('keeps what the server answers for a dialog already closed out of the one open now', async () => {
     const user = userEvent.setup();
     let refuse: (reason: unknown) => void = () => undefined;
-    vi.mocked(customersApi.update).mockReturnValue(new Promise((_, reject) => { refuse = reject; }) as never);
+    let accept: (value: unknown) => void = () => undefined;
+    vi.mocked(customersApi.update)
+      .mockReturnValueOnce(new Promise((_, reject) => { refuse = reject; }) as never)
+      .mockReturnValueOnce(new Promise((resolve) => { accept = resolve; }) as never);
     renderList();
 
+    // Ana's save is refused once Marta's dialog is open: the error is Ana's, not Marta's.
     await user.click(within(await row('Ana Gil')).getByRole('button', { name: 'Editar Ana Gil' }));
     let dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
     await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
     await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar cliente' })).not.toBeInTheDocument());
-    refuse({ isAxiosError: true, response: { status: 409, data: { error: 'Ya existe un cliente con ese teléfono.' } } });
+    await user.click(within(await row('Marta Ruiz')).getByRole('button', { name: 'Editar Marta Ruiz' }));
+    dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
+    await act(async () => refuse({ isAxiosError: true, response: { status: 409, data: { error: 'Ya existe un cliente con ese teléfono.' } } }));
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
 
+    // Marta's save goes through once a new customer is being written: the list is read again, the new dialog stays.
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar cliente' })).not.toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: 'Nuevo cliente' }));
     dialog = await screen.findByRole('dialog', { name: 'Nuevo cliente' });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Nombre *'), 'Rosa Díaz');
+    const calls = vi.mocked(customersApi.getAll).mock.calls.length;
+    await act(async () => accept({ data: {} }));
+    await waitFor(() => expect(customersApi.getAll).toHaveBeenCalledTimes(calls + 1));
+    // Still shown, not on its way out.
+    expect(screen.getByRole('dialog', { name: 'Nuevo cliente' })).toHaveClass('show');
+    expect(within(dialog).getByLabelText('Nombre *')).toHaveValue('Rosa Díaz');
   });
 
   it('deletes a customer only once confirmed, and reads the list again', async () => {

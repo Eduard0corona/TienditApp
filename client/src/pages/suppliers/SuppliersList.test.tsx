@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { suppliersApi } from '../../api/suppliersApi';
@@ -136,6 +136,47 @@ describe('SuppliersList', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Ya existe un proveedor con el RFC LVA990101AB2.');
     expect(screen.getAllByText('Ya existe un proveedor con el RFC LVA990101AB2.')).toHaveLength(1);
     expect(within(dialog).getByRole('button', { name: 'Guardar cambios' })).toBeEnabled();
+    expect(screen.queryByText('Proveedor actualizado.')).not.toBeInTheDocument();
+  });
+
+  it('keeps what the server answers for a dialog already closed out of the one open now', async () => {
+    const user = userEvent.setup();
+    let refuse: (reason: unknown) => void = () => undefined;
+    let accept: (value: unknown) => void = () => undefined;
+    vi.mocked(suppliersApi.update)
+      .mockReturnValueOnce(new Promise((_, reject) => { refuse = reject; }) as never)
+      .mockReturnValueOnce(new Promise((resolve) => { accept = resolve; }) as never);
+    render(<SuppliersList />);
+
+    // The dairy's save is refused once a new supplier is being written: the error is not the new one's.
+    await user.click(within(await row('Lácteos del Valle')).getByRole('button', { name: 'Editar Lácteos del Valle' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Editar proveedor' });
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar proveedor' })).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Nuevo proveedor' }));
+    dialog = await screen.findByRole('dialog', { name: 'Nuevo proveedor' });
+    await user.type(within(dialog).getByLabelText('Nombre *'), 'Panadería La Espiga');
+    await act(async () => refuse({ isAxiosError: true, response: { status: 409, data: { error: 'Ya existe un proveedor con ese RFC.' } } }));
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nuevo proveedor' })).not.toBeInTheDocument());
+
+    // A save that goes through with another dialog open reads the list again, and leaves that dialog and its notice alone.
+    await user.click(within(await row('Tostadores de Altura')).getByRole('button', { name: 'Editar Tostadores de Altura' }));
+    dialog = await screen.findByRole('dialog', { name: 'Editar proveedor' });
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar proveedor' })).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Nuevo proveedor' }));
+    dialog = await screen.findByRole('dialog', { name: 'Nuevo proveedor' });
+    await user.type(within(dialog).getByLabelText('Nombre *'), 'Café de Olla SA');
+    const calls = vi.mocked(suppliersApi.getAll).mock.calls.length;
+    await act(async () => accept({ data: {} }));
+    await waitFor(() => expect(suppliersApi.getAll).toHaveBeenCalledTimes(calls + 1));
+    // Still shown, not on its way out.
+    expect(screen.getByRole('dialog', { name: 'Nuevo proveedor' })).toHaveClass('show');
+    expect(within(dialog).getByLabelText('Nombre *')).toHaveValue('Café de Olla SA');
     expect(screen.queryByText('Proveedor actualizado.')).not.toBeInTheDocument();
   });
 

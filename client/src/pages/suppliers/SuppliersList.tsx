@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -53,6 +53,9 @@ export default function SuppliersList() {
   const [error, setError] = useState('');
   // What the dialog could not save: shown inside it, where it can be seen, and apart from the errors of the list.
   const [saveError, setSaveError] = useState('');
+  // Each opening or closing of the dialog is a new attempt: an answer of the server for an earlier one (it may arrive with
+  // another dialog already open) neither shows its error nor closes the dialog that is open now.
+  const attempt = useRef(0);
   const [success, setSuccess] = useState('');
 
   const [showModal, setShowModal] = useState(false);
@@ -86,6 +89,7 @@ export default function SuppliersList() {
   }, [loadData]);
 
   const openCreate = () => {
+    attempt.current += 1;
     setSaveError('');
     setEditing(null);
     setForm(buildEmptyForm());
@@ -93,6 +97,7 @@ export default function SuppliersList() {
   };
 
   const openEdit = (supplier: SupplierDto) => {
+    attempt.current += 1;
     setSaveError('');
     setEditing(supplier);
     setForm({
@@ -108,6 +113,7 @@ export default function SuppliersList() {
   };
 
   const closeModal = () => {
+    attempt.current += 1;
     setSaveError('');
     setShowModal(false);
   };
@@ -130,20 +136,23 @@ export default function SuppliersList() {
       notes: form.notes.trim() || undefined,
     };
 
+    const sent = attempt.current;
     try {
       setSaving(true);
       if (editing) {
         const updatePayload: UpdateSupplierRequest = { ...payload, id: editing.id };
         await suppliersApi.update(editing.id, updatePayload);
-        setSuccess('Proveedor actualizado.');
       } else {
         await suppliersApi.create(payload);
-        setSuccess('Proveedor creado.');
       }
-      closeModal();
+      // The list shows what was saved either way; only the dialog that sent it is closed, with its notice.
+      if (attempt.current === sent) {
+        setSuccess(editing ? 'Proveedor actualizado.' : 'Proveedor creado.');
+        closeModal();
+      }
       await loadData();
     } catch (err: unknown) {
-      setSaveError(getApiErrorMessage(err, 'No se pudo guardar el proveedor.'));
+      if (attempt.current === sent) setSaveError(getApiErrorMessage(err, 'No se pudo guardar el proveedor.'));
     } finally {
       setSaving(false);
     }

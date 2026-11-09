@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Modal } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
@@ -45,6 +45,9 @@ export default function CustomersList() {
   const [error, setError] = useState('');
   // What the dialog could not save: shown inside it, where it can be seen, and apart from the errors of the list.
   const [saveError, setSaveError] = useState('');
+  // Each opening or closing of the dialog is a new attempt: an answer of the server for an earlier one (it may arrive with
+  // another dialog already open) neither shows its error nor closes the dialog that is open now.
+  const attempt = useRef(0);
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<CustomerDto | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -103,6 +106,7 @@ export default function CustomersList() {
   }, [loadCustomers]);
 
   const openCreateModal = () => {
+    attempt.current += 1;
     setSaveError('');
     setEditingCustomer(null);
     reset({ name: '', phone: '', email: '', notes: '' });
@@ -110,6 +114,7 @@ export default function CustomersList() {
   };
 
   const openEditModal = (customer: CustomerDto) => {
+    attempt.current += 1;
     setSaveError('');
     setEditingCustomer(customer);
     reset({
@@ -122,6 +127,7 @@ export default function CustomersList() {
   };
 
   const closeModal = () => {
+    attempt.current += 1;
     setSaveError('');
     setShowModal(false);
     setEditingCustomer(null);
@@ -135,6 +141,7 @@ export default function CustomersList() {
       return;
     }
 
+    const sent = attempt.current;
     try {
       if (editingCustomer) {
         await customersApi.update(editingCustomer.id, {
@@ -151,10 +158,11 @@ export default function CustomersList() {
         });
       }
 
-      closeModal();
+      // The list shows what was saved either way; only the dialog that sent it is closed.
+      if (attempt.current === sent) closeModal();
       await loadCustomers();
     } catch (err: unknown) {
-      setSaveError(getApiErrorMessage(err, 'Error al guardar cliente.'));
+      if (attempt.current === sent) setSaveError(getApiErrorMessage(err, 'Error al guardar cliente.'));
     }
   };
 
