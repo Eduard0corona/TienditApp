@@ -2953,18 +2953,19 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Primeros pasos:**
       - Los errores no se anunciaban.
       - Se podía omitir el arranque o volver al paso anterior mientras se instalaba una plantilla, e instalar una mientras se omitía.
-      - Una respuesta que llegaba después de que la persona se fue la sacaba de la página adonde había ido, o la desplazaba.
+      - Una respuesta que llegaba después de que la persona se fue la sacaba de la página adonde había ido, o la desplazaba, también si la plantilla se rechazaba.
       - «Reintentar» no decía que leía, y mandaba una petición por clic.
       - La tasa de IVA elegida y no guardada se perdía al volver a cambiar los módulos.
-      - Si leer el arranque otra vez fallaba después de instalar una plantilla, toda la página se volvía un error.
+      - Si leer el arranque otra vez fallaba después de instalar una plantilla, toda la página se volvía un error. Ahora sigue al paso siguiente y lo dice ahí, también después de guardar los módulos.
       - El error de una plantilla quedaba fuera de la vista.
   - **Mutaciones:** de 38, fallan las pruebas en las 38. Dos de las que sobrevivían señalaron una limpieza que repetía otra (el código al volver, que ya borra el envío), y se quitó.
   - **Revisión independiente:**
     - Con pruebas sonda y mutaciones encontró, como hallazgo mayor, que el arreglo de «Cancelar» dejaba guardar el nombre dos veces: cancelar mientras guardaba devolvía el formulario a su estado inicial con el envío todavía en camino.
     - Como menores encontró casi todo lo demás de la lista de arriba, y pruebas que prometían más de lo que comprobaban: la región de avisos comparada por subcadena, el rol sin revisar, el apellido, los textos de los errores y «Vender».
     - Todo quedó corregido, salvo dos que ya existían y quedan fuera: `saveModules` manda el negocio tal como está en el contexto, y los anuncios con un lector de pantalla real no se comprobaron.
+    - La revisión de la PR encontró dos menores más en Primeros pasos, corregidos con pruebas que fallan sin el arreglo: el error de volver a leer el arranque lo borraba el cambio de paso que venía después, y una plantilla rechazada después de salir desplazaba la pantalla.
   - **Cliente:**
-    - 233 archivos y 1,927 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - 233 archivos y 1,929 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
     - Primera visita: 180,400 B de 180,400 B. El código de la primera visita no cambia: la diferencia de 17 B con master sale de los nombres con hash de los chunks que cambiaron, que el chunk de entrada referencia y que comprimen distinto.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.

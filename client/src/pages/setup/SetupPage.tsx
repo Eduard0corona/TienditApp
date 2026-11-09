@@ -49,7 +49,8 @@ export default function SetupPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [installingId, setInstallingId] = useState('');
-  // Once read, a read again (after saving the modules or installing a template) keeps the page: a failure is said in it.
+  // Once read, a read again (after saving the modules or installing a template) keeps the page: whoever asked for it says
+  // the failure in the page, once it moved to the next step (moving clears the error).
   const read = useRef(false);
   // An answer that arrives once the person left (a link, the menu) does not move them, nor this page.
   const mounted = useRef(true);
@@ -58,7 +59,8 @@ export default function SetupPage() {
     return () => { mounted.current = false; };
   }, []);
 
-  const loadSetup = useCallback(async () => {
+  /** Reads the setup; once read, a failure is not shown here but returned, so the step it goes to says it. */
+  const loadSetup = useCallback(async (): Promise<string> => {
     try {
       const { data } = await tenantApi.getSetup();
       setSetup(data);
@@ -67,10 +69,11 @@ export default function SetupPage() {
       if (!read.current) setPolicy((current) => ({ ...current, pricesIncludeTax: data.pricesIncludeTax, defaultTaxRate: data.defaultTaxRate }));
       read.current = true;
       setLoadError('');
+      return '';
     } catch (err: unknown) {
       const message = getApiErrorMessage(err, 'No se pudo cargar el arranque guiado.');
-      if (read.current) setError(message);
-      else setLoadError(message);
+      if (!read.current) setLoadError(message);
+      return message;
     } finally {
       setLoading(false);
     }
@@ -100,6 +103,7 @@ export default function SetupPage() {
     setSaving(true);
     setError('');
     try {
+      let readAgain = '';
       if (capabilities !== setup?.capabilities) {
         await tenantApi.updateMyTenant({
           name: tenant.name,
@@ -118,9 +122,10 @@ export default function SetupPage() {
           city: tenant.city,
           state: tenant.state,
         });
-        await Promise.all([refreshTenant(), loadSetup()]);
+        [, readAgain] = await Promise.all([refreshTenant(), loadSetup()]);
       }
       goTo(1);
+      if (readAgain) setError(readAgain);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudieron guardar los módulos.'));
     } finally {
@@ -149,12 +154,14 @@ export default function SetupPage() {
       const { data } = await tenantApi.installStarterCatalog(catalog.id);
       toast.success(`Listo: ${data.productsCreated} productos de ejemplo de ${data.templateName}. Edita los precios cuando quieras.`);
       if (!mounted.current) return;
-      await loadSetup();
+      const readAgain = await loadSetup();
+      if (!mounted.current) return;
       goTo(3);
+      if (readAgain) setError(readAgain);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo instalar la plantilla.'));
-      // Said above the steps: the page goes up to it.
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Said above the steps: the page goes up to it, unless the person already left.
+      if (mounted.current) window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setInstallingId('');
     }

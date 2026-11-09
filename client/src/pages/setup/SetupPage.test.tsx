@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -343,7 +343,25 @@ describe('SetupPage', () => {
     expect(api.getSetup).toHaveBeenCalledTimes(1);
   });
 
-  it('goes on when the setup cannot be read again after installing a template', async () => {
+  it('says nothing and moves nothing when a template is refused after the person left', async () => {
+    const user = userEvent.setup();
+    let refuse: (reason: unknown) => void = () => undefined;
+    api.updateSalesPolicy.mockResolvedValue({ data: {} } as never);
+    api.installStarterCatalog.mockReturnValue(new Promise((_, reject) => { refuse = reject; }) as never);
+    renderSetup();
+    await user.click(await screen.findByRole('button', { name: 'Continuar' }));
+    await user.click(await screen.findByRole('button', { name: 'Continuar' }));
+    await user.click((await screen.findAllByRole('button', { name: 'Usar esta plantilla' }))[0]);
+
+    await user.click(screen.getByRole('link', { name: 'Salir' }));
+    const scrolled = vi.mocked(window.scrollTo).mock.calls.length;
+    await act(async () => refuse({ isAxiosError: true, response: { status: 409, data: { detail: 'Ya tienes productos.' } } }));
+
+    expect(screen.getByText('En /fuera')).toBeInTheDocument();
+    expect(window.scrollTo).toHaveBeenCalledTimes(scrolled);
+  });
+
+  it('goes on when the setup cannot be read again after installing a template, and says so in the last step', async () => {
     const user = userEvent.setup();
     api.updateSalesPolicy.mockResolvedValue({ data: {} } as never);
     api.installStarterCatalog.mockResolvedValue({ data: { templateId: 'cafe', templateName: 'Cafetería', productsCreated: 24 } } as never);
@@ -355,7 +373,24 @@ describe('SetupPage', () => {
     await user.click((await screen.findAllByRole('button', { name: 'Usar esta plantilla' }))[0]);
 
     expect(await screen.findByRole('heading', { name: '¡Tu negocio está listo para vender!' })).toBeInTheDocument();
+    // What is still to do may be out of date: the page says it could not read it again, and keeps going.
+    expect(screen.getByRole('alert')).toHaveTextContent('No se pudo cargar el arranque guiado.');
     expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
+  });
+
+  it('goes on when the setup cannot be read again after saving the modules, and says so in the next step', async () => {
+    const user = userEvent.setup();
+    api.updateMyTenant.mockResolvedValue({ data: {} } as never);
+    api.getSetup.mockResolvedValueOnce({ data: SETUP } as never)
+      .mockRejectedValue({ isAxiosError: true, response: { status: 400, data: { detail: 'El arranque no está disponible.' } } });
+    renderSetup();
+
+    await user.click(await screen.findByRole('checkbox', { name: /^Pantalla de cocina/ }));
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+
+    expect(await screen.findByRole('heading', { name: 'Precios e IVA' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('El arranque no está disponible.');
+    expect(api.getSetup).toHaveBeenCalledTimes(2);
   });
 
   it('can be skipped from the start, which the server remembers', async () => {
