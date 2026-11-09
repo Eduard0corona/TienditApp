@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -23,6 +24,9 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
   // On a short window the links go on below the edge: the faded edge says so.
   const linkCount = groups.reduce((count, group) => count + group.entries.length, 0);
   const { ref: scrollRef, fadeClass: scrollFadeClass } = useScrollFade<HTMLDivElement>(linkCount, 'y');
+  // The link just used, while it keeps the focus. Nothing moves the focus when the page changes: in the condensed menu
+  // a link the keyboard grew (shell.css) would stay grown over the new page, taking its clicks, until the focus left.
+  const [usedLink, setUsedLink] = useState<string | null>(null);
 
   return (
     <div className="ta-sidebar">
@@ -56,7 +60,14 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
                     const active = isNavEntryActive(entry, pathname);
                     return (
                       <li key={entry.label} className="ta-nav-item">
-                        <Link to={getNavEntryPath(entry)} className={`ta-nav-link ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined}>
+                        <Link
+                          to={getNavEntryPath(entry)}
+                          className={`ta-nav-link ${active ? 'active' : ''}`}
+                          aria-current={active ? 'page' : undefined}
+                          data-used={usedLink === entry.label ? '' : undefined}
+                          onClick={() => setUsedLink(entry.label)}
+                          onBlur={() => setUsedLink((used) => (used === entry.label ? null : used))}
+                        >
                           <i className={entry.icon} aria-hidden="true"></i>
                           <span>{entry.label}</span>
                         </Link>

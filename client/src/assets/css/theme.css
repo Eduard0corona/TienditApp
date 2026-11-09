@@ -443,9 +443,9 @@
 }
 
 /* A page button that does nothing (Anterior on the first page, Siguiente on the last) looked like the others: the
-   disabled color of pagination is the color of every page. Dimmed like a disabled button, as are the dots between. */
-.disabled > .page-link,
-.page-link.disabled {
+   disabled color of pagination is the color of every page. Dimmed like a disabled button; the dots between pages,
+   which are text and not a control, keep their contrast. */
+.page-link:disabled {
   opacity: 0.65;
 }
 

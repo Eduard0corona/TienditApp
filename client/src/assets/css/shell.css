@@ -560,9 +560,10 @@ html[data-ta-sidenav='condensed'] .ta-nav-link i {
 
 /*
  * Under the pointer a link grows to show its name on the accent; the focus ring on it takes the text's color. The
- * keyboard grows it too, so whoever tabs through the icons reads where each goes. Each in its own rule: Safari before
- * 15.4 drops a whole selector list that names :focus-visible. A touch screen grows none, as its menu scrolls and would
- * cut the name (see above); there the name is still the link's for a screen reader.
+ * keyboard grows it too, so whoever tabs through the icons reads where each goes, until the link is used (data-used,
+ * LeftSidebar): the focus stays on it when the page changes, and grown it would lie over the new page. Each in its own
+ * rule: Safari before 15.4 drops a whole selector list that names :focus-visible. A touch screen grows none, as its
+ * menu scrolls and would cut the name (see above); there the name is still the link's for a screen reader.
  */
 @media (hover: hover) {
   html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link {
@@ -573,7 +574,7 @@ html[data-ta-sidenav='condensed'] .ta-nav-link i {
     color: var(--ta-menu-condensed-link-color);
   }
 
-  html[data-ta-sidenav='condensed'] .ta-nav-link:focus-visible {
+  html[data-ta-sidenav='condensed'] .ta-nav-link:focus-visible:not([data-used]) {
     --ta-focus-ring: var(--ta-menu-condensed-link-color);
     position: relative;
     width: var(--ta-sidebar-width);
@@ -585,7 +586,7 @@ html[data-ta-sidenav='condensed'] .ta-nav-link i {
     opacity: 1;
   }
 
-  html[data-ta-sidenav='condensed'] .ta-nav-link:focus-visible span {
+  html[data-ta-sidenav='condensed'] .ta-nav-link:focus-visible:not([data-used]) span {
     opacity: 1;
   }
 
@@ -593,7 +594,7 @@ html[data-ta-sidenav='condensed'] .ta-nav-link i {
     margin-left: var(--ta-menu-item-padding-x);
   }
 
-  html[data-ta-sidenav='condensed'] .ta-nav-link:focus-visible span:not(.badge) {
+  html[data-ta-sidenav='condensed'] .ta-nav-link:focus-visible:not([data-used]) span:not(.badge) {
     margin-left: var(--ta-menu-item-padding-x);
   }
 }

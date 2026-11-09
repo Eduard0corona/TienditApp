@@ -193,11 +193,15 @@ describe('shell.css', () => {
     expect(hidden?.[1]).toContain('opacity: 0;');
     expect(hidden?.[1]).toContain('pointer-events: none;');
     expect(shellCss).not.toMatch(/condensed'\] [^{]*\.ta-nav-link[^{]*\{[^}]*visibility: hidden/);
-    // What the pointer grows, the keyboard grows: the same declarations, each selector in its own rule.
+    // What the pointer grows, the keyboard grows (until the link is used: data-used, LeftSidebar), each selector in its
+    // own rule, and the name shows.
     const grown = (selector: string) => shellCss.match(new RegExp(`html\\[data-ta-sidenav='condensed'\\] ${selector} \\{([^}]*)\\}`))?.[1];
-    expect(grown('\\.ta-nav-link:focus-visible')).toBe(grown('\\.ta-nav-item:hover \\.ta-nav-link'));
-    expect(grown('\\.ta-nav-link:focus-visible span')).toBe(grown('\\.ta-nav-item:hover \\.ta-nav-link span'));
-    expect(grown('\\.ta-nav-link:focus-visible span:not\\(\\.badge\\)')).toBe(grown('\\.ta-nav-item:hover \\.ta-nav-link span:not\\(\\.badge\\)'));
-    expect(grown('\\.ta-nav-link:focus-visible')).toContain('width: var(--ta-sidebar-width);');
+    const keyboard = '\\.ta-nav-link:focus-visible:not\\(\\[data-used\\]\\)';
+    expect(grown('\\.ta-nav-item:hover \\.ta-nav-link')).toContain('width: var(--ta-sidebar-width);');
+    expect(grown('\\.ta-nav-item:hover \\.ta-nav-link span')).toContain('opacity: 1;');
+    expect(grown('\\.ta-nav-item:hover \\.ta-nav-link span:not\\(\\.badge\\)')).toContain('margin-left:');
+    expect(grown(keyboard)).toBe(grown('\\.ta-nav-item:hover \\.ta-nav-link'));
+    expect(grown(`${keyboard} span`)).toBe(grown('\\.ta-nav-item:hover \\.ta-nav-link span'));
+    expect(grown(`${keyboard} span:not\\(\\.badge\\)`)).toBe(grown('\\.ta-nav-item:hover \\.ta-nav-link span:not\\(\\.badge\\)'));
   });
 });

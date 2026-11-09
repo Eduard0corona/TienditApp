@@ -86,7 +86,12 @@ for (const colorMode of ['light', 'dark'] as const) {
       await open(page, '/dashboard');
       await page.keyboard.press('Tab');
       const menu = page.getByRole('navigation', { name: 'Menú principal' });
-      await snapRing(page, menu.getByRole('link', { name: 'Pedidos', exact: true }), `foco-menu-condensado-${colorMode}`);
+      const orders = menu.getByRole('link', { name: 'Pedidos', exact: true });
+      await snapRing(page, orders, `foco-menu-condensado-${colorMode}`);
+      // Used, it shrinks back: the focus stays on it on the new page, and grown it would lie over the page.
+      await page.keyboard.press('Enter');
+      await page.getByRole('heading', { name: 'Pedidos', level: 4, exact: true }).waitFor();
+      await snapRing(page, orders, `foco-menu-condensado-usado-${colorMode}`);
     });
   });
 }
