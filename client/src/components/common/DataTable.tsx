@@ -38,6 +38,11 @@ interface DataTableProps<T> {
   initialSearch?: string;
   /** The longest search the API takes: the box does not let more be typed. */
   searchMaxLength?: number;
+  /**
+   * What the list shows (Próximas, Anteriores), before the filters in the same bar. Unlike them it stays in sight on a
+   * phone: it is not a filter but which list this is.
+   */
+  views?: ReactNode;
   /** The screen's own filters, in the same bar as the search box (each one a `DataTableFilter`). */
   filters?: ReactNode;
   /** The action of the list (Nuevo producto) or a control of the screen, at the end of that bar. */
@@ -69,6 +74,7 @@ export default function DataTable<T>({
   searchPlaceholder = 'Buscar…',
   initialSearch = '',
   searchMaxLength,
+  views,
   filters,
   toolbarEnd,
 }: DataTableProps<T>) {
@@ -194,9 +200,10 @@ export default function DataTable<T>({
                 <i className="ri-filter-3-line" aria-hidden="true"></i>
                 Filtros
               </button>
-              <div id={filtersId} className={`datatable-filters${filtersOpen ? ' is-open' : ''}`}>{filters}</div>
             </>
           )}
+          {views && <div className="datatable-views">{views}</div>}
+          {filters && <div id={filtersId} className={`datatable-filters${filtersOpen ? ' is-open' : ''}`}>{filters}</div>}
         </div>
         {toolbarEnd && <div className="datatable-toolbar-end">{toolbarEnd}</div>}
       </div>

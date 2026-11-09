@@ -23,6 +23,9 @@ async function snapDialog(page: Page, name: string) {
 /** The agenda with only the appointments at the customers' addresses. */
 async function openHomeVisits(page: Page) {
   await open(page, '/appointments');
+  // On a phone the filters wait behind «Filtros» (Fase 30G).
+  const filters = page.getByRole('button', { name: 'Filtros' });
+  if (await filters.isVisible()) await filters.click();
   await page.getByLabel('Dónde').selectOption({ label: 'A domicilio' });
   await expect(page.getByText('A domicilio · CP 03100 · Del Valle')).toBeVisible();
 }

@@ -64,6 +64,29 @@ describe('DataTable', () => {
     expect(box).not.toHaveClass('is-open');
   });
 
+  it('keeps what the list shows out of the filters box, in sight on a phone', () => {
+    render(
+      <DataTable
+        data={rows(3)}
+        columns={[{ header: 'Nombre' }]}
+        keyExtractor={(row) => row.id}
+        renderRow={(row) => <td>{row.name}</td>}
+        views={<button type="button">Próximas</button>}
+        filters={(
+          <DataTableFilter label="Estado" htmlFor="test-status-views">
+            <select id="test-status-views" className="form-select form-select-sm"><option>Todos</option></select>
+          </DataTableFilter>
+        )}
+      />,
+    );
+
+    const box = document.getElementById(screen.getByRole('button', { name: 'Filtros' }).getAttribute('aria-controls')!)!;
+    const views = screen.getByRole('button', { name: 'Próximas' });
+    expect(box).not.toContainElement(views);
+    expect(views.closest('.datatable-views')).not.toBeNull();
+    expect(within(screen.getByRole('search')).getByRole('button', { name: 'Próximas' })).toBe(views);
+  });
+
   it('shows no «Filtros» button for a list without filters', () => {
     render(
       <DataTable

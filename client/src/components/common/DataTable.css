@@ -36,9 +36,11 @@
 }
 
 /*
- * The screen's filters. From a tablet up their box is not drawn (display: contents): each filter is one more control of
- * the bar, as before the Fase 30G. On a phone they wait behind «Filtros», on their own rows once it opens.
+ * What the list shows and the screen's filters. From a tablet up their boxes are not drawn (display: contents): each is
+ * one more control of the bar, as before the Fase 30G. On a phone the views take a row of their own and the filters
+ * wait behind «Filtros», on their own rows once it opens.
  */
+.datatable-views,
 .datatable-filters {
   display: contents;
 }
@@ -131,6 +133,11 @@
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
+  }
+
+  .datatable-views {
+    display: flex;
+    flex-basis: 100%;
   }
 
   .datatable-filters {
