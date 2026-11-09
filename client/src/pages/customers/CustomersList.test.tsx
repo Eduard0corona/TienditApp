@@ -252,39 +252,76 @@ describe('CustomersList', () => {
     expect(screen.getByText('Marta Ruiz tiene pedidos fiados sin pagar.')).toBeInTheDocument();
   });
 
-  it('keeps what the server answers for a dialog already closed out of the one open now', async () => {
+  it('keeps the dialog open while it is saved, and says there why the server did not save', async () => {
     const user = userEvent.setup();
     let refuse: (reason: unknown) => void = () => undefined;
-    let accept: (value: unknown) => void = () => undefined;
-    vi.mocked(customersApi.update)
-      .mockReturnValueOnce(new Promise((_, reject) => { refuse = reject; }) as never)
-      .mockReturnValueOnce(new Promise((resolve) => { accept = resolve; }) as never);
+    vi.mocked(customersApi.update).mockReturnValueOnce(new Promise((_, reject) => { refuse = reject; }) as never);
     renderList();
 
-    // Ana's save is refused once Marta's dialog is open: the error is Ana's, not Marta's.
-    await user.click(within(await row('Ana Gil')).getByRole('button', { name: 'Editar Ana Gil' }));
-    let dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
-    await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
-    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar cliente' })).not.toBeInTheDocument());
     await user.click(within(await row('Marta Ruiz')).getByRole('button', { name: 'Editar Marta Ruiz' }));
-    dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
-    await act(async () => refuse({ isAxiosError: true, response: { status: 409, data: { error: 'Ya existe un cliente con ese teléfono.' } } }));
-    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
-
-    // Marta's save goes through once a new customer is being written: the list is read again, the new dialog stays.
+    const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
     await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
-    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+
+    // Neither its buttons, the X, Escape nor going to the fiscal data close it while it is on its way.
+    expect(within(dialog).getByRole('button', { name: 'Guardando...' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cambiar datos fiscales' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(dialog).toHaveClass('show');
+
+    await act(async () => refuse({ isAxiosError: true, response: { status: 409, data: { code: 'conflict', detail: 'Ya existe un cliente con ese teléfono.', error: 'Ya existe un cliente con ese teléfono.' } } }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Ya existe un cliente con ese teléfono.');
+    expect(within(dialog).getByRole('button', { name: 'Guardar cambios' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
+  it('holds the next dialog while it saves, even when the list read after the one before arrives meanwhile', async () => {
+    const user = userEvent.setup();
+    let listed: (value: unknown) => void = () => undefined;
+    let created: (value: unknown) => void = () => undefined;
+    renderList();
+    await row('Marta Ruiz');
+    // The list read after Marta is saved, and the new customer's save, both arrive late.
+    vi.mocked(customersApi.getAll).mockReturnValue(new Promise((resolve) => { listed = resolve; }) as never);
+    vi.mocked(customersApi.update).mockResolvedValueOnce({ data: {} } as never);
+    vi.mocked(customersApi.create).mockReturnValueOnce(new Promise((resolve) => { created = resolve; }) as never);
+
+    await user.click(within(await row('Marta Ruiz')).getByRole('button', { name: 'Editar Marta Ruiz' }));
+    await user.click(within(await screen.findByRole('dialog', { name: 'Editar cliente' })).getByRole('button', { name: 'Guardar cambios' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar cliente' })).not.toBeInTheDocument());
+
     await user.click(screen.getByRole('button', { name: 'Nuevo cliente' }));
-    dialog = await screen.findByRole('dialog', { name: 'Nuevo cliente' });
+    const dialog = await screen.findByRole('dialog', { name: 'Nuevo cliente' });
     await user.type(within(dialog).getByLabelText('Nombre *'), 'Rosa Díaz');
-    const calls = vi.mocked(customersApi.getAll).mock.calls.length;
-    await act(async () => accept({ data: {} }));
-    await waitFor(() => expect(customersApi.getAll).toHaveBeenCalledTimes(calls + 1));
-    // Still shown, not on its way out.
-    expect(screen.getByRole('dialog', { name: 'Nuevo cliente' })).toHaveClass('show');
-    expect(within(dialog).getByLabelText('Nombre *')).toHaveValue('Rosa Díaz');
+    await user.type(within(dialog).getByLabelText('Teléfono *'), '5522223333');
+    await user.click(within(dialog).getByRole('button', { name: 'Crear cliente' }));
+    listed(listPage([counter, marta, luis, ana, customer({ id: 'pepe', name: 'Pepe Luna' })]));
+
+    // Its «Guardando...» stays until its own answer arrives: a second click cannot create the customer twice.
+    await row('Pepe Luna');
+    expect(within(dialog).getByRole('button', { name: 'Guardando...' })).toBeDisabled();
+    expect(customersApi.create).toHaveBeenCalledTimes(1);
+    await act(async () => created({ data: {} }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nuevo cliente' })).not.toBeInTheDocument());
+  });
+
+  it('creates a customer once, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    vi.mocked(customersApi.create).mockResolvedValue({ data: {} } as never);
+    renderList();
+    await row('Marta Ruiz');
+
+    await user.click(screen.getByRole('button', { name: 'Nuevo cliente' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Nuevo cliente' });
+    await user.type(within(dialog).getByLabelText('Nombre *'), 'Rosa Díaz');
+    await user.type(within(dialog).getByLabelText('Teléfono *'), '5522223333');
+    // The second click lands while the dialog fades out (a second Enter would too, but by then the focus may be back on
+    // «Nuevo cliente», which it would open again: that is what the browser does as well).
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Crear cliente' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nuevo cliente' })).not.toBeInTheDocument());
+    expect(customersApi.create).toHaveBeenCalledTimes(1);
   });
 
   it('deletes a customer only once confirmed, and reads the list again', async () => {

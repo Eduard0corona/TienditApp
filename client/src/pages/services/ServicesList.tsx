@@ -255,7 +255,9 @@ export default function ServicesList() {
       }
 
       closeModal();
-      await loadServices();
+      // Not awaited: the dialog is done once it is saved. Awaiting the list would keep this submit going, and when it
+      // ended it would let go of the next dialog's «Guardando...» while that one is still on its way.
+      void loadServices();
     } catch (err: unknown) {
       setSaveError(getApiErrorMessage(err, 'Error al guardar el servicio.'));
     }
@@ -429,8 +431,9 @@ export default function ServicesList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={closeModal} centered aria-labelledby={titleId}>
-        <Modal.Header closeButton>
+      {/* It stays open while what it sent is on its way, so the answer always reaches the dialog that sent it. */}
+      <Modal show={showModal} onHide={() => !isSubmitting && closeModal()} centered aria-labelledby={titleId}>
+        <Modal.Header closeButton={!isSubmitting}>
           <Modal.Title id={titleId}>{editingService ? 'Editar servicio' : 'Nuevo servicio'}</Modal.Title>
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -588,10 +591,12 @@ export default function ServicesList() {
             </div>
           </Modal.Body>
           <Modal.Footer>
-            <button type="button" className="btn btn-light" onClick={closeModal}>
+            <button type="button" className="btn btn-light" onClick={closeModal} disabled={isSubmitting}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+            {/* Also while it fades out after saving: what is still written is not sent again by a double click or Enter
+                (with its submit button disabled, Enter does not send the form either). */}
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting || !showModal}>
               {isSubmitting ? 'Guardando...' : editingService ? 'Guardar cambios' : 'Crear servicio'}
             </button>
           </Modal.Footer>

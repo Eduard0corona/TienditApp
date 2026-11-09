@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -244,6 +245,80 @@ describe('BranchesList', () => {
     act(() => answer?.({ coords: { latitude: 19.0435774, longitude: -98.1986262 } } as GeolocationPosition));
     expect(within(dialog).getByLabelText('Ubicación en el mapa (opcional)')).toHaveValue('');
     expect(within(dialog).getByRole('button', { name: 'Usar mi ubicación' })).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  it('keeps the form open while it is saved, and says there why the server did not save', async () => {
+    const user = userEvent.setup();
+    let refuse: (reason: unknown) => void = () => undefined;
+    vi.mocked(branchesApi.update).mockReturnValueOnce(new Promise((_, reject) => { refuse = reject; }) as never);
+    renderBranches();
+
+    await user.click(await screen.findByRole('button', { name: 'Editar Centro' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Editar Centro' });
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+
+    // Neither its buttons, the X nor Escape close it while it is on its way.
+    expect(within(dialog).getByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(dialog).toHaveClass('show');
+
+    await act(async () => refuse({ isAxiosError: true, response: { status: 409, data: { code: 'conflict', detail: 'Ya existe una sucursal con la clave CENTRO.', error: 'Ya existe una sucursal con la clave CENTRO.' } } }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Ya existe una sucursal con la clave CENTRO.');
+    expect(within(dialog).getByRole('button', { name: 'Guardar cambios' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
+  it('holds the next form while it saves, even when the list read after the one before arrives meanwhile', async () => {
+    const user = userEvent.setup();
+    let listed: (value: unknown) => void = () => undefined;
+    let created: (value: unknown) => void = () => undefined;
+    renderBranches();
+    await screen.findByText('Sucursal principal');
+    // The list read after Centro is saved, and the new branch's save, both arrive late.
+    vi.mocked(branchesApi.getAll).mockReturnValue(new Promise((resolve) => { listed = resolve; }) as never);
+    vi.mocked(branchesApi.update).mockResolvedValueOnce(branch({ id: 'b2' }) as never);
+    vi.mocked(branchesApi.create).mockReturnValueOnce(new Promise((resolve) => { created = resolve; }) as never);
+
+    await user.click(screen.getByRole('button', { name: 'Editar Centro' }));
+    await user.click(within(await screen.findByRole('dialog', { name: 'Editar Centro' })).getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar Centro' })).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Nueva sucursal/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Nueva sucursal' });
+    await user.type(within(dialog).getByLabelText('Nombre'), 'Norte');
+    await user.type(within(dialog).getByLabelText('Clave'), 'norte');
+    await user.click(within(dialog).getByRole('button', { name: 'Crear sucursal' }));
+    listed([
+      branch({}),
+      branch({ id: 'b2', name: 'Centro', code: 'CENTRO', isDefault: false }),
+      branch({ id: 'b4', name: 'Sur', code: 'SUR', isDefault: false }),
+    ]);
+
+    // Its «Guardando…» stays until its own answer arrives: a second click cannot create the branch twice.
+    await screen.findByText('Sur');
+    expect(within(dialog).getByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(branchesApi.create).toHaveBeenCalledTimes(1);
+    await act(async () => created(branch({ id: 'b3', name: 'Norte', code: 'NORTE', isDefault: false })));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nueva sucursal' })).not.toBeInTheDocument());
+  });
+
+  it('creates a branch once, even with a double click when the server answers at once', async () => {
+    const user = userEvent.setup();
+    vi.mocked(branchesApi.create).mockResolvedValue(branch({ id: 'b3', name: 'Norte', code: 'NORTE', isDefault: false }) as never);
+    renderBranches();
+    await screen.findByText('Sucursal principal');
+
+    await user.click(screen.getByRole('button', { name: /Nueva sucursal/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Nueva sucursal' });
+    await user.type(within(dialog).getByLabelText('Nombre'), 'Norte');
+    await user.type(within(dialog).getByLabelText('Clave'), 'norte');
+    // Closing takes the form out of the dialog, so its button is gone before a second click.
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Crear sucursal' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nueva sucursal' })).not.toBeInTheDocument());
+    expect(branchesApi.create).toHaveBeenCalledTimes(1);
   });
 
   it('starts a new branch serving like the main one, and sends it', async () => {
