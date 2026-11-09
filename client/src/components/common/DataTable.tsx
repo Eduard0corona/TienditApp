@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import './DataTable.css';
 
 export interface DataTableColumn {
@@ -73,6 +73,9 @@ export default function DataTable<T>({
   toolbarEnd,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState(initialSearch);
+  // On a phone the filters wait behind «Filtros» (Fase 30G): with 16 px fields they took up to five rows above the list.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersId = useId();
   const [clientPage, setClientPage] = useState(1);
   const [clientPageSize, setClientPageSize] = useState(pageSizeOptions[0]);
 
@@ -178,7 +181,22 @@ export default function DataTable<T>({
               onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
-          {filters}
+          {filters && (
+            <>
+              {/* From a tablet up the filters are in the bar and this button does not show (DataTable.css). */}
+              <button
+                type="button"
+                className={`btn btn-light btn-sm datatable-filters-toggle${filtersOpen ? ' active' : ''}`}
+                aria-expanded={filtersOpen}
+                aria-controls={filtersId}
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                <i className="ri-filter-3-line" aria-hidden="true"></i>
+                Filtros
+              </button>
+              <div id={filtersId} className={`datatable-filters${filtersOpen ? ' is-open' : ''}`}>{filters}</div>
+            </>
+          )}
         </div>
         {toolbarEnd && <div className="datatable-toolbar-end">{toolbarEnd}</div>}
       </div>

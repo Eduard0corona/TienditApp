@@ -43,6 +43,40 @@ describe('DataTable', () => {
     expect(screen.getByRole('combobox', { name: 'Por página' })).toHaveValue('10');
   });
 
+  // Fase 30G: on a phone the filters wait behind «Filtros» (DataTable.css shows the button and hides the box only there).
+  it('opens and closes the filters with «Filtros», which says whether they are open and names their box', async () => {
+    const user = userEvent.setup();
+    renderTable(rows(3));
+
+    const toggle = screen.getByRole('button', { name: 'Filtros' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const box = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect(box).toHaveClass('datatable-filters');
+    expect(box).not.toHaveClass('is-open');
+    expect(within(box).getByRole('combobox', { name: 'Estado' })).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(box).toHaveClass('is-open');
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(box).not.toHaveClass('is-open');
+  });
+
+  it('shows no «Filtros» button for a list without filters', () => {
+    render(
+      <DataTable
+        data={rows(3)}
+        columns={[{ header: 'Nombre' }]}
+        keyExtractor={(row) => row.id}
+        renderRow={(row) => <td>{row.name}</td>}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Filtros' })).not.toBeInTheDocument();
+  });
+
   it('moves through the pages with named buttons and marks the current one', async () => {
     const user = userEvent.setup();
     renderTable(rows(30));

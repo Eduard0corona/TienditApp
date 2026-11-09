@@ -555,6 +555,16 @@ test.describe('Pedidos', () => {
     await snapPage(page, 'pedidos-telefono');
   });
 
+  // Fase 30G: on a phone the filters wait behind «Filtros»; open, they take their own rows above the list.
+  test('Pedidos teléfono con los filtros abiertos', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/orders');
+    await expect(page.getByRole('combobox', { name: 'Estado' })).toBeHidden();
+    await page.getByRole('button', { name: 'Filtros' }).click();
+    await expect(page.getByRole('combobox', { name: 'Estado' })).toBeVisible();
+    await snapPage(page, 'pedidos-telefono-filtros');
+  });
+
   test.describe('solo en mostrador', () => {
     test.use({ prepareData: COUNTER_ONLY_DATA });
 
