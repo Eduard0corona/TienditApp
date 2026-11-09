@@ -118,7 +118,8 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
       setSelected(null);
       toast.success(`Caja de ${personLabel(selected.openedByName, selected.openedBy)} cerrada.`);
       refreshCashState();
-      await load();
+      // Not awaited: closing another drawer from the list read with another filter would open in «Cerrando…» until then.
+      void load();
     } catch (err: unknown) {
       setCloseError(getApiErrorMessage(err, 'No se pudo cerrar la caja.'));
     } finally {

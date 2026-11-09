@@ -150,6 +150,34 @@ describe('ShiftHistory', () => {
     expect(screen.queryByRole('dialog', { name: 'Cerrar caja' })).not.toBeInTheDocument();
   });
 
+  it('does not wait for the shifts read again to close another drawer', async () => {
+    const user = userEvent.setup();
+    vi.mocked(cashApi.closeSession).mockResolvedValue({ data: {} } as never);
+    const pedro = shift({ id: 'pedro', openedByName: 'Pedro', openedBy: 'pedro@cafelaesquina.mx', isMine: false, status: CashSessionStatus.Open });
+    vi.mocked(cashApi.getSessions)
+      .mockResolvedValueOnce(listPage(shifts))
+      // The shifts read again after closing Luis's drawer never come back.
+      .mockReturnValueOnce(new Promise(() => undefined) as never)
+      .mockResolvedValue(listPage([pedro]));
+    renderHistory();
+    await user.click(within(await row('Luis')).getByRole('button'));
+    await user.click(within(await screen.findByRole('dialog', { name: /Turno de Luis/ })).getByRole('button', { name: 'Cerrar esta caja' }));
+    const close = await screen.findByRole('dialog', { name: 'Cerrar caja' });
+    await user.type(within(close).getByLabelText('$500.00'), '1');
+    await user.type(within(close).getByLabelText('Notas (explica la diferencia)'), 'Faltó dinero');
+    await user.click(within(close).getByRole('button', { name: 'Cerrar caja' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Caja de Luis cerrada.'));
+
+    // Another filter reads Pedro's drawer, open too: closing it starts ready, not «Cerrando…».
+    await user.click(screen.getByLabelText('Solo con faltante o sobrante'));
+    await user.click(within(await row('Pedro')).getByRole('button'));
+    await user.click(within(await screen.findByRole('dialog', { name: /Turno de Pedro/ })).getByRole('button', { name: 'Cerrar esta caja' }));
+
+    const next = await screen.findByRole('dialog', { name: 'Cerrar caja' });
+    expect(within(next).getByRole('button', { name: 'Volver' })).toBeEnabled();
+    expect(within(next).queryByRole('button', { name: 'Cerrando…' })).not.toBeInTheDocument();
+  });
+
   it('offers to close another drawer only to whoever may, and never their own one', async () => {
     const user = userEvent.setup();
     vi.mocked(cashApi.getSessions).mockResolvedValue(listPage([shifts[0], shift({ id: 'mine', status: CashSessionStatus.Open, openedByName: 'Ana' })]));

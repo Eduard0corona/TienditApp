@@ -178,6 +178,60 @@ describe('PublicBookingPage', () => {
     expect(await screen.findByText(`En /cita#${LINK}`)).toBeInTheDocument();
   });
 
+  it('keeps the sheet open while the request is on its way', async () => {
+    const user = userEvent.setup();
+    let answered: (value: unknown) => void = () => undefined;
+    api.requestAppointment.mockReturnValue(new Promise((resolve) => { answered = resolve; }) as never);
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Corte de cabello/ }));
+    await user.click(await screen.findByRole('button', { name: '10:00 a. m.' }));
+    await user.click(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Tu cita' });
+    await user.type(within(sheet).getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(within(sheet).getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    await user.click(within(sheet).getByRole('button', { name: 'Pedir cita' }));
+
+    expect(within(sheet).getByRole('button', { name: 'Enviando…' })).toBeDisabled();
+    expect(within(sheet).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Tu cita' })).toHaveClass('show');
+
+    answered(receipt());
+    expect(await screen.findByRole('heading', { name: '¡Solicitud enviada!' })).toBeInTheDocument();
+  });
+
+  it('can close while the times are read again after a refusal, and sends nothing else until they are', async () => {
+    const user = userEvent.setup();
+    const refused = { isAxiosError: true, response: { status: 400, data: { detail: 'Escribe un teléfono de 10 dígitos.' } } };
+    api.requestAppointment.mockRejectedValue(refused);
+    let reads = 0;
+    let reread: (value: unknown) => void = () => undefined;
+    api.getBookingSlots.mockImplementation((() => (++reads === 1
+      ? Promise.resolve(week())
+      : new Promise((resolve) => { reread = resolve; }))) as never);
+    renderPage();
+
+    const sheet = await pickMondayAtTen(user);
+    await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    await user.click(sheet.getByRole('button', { name: 'Pedir cita' }));
+
+    // Refused, nothing is on its way: the sheet can close while the times are read again, and does not send it again.
+    await waitFor(() => expect(reads).toBe(2));
+    expect(sheet.getByRole('button', { name: 'Pedir cita' })).toBeDisabled();
+    await user.click(sheet.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(api.requestAppointment).toHaveBeenCalledTimes(1);
+
+    // Still free: the sheet opens again with why it was refused, ready to send it again.
+    reread(week());
+    await user.click(await screen.findByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
+    const again = within(await screen.findByRole('dialog', { name: 'Tu cita' }));
+    expect(again.getByRole('alert')).toHaveTextContent('Escribe un teléfono de 10 dígitos.');
+    expect(again.getByRole('button', { name: 'Pedir cita' })).toBeEnabled();
+  });
+
   it('goes to the next week the server offers and back', async () => {
     const user = userEvent.setup();
     renderPage();

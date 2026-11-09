@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import {
   PAYMENT_METHOD_LABELS,
@@ -43,7 +43,13 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // The list of businesses gives its plan and whether it is suspended.
+  const listing = useIsFetching({ queryKey: ['platform', 'tenants'] }) > 0;
+
   const data = detail.data;
+  // While the business or the list is read again (after a change, too), nothing else is sent from what they said before: a
+  // payment registered twice is two payments, and a suspension lifted would be lifted again instead of suspended.
+  const working = busy || detail.isFetching || listing;
   const plan = data?.plan;
   const selectedPlan = plans.find((item) => item.id === planId);
   const monthsNumber = Math.max(1, Number(months) || 1);
@@ -54,7 +60,8 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
     try {
       await action();
       toast.success(done);
-      await queryClient.invalidateQueries({ queryKey: ['platform'] });
+      // Not awaited: the dialog does not wait for the lists; its actions wait for the business and the list read again.
+      void queryClient.invalidateQueries({ queryKey: ['platform'] });
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo completar la acción.'));
     } finally {
@@ -109,8 +116,9 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
   };
 
   return (
-    <Modal show onHide={onClose} size="lg" centered scrollable aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    // It stays open while what it sent is on its way.
+    <Modal show onHide={() => !busy && onClose()} size="lg" centered scrollable aria-labelledby={titleId}>
+      <Modal.Header closeButton={!busy}>
         <Modal.Title id={titleId}>{tenant.name}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -162,7 +170,7 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
                   </div>
                 )}
                 <div className="col-6 col-md-3">
-                  <button type="button" className="btn btn-sm btn-primary w-100" disabled={busy || !planId || planId === tenant.planId}
+                  <button type="button" className="btn btn-sm btn-primary w-100" disabled={working || !planId || planId === tenant.planId}
                     onClick={() => void assign()}>
                     {data.hasPlan ? 'Cambiar plan' : 'Asignar plan'}
                   </button>
@@ -200,7 +208,7 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
                 </div>
                 <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2">
                   <span className="small text-muted">El periodo pagado sigue donde termina la cobertura actual.</span>
-                  <button type="button" className="btn btn-sm btn-success" disabled={busy} onClick={() => void pay()}>
+                  <button type="button" className="btn btn-sm btn-success" disabled={working} onClick={() => void pay()}>
                     Registrar {formatMoney(amount.trim() === '' ? suggestedAmount : Number(amount) || 0)}
                   </button>
                 </div>
@@ -216,7 +224,7 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
                     <input id="billing-extra-days" type="number" min={1} max={90} className="form-control form-control-sm" value={extraDays}
                       onChange={(event) => setExtraDays(event.target.value)} />
                   </div>
-                  <button type="button" className="btn btn-sm btn-light" disabled={busy}
+                  <button type="button" className="btn btn-sm btn-light" disabled={working}
                     onClick={() => void run(() => platformApi.extendTrial(tenant.tenantId, Number(extraDays) || 1), 'Prueba extendida.')}>
                     Extender
                   </button>
@@ -230,11 +238,11 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
               <input id="billing-reason" className="form-control form-control-sm mb-2" maxLength={500} value={reason}
                 onChange={(event) => setReason(event.target.value)} />
               <div className="d-flex flex-wrap gap-2">
-                <button type="button" className="btn btn-sm btn-outline-danger" disabled={busy} onClick={() => void suspendOrReactivate()}>
+                <button type="button" className="btn btn-sm btn-outline-danger" disabled={working} onClick={() => void suspendOrReactivate()}>
                   {data.suspendedByPlatform || tenant.tenantStatus !== 0 ? 'Quitar suspensión' : 'Suspender'}
                 </button>
                 {data.hasPlan && data.status !== SubscriptionStatusValue.Cancelled && (
-                  <button type="button" className="btn btn-sm btn-outline-secondary" disabled={busy} onClick={() => void cancelSubscription()}>
+                  <button type="button" className="btn btn-sm btn-outline-secondary" disabled={working} onClick={() => void cancelSubscription()}>
                     Cancelar plan
                   </button>
                 )}
@@ -268,7 +276,7 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
         )}
       </Modal.Body>
       <Modal.Footer>
-        <button type="button" className="btn btn-light" onClick={onClose}>Cerrar</button>
+        <button type="button" className="btn btn-light" onClick={onClose} disabled={busy}>Cerrar</button>
       </Modal.Footer>
     </Modal>
   );
