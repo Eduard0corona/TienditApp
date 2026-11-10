@@ -104,7 +104,7 @@ export default function ResetPassword() {
 
                       <div className="mb-0 text-center">
                         <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
-                          {isSubmitting ? 'Guardando...' : 'Guardar contraseña'}
+                          {isSubmitting ? 'Guardando…' : 'Guardar contraseña'}
                         </button>
                       </div>
                     </form>

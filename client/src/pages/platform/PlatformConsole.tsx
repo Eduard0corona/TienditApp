@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import FakeRequestsWatch from '../../components/platform/FakeRequestsWatch';
@@ -18,6 +18,8 @@ import { formatMoney } from '../../utils/money';
 type StatusFilter = '' | 'none' | `${SubscriptionStatus}`;
 
 const PAGE_SIZE = 20;
+/** The search is asked for when typing stops, not with each key. */
+const SEARCH_DELAY_MS = 300;
 
 function dueDate(tenant: PlatformTenant) {
   if (tenant.subscriptionStatus === null || tenant.subscriptionStatus === undefined) return '—';
@@ -30,18 +32,29 @@ function dueDate(tenant: PlatformTenant) {
  * suspension). Only the platform admin reaches it; the API checks it too.
  */
 export default function PlatformConsole() {
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('');
   const [planId, setPlanId] = useState('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<PlatformTenant | null>(null);
 
+  useEffect(() => {
+    const typed = searchInput.trim();
+    if (typed === search) return;
+    const id = window.setTimeout(() => {
+      setSearch(typed);
+      setPage(1);
+    }, SEARCH_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput, search]);
+
   const overview = useQuery({ queryKey: ['platform', 'overview'], queryFn: platformApi.getOverview });
   const plans = useQuery({ queryKey: ['platform', 'plans'], queryFn: platformApi.getPlans });
   const tenants = useQuery({
     queryKey: ['platform', 'tenants', search, status, planId, page],
     queryFn: () => platformApi.getTenants({
-      search: search.trim() || undefined,
+      search: search || undefined,
       withoutPlan: status === 'none' || undefined,
       subscriptionStatus: status !== '' && status !== 'none' ? (Number(status) as SubscriptionStatus) : undefined,
       planId: planId || undefined,
@@ -62,7 +75,11 @@ export default function PlatformConsole() {
   ] : [];
 
   const page$ = tenants.data;
+  // A page that no longer exists (an action emptied the last one) is not «no businesses»: the last one is read instead.
+  const pageGone = !!page$ && !tenants.isPlaceholderData && page$.items.length === 0 && page > 1 && page$.totalPages < page;
+  if (pageGone) setPage(Math.max(1, page$.totalPages));
   const resetPage = () => setPage(1);
+  const filtered = search !== '' || status !== '' || planId !== '';
   // The row as the list has it now: actions in the modal refresh the list.
   const selectedTenant = (selected && page$?.items.find((item) => item.tenantId === selected.tenantId)) ?? selected;
 
@@ -70,7 +87,14 @@ export default function PlatformConsole() {
     <>
       <PageTitle title="Negocios" />
 
-      {overview.isError && <div className="alert alert-danger">{getApiErrorMessage(overview.error, 'No se pudo cargar el resumen.')}</div>}
+      {overview.isError && (
+        <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+          <span className="me-auto">{getApiErrorMessage(overview.error, 'No se pudo cargar el resumen.')}</span>
+          <button type="button" className="btn btn-sm btn-light" disabled={overview.isFetching} onClick={() => void overview.refetch()}>
+            Reintentar
+          </button>
+        </div>
+      )}
       <div className="row g-2 mb-3">
         {cards.map((card) => (
           <div key={card.label} className="col-6 col-lg-4 col-xxl-2">
@@ -90,8 +114,8 @@ export default function PlatformConsole() {
           <div className="row g-2 mb-3">
             <div className="col-md-5">
               <label className="form-label small mb-1" htmlFor="platform-search">Buscar</label>
-              <input id="platform-search" type="search" className="form-control" placeholder="Nombre, enlace o correo" value={search}
-                onChange={(event) => { setSearch(event.target.value); resetPage(); }} />
+              <input id="platform-search" type="search" className="form-control" placeholder="Nombre, enlace o correo" maxLength={100} value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)} />
             </div>
             <div className="col-6 col-md-3">
               <label className="form-label small mb-1" htmlFor="platform-status">Estado</label>
@@ -114,9 +138,17 @@ export default function PlatformConsole() {
             </div>
           </div>
 
-          {tenants.isError && <div className="alert alert-danger">{getApiErrorMessage(tenants.error, 'No se pudieron cargar los negocios.')}</div>}
+          {tenants.isError && (
+            <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+              <span className="me-auto">{getApiErrorMessage(tenants.error, 'No se pudieron cargar los negocios.')}</span>
+              <button type="button" className="btn btn-sm btn-light" disabled={tenants.isFetching} onClick={() => void tenants.refetch()}>
+                Reintentar
+              </button>
+            </div>
+          )}
           <div className="table-responsive">
-            <table className="table align-middle mb-0">
+            {/* While another filter is read, the rows of the one before stay, marked as busy. */}
+            <table className="table align-middle mb-0" aria-busy={tenants.isPlaceholderData || undefined}>
               <thead>
                 <tr>
                   <th>Negocio</th>
@@ -131,10 +163,19 @@ export default function PlatformConsole() {
               </thead>
               <tbody>
                 {tenants.isLoading && (
-                  <tr><td colSpan={8} className="text-center py-4"><div className="spinner-border text-primary" role="status"></div></td></tr>
+                  <tr>
+                    <td colSpan={8} className="text-center py-4">
+                      <div className="spinner-border text-primary" role="status"><span className="visually-hidden">Cargando los negocios…</span></div>
+                    </td>
+                  </tr>
                 )}
-                {page$ && page$.items.length === 0 && (
-                  <tr><td colSpan={8} className="text-center text-muted py-4">No hay negocios con esos filtros.</td></tr>
+                {/* Only for what was read for these filters, not while the rows of others stay. */}
+                {page$ && !tenants.isPlaceholderData && page$.items.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="text-center text-muted py-4">
+                      {filtered ? 'No hay negocios con esos filtros.' : 'Todavía no hay negocios.'}
+                    </td>
+                  </tr>
                 )}
                 {page$?.items.map((tenant) => (
                   <tr key={tenant.tenantId}>
@@ -175,8 +216,11 @@ export default function PlatformConsole() {
             <div className="d-flex justify-content-between align-items-center mt-3">
               <span className="small text-muted">Página {page$.pageNumber} de {page$.totalPages} · {page$.totalCount} negocios</span>
               <div className="btn-group">
-                <button type="button" className="btn btn-sm btn-light" disabled={!page$.hasPreviousPage} onClick={() => setPage((p) => p - 1)}>Anterior</button>
-                <button type="button" className="btn btn-sm btn-light" disabled={!page$.hasNextPage} onClick={() => setPage((p) => p + 1)}>Siguiente</button>
+                {/* From the page shown, and not while another is read: two clicks would go past the end. */}
+                <button type="button" className="btn btn-sm btn-light" disabled={!page$.hasPreviousPage || tenants.isPlaceholderData}
+                  onClick={() => setPage(page$.pageNumber - 1)}>Anterior</button>
+                <button type="button" className="btn btn-sm btn-light" disabled={!page$.hasNextPage || tenants.isPlaceholderData}
+                  onClick={() => setPage(page$.pageNumber + 1)}>Siguiente</button>
               </div>
             </div>
           )}
