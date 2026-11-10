@@ -9,7 +9,7 @@ Hasta la Fase 31C el servidor aceptaba dos categorías con el mismo nombre en un
 Desde la Fase 31C:
 
 - crear o editar con un nombre que el negocio ya tiene, sin importar mayúsculas ni espacios y contando las archivadas, responde 400 con el nombre de la que lo tiene (`Category.NameKey`);
-- el índice único `IX_Categories_TenantId_Name` respalda esa regla cuando dos guardados se cruzan. Compara con la intercalación de la columna (`SQL_Latin1_General_CP1_CI_AS`: sin mayúsculas ni espacios al final, con acentos).
+- el índice único `IX_Categories_TenantId_Name` respalda esa regla cuando dos guardados se cruzan. Compara con la intercalación de la columna (`SQL_Latin1_General_CP1_CI_AS`: sin mayúsculas, espacios al final ni el ancho de las letras, «ß» como «ss», con acentos).
 
 La migración no puede crear el índice mientras un negocio tenga dos categorías iguales para esa intercalación: se detiene con el error 50057 sin cambiar nada.
 

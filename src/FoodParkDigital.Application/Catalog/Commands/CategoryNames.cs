@@ -35,6 +35,21 @@ public static class CategoryNames
             .OrderByDescending(category => category.IsActive)
             .ThenBy(category => category.Name, StringComparer.Ordinal)
             .FirstOrDefault();
-        return taken is null ? null : Taken(taken.Name, taken.IsActive);
+        if (taken is not null)
+            return Taken(taken.Name, taken.IsActive);
+
+        // The unique index compares with the collation of the database, which takes as the same more than the key (a
+        // full-width letter, «ß» and «ss»): it is asked too, so a save it would refuse names the category instead of failing.
+        var equal = await context.Categories
+            .AsNoTracking()
+            .Where(category => (exceptId == null || category.Id != exceptId) && category.Name == name)
+            .OrderByDescending(category => category.IsActive)
+            .Select(category => new { category.Name, category.IsActive })
+            .FirstOrDefaultAsync(cancellationToken);
+        return equal is null ? null : Taken(equal.Name, equal.IsActive);
     }
+
+    /// <summary>Whether the database has a category of the business in scope with <paramref name="name"/> by its collation.</summary>
+    internal static Task<bool> DatabaseHasAsync(IApplicationDbContext context, string name, CancellationToken cancellationToken)
+        => context.Categories.AsNoTracking().AnyAsync(category => category.Name == name, cancellationToken);
 }

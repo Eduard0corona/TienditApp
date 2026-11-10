@@ -865,7 +865,7 @@ Un nombre es de una sola categoría en cada negocio ([ADR 0085](../adr/0085-uniq
 - **Crear o editar** con un nombre tomado se rechaza (400) con el de la categoría que lo tiene: «Ya tienes una categoría llamada «Bebidas». Ponle otro nombre.», o con una archivada, «Ya tienes una categoría archivada llamada «Temporada». Restáurala o ponle otro nombre.».
 - **Editar solo revisa un nombre nuevo:** cambiarle mayúsculas o espacios a su propio nombre, o la descripción u orden de una repetida de antes de la regla, funciona.
 - **Las plantillas** omiten los nombres que el negocio tiene, con la misma comparación. **El catálogo de ejemplo** los reutiliza: entre dos repetidas de antes, la activa.
-- **El índice único `(TenantId, Name)`** respalda la regla cuando dos guardados se cruzan, con la intercalación de la base (sin mayúsculas ni espacios al final). El nombre se guarda tal como se escribió.
+- **El índice único `(TenantId, Name)`** respalda la regla cuando dos guardados se cruzan, con la intercalación de la base (sin mayúsculas, espacios al final ni el ancho de las letras, y con «ß» como «ss»). Lo que solo ella tiene por igual también se rechaza con el nombre de la categoría que lo tiene, y la plantilla lo omite. El nombre se guarda tal como se escribió.
 
 ## Servicio y citas
 

@@ -61,6 +61,9 @@ public class InstallCategoryTemplateCommandHandler : IRequestHandler<InstallCate
             var normalizedName = Category.NameKey(item.Name);
             if (!normalizedNames.Add(normalizedName))
                 continue;
+            // The collation of the database may take one of its names as this one (a full-width letter, «ß» and «ss»).
+            if (await CategoryNames.DatabaseHasAsync(_context, item.Name, cancellationToken))
+                continue;
 
             toCreate.Add(new Category(
                 _tenantService.TenantId,
@@ -86,15 +89,12 @@ public class InstallCategoryTemplateCommandHandler : IRequestHandler<InstallCate
                 // Someone created one of these names at the same moment (the unique index): none is created, and
                 // installing again skips it.
                 await _context.DiscardUnitOfWorkAsync(cancellationToken);
-                var namesNow = (await _context.Categories
-                        .AsNoTracking()
-                        .Select(x => x.Name)
-                        .ToListAsync(cancellationToken))
-                    .Select(Category.NameKey)
-                    .ToHashSet(StringComparer.Ordinal);
-                var meanwhile = toCreate.FirstOrDefault(category => namesNow.Contains(Category.NameKey(category.Name)));
-                if (meanwhile is not null)
-                    return Result.Failure<InstallCategoryTemplateResultDto>(TakenMeanwhile(meanwhile.Name));
+                foreach (var category in toCreate)
+                {
+                    if (await CategoryNames.FindTakenAsync(_context, category.Name, null, cancellationToken) is not null)
+                        return Result.Failure<InstallCategoryTemplateResultDto>(TakenMeanwhile(category.Name));
+                }
+
                 throw;
             }
         }

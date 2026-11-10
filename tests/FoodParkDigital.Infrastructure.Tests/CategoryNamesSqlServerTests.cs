@@ -14,8 +14,9 @@ namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
 /// AddUniqueCategoryNamePerTenant (Fase 31C): one name per category in a business. The unique index compares with the
-/// collation of the database (without capitals or spaces at the end; accents count) and lets another business have the
-/// name; the use cases answer a name taken at the same moment as taken, not with an error; the migration stops before
+/// collation of the database (without capitals, spaces at the end or the width of a letter, «ß» as «ss»; accents count) and
+/// lets another business have the name; the use cases answer a name taken at the same moment, or one only the collation
+/// takes as the same, naming the category that has it, not with an error; the migration stops before
 /// anything changes while two categories of a business share a name by that collation; and rolling back drops only the
 /// index.
 /// </summary>
@@ -81,6 +82,47 @@ public class CategoryNamesSqlServerTests
         Assert.Equal(
             ["Bebidas", "comidas", "Dulces", "Postres"],
             await check.Categories.OrderBy(c => c.Name).Select(c => c.Name).ToListAsync());
+    }
+
+    [SqlServerFact]
+    public async Task UseCases_ShouldAnswerANameTheCollationTakesAsTheSame_NamingTheCategory_NotFail()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var tenantId = Guid.NewGuid();
+        await AddAsync(database, tenantId, "Bebidas");
+        await AddAsync(database, tenantId, "Straße");
+        var dessertsId = await AddAsync(database, tenantId, "Postres");
+
+        // The collation takes a full-width letter and «ß» as «B» and «ss»; Category.NameKey does not. The index decides,
+        // and the person is told which category has the name.
+        await using (var context = database.CreateContext(tenantId))
+        {
+            var fullWidth = await CreateAsync(context, tenantId, "\uFF22ebidas");
+            Assert.Equal(CategoryNames.Taken("Bebidas", isActive: true), fullWidth.Error);
+        }
+
+        await using (var context = database.CreateContext(tenantId))
+        {
+            var edited = await new UpdateCategoryCommandHandler(context)
+                .Handle(new UpdateCategoryCommand { Id = dessertsId, Name = "Strasse" }, CancellationToken.None);
+            Assert.Equal(CategoryNames.Taken("Straße", isActive: true), edited.Error);
+        }
+
+        // The template skips «Bebidas» as one the business has, and creates the rest.
+        await using (var context = database.CreateContext(tenantId))
+        {
+            await context.Categories.Where(c => c.Name == "Bebidas")
+                .ExecuteUpdateAsync(set => set.SetProperty(c => c.Name, "\uFF22EBIDAS"));
+            var installed = await new InstallCategoryTemplateCommandHandler(context, Tenant(tenantId))
+                .Handle(new InstallCategoryTemplateCommand { TemplateId = "food" }, CancellationToken.None);
+            Assert.True(installed.IsSuccess, installed.Error);
+            Assert.Equal(2, installed.Value.SkippedCount);
+        }
+
+        await using var check = database.CreateContext(tenantId);
+        Assert.Equal(
+            new[] { "\uFF22EBIDAS", "Cenas", "Comidas", "Desayunos", "Postres", "Promociones", "Snacks", "Straße" }.Order(StringComparer.Ordinal),
+            (await check.Categories.Select(c => c.Name).ToListAsync()).Order(StringComparer.Ordinal));
     }
 
     [SqlServerFact]

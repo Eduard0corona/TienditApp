@@ -15,8 +15,9 @@ FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;
 
 -- 2. El índice único nuevo [IX_Categories_TenantId_Name] y la intercalación de [Categories].[Name],
---    con la que compara: con la de siempre (SQL_Latin1_General_CP1_CI_AS) no distingue mayúsculas ni
---    espacios al final, y sí acentos. Antes de aplicar y después de rollback.sql no hay índice
+--    con la que compara: con la de siempre (SQL_Latin1_General_CP1_CI_AS) no distingue mayúsculas,
+--    espacios al final ni el ancho de las letras, toma «ß» por «ss» y sí distingue acentos. Antes de
+--    aplicar y después de rollback.sql no hay índice
 --    ([Indice] sale NULL).
 SELECT c.[collation_name] AS [IntercalacionDeName],
     i.[name] AS [Indice], i.[is_unique] AS [Unico],

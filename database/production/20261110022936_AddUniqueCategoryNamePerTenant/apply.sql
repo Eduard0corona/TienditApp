@@ -9,7 +9,8 @@
 -- con la Fase 31B) solo ejecuta 20261110022936_AddUniqueCategoryNamePerTenant:
 --   - [IX_Categories_TenantId_Name]: índice único nuevo sobre [Categories] ([TenantId], [Name]): un
 --     nombre por categoría en cada negocio, archivadas incluidas, con la intercalación de la columna
---     (la de siempre no distingue mayúsculas ni espacios al final; sí acentos).
+--     (la de siempre no distingue mayúsculas, espacios al final ni el ancho de las letras, toma «ß»
+--     por «ss» y sí distingue acentos).
 --   - Antes de crearlo se detiene con el error 50057, sin cambiar nada, si un negocio tiene dos
 --     categorías con el mismo nombre según esa intercalación: la consulta 3 de verify.sql las lista.
 --     Renombra una de cada grupo (desde la app o con data-repair/20261110_RepeatedCategoryNames) y
