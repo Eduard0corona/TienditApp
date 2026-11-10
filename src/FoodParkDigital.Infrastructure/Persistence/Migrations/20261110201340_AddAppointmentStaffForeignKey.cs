@@ -12,8 +12,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
         {
             // Fase 31H (ADR 0088): an appointment whose team member points to an account that does not exist stops it before
             // anything changes. Accounts are never deleted, so that would be some other Id: look into it (query 3 of its
-            // verify.sql) before emptying it, which leaves the name in StaffName. The lock holds until the key exists, in the
-            // same transaction: no appointment the deployed version saves in between escapes the check.
+            // verify.sql) before emptying it, which leaves the name in StaffName. The key is added WITH CHECK, so one saved in
+            // between would fail it too (547); the lock, held until the key exists in the same transaction, makes the stop this
+            // one with its message.
             migrationBuilder.Sql(@"
 EXEC(N'IF EXISTS (SELECT 1 FROM [Appointments] a WITH (TABLOCKX, HOLDLOCK)
     WHERE a.[StaffUserId] IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [AspNetUsers] u WHERE u.[Id] = a.[StaffUserId]))

@@ -16,10 +16,10 @@
 --   - [ServiceProductId] se queda sin llave, a propósito: la venta de una visita y el crédito de
 --     su cotización se cruzan por ese Id también después de borrar el producto (ADR 0088).
 --   No agrega columnas ni cambia datos. Bloquea [Appointments] hasta crear la llave, y crearla
---   toma un candado de esquema (Sch-M) sobre [AspNetUsers]: mientras tanto nadie lee las cuentas y
---   los inicios de sesión esperan (milisegundos o pocos segundos, según cuántas citas haya). Mejor
---   en una hora tranquila. Si un candado tarda más de 15 s (LOCK_TIMEOUT, abajo), se detiene con
---   el error 1222 sin cambiar nada: vuelve a ejecutarlo.
+--   toma un candado de esquema (Sch-M) sobre [AspNetUsers]. Mientras lo espera y lo tiene, nadie
+--   lee las cuentas: todas las solicitudes con sesión (que revisan su sesión en [AspNetUsers]) y los
+--   inicios de sesión esperan. Con la tabla libre dura milisegundos o pocos segundos, según cuántas
+--   citas haya; mejor en una hora tranquila, y con -t (abajo) para que no espere de más.
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
 -- vacía): revisa antes el verify.sql de database/production/20261110022936_AddUniqueCategoryNamePerTenant.
 --
@@ -31,11 +31,13 @@
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a
 -- ejecutar el script. Las opciones SET son las que exigen los índices filtrados (el sqlcmd
--- clásico arranca con QUOTED_IDENTIFIER OFF), más LOCK_TIMEOUT.
+-- clásico arranca con QUOTED_IDENTIFIER OFF).
 --
 -- Orden: respaldo de la base -> verify.sql (la consulta 3 vacía) -> este script -> verify.sql ->
--- fusionar la PR, cuyo merge a master despliega a producción. Por ejemplo:
---     sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql
+-- fusionar la PR, cuyo merge a master despliega a producción. Por ejemplo, con -t 15: si un lote
+-- tarda más de 15 s (porque espera ese candado), sqlcmd lo cancela, XACT_ABORT deshace su
+-- transacción sin cambiar nada y -b termina; vuelve a ejecutarlo en otro momento:
+--     sqlcmd -S <servidor> -d <base> <autenticación> -b -t 15 -i apply.sql
 -- =====================================================================================
 SET ANSI_NULLS ON;
 SET ANSI_PADDING ON;
@@ -45,7 +47,6 @@ SET CONCAT_NULL_YIELDS_NULL ON;
 SET NUMERIC_ROUNDABORT OFF;
 SET QUOTED_IDENTIFIER ON;
 SET XACT_ABORT ON;
-SET LOCK_TIMEOUT 15000;
 GO
 
 IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL

@@ -9,8 +9,10 @@
 -- la base vuelve a aceptar la persona de una cita sin revisar que su cuenta exista (como antes).
 -- Córrelo después de regresar el código a master con la Fase 31G; volver a ese código funciona
 -- también sin este script.
+-- Borrar la llave toma el mismo candado de esquema sobre [AspNetUsers] que crearla: mientras tanto
+-- esperan las solicitudes con sesión. Con -t 15, si tarda más, sqlcmd lo cancela sin cambiar nada.
 -- Idempotente: no hace nada si la migración no está aplicada.
---     sqlcmd -S <servidor> -d <base> <autenticación> -b -i rollback.sql
+--     sqlcmd -S <servidor> -d <base> <autenticación> -b -t 15 -i rollback.sql
 -- =====================================================================================
 SET ANSI_NULLS ON;
 SET ANSI_PADDING ON;

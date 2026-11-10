@@ -9,7 +9,8 @@ SET NOCOUNT ON;
 --    migración que siguen, hasta la 31G), la más reciente es
 --    20261110022936_AddUniqueCategoryNamePerTenant. Si es anterior, revisa primero el verify.sql
 --    de su carpeta: apply.sql también aplica las que falten. Después:
---    20261110201340_AddAppointmentStaffForeignKey.
+--    20261110201340_AddAppointmentStaffForeignKey. No debe aparecer nunca
+--    20261110192224_AddAppointmentForeignKeys: fue un primer diseño de esta fase que no se publicó.
 SELECT TOP (5) [MigrationId], [ProductVersion]
 FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;
@@ -29,10 +30,12 @@ ORDER BY [Tipo], [Nombre];
 
 -- 3. Antes (bloquea): citas cuya persona que atiende apunta a una cuenta que no existe. Si devuelve
 --    filas, apply.sql se detiene con el error 50058 sin cambiar nada. Las cuentas no se borran, así
---    que no debería salir ninguna: si sale, ese Id es de otra cosa. Revísalo antes de seguir (quién
---    la agendó y cuándo); si no apunta a nadie del equipo, vacíalo
+--    que no debería salir ninguna: si sale, ese Id es de otra cosa. Guarda la salida y revísalo antes
+--    de seguir (quién la agendó y cuándo); si no apunta a nadie del equipo, vacíalo
 --        UPDATE [Appointments] SET [StaffUserId] = NULL WHERE [Id] = <cita>;
---    y la cita conserva el nombre de quien atiende en [StaffName] (la agenda la cruza por ese nombre).
+--    La cita conserva el nombre de quien atiende en [StaffName] y la agenda la cruza por ese nombre.
+--    Si es una cita en línea por venir, sin persona ocupa un lugar del cupo de las que no eligen con
+--    quién: revisa ese día en la agenda.
 SELECT t.[Slug] AS [Negocio], a.[Id] AS [Cita], a.[StaffName] AS [Atiende], a.[StaffUserId] AS [CuentaQueNoExiste],
     a.[Channel] AS [Canal], a.[StartAt] AS [Inicio], a.[Status] AS [Estado], a.[CreatedAt] AS [Creada]
 FROM [Appointments] a

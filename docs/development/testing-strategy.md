@@ -3421,7 +3421,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la pieza del taller o la cancelación del cliente reintentando dentro de la transacción, como antes de la fase.
   - **Verificación:** Domain 1,462, Application 2,252, Infrastructure 729 (con las de SQL Server; 7 omitidas) y WebApi 515 en verde, sobre `d3a945d` (con la 31F). Sin cambios en el cliente ni en las dependencias.
 
-- Fase 31H, la llave foránea de quien atiende una cita (punto 12; [ADR 0088](../adr/0088-appointment-foreign-keys.md)):
+- Fase 31H, la llave foránea de quien atiende una cita (punto 12; [ADR 0088](../adr/0088-appointment-staff-foreign-key.md)):
   - **Qué cambia:** `Appointment.StaffUserId` apunta a `AspNetUsers` sin cascada, con un índice filtrado. La migración `AddAppointmentStaffForeignKey` se detiene con el error 50058, sin cambiar nada, si una cita apunta a una cuenta que no existe. `ServiceProductId` se queda sin llave a propósito: el crédito de la visita en su cotización cruza por él las líneas de la venta aunque el producto se haya borrado. Ningún endpoint ni mensaje cambia.
   - **Infrastructure:** `AppointmentStaffForeignKeyMigrationSqlServerTests` (3, nuevo, SQL Server, desde la migración anterior):
     - una cita con una cuenta que no existe detiene la migración sin llave, sin índice y sin tocar las citas; vaciada como dice el `verify.sql`, se aplica, la cita conserva el nombre y la buena conserva su persona;

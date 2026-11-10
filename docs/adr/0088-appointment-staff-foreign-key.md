@@ -25,12 +25,15 @@ El dueño del producto pidió avanzar los puntos de la lista sin esperar su resp
 2. **La migración se detiene (error 50058) sin cambiar nada si una cita ya apunta a una cuenta que no existe.**
    - Como las cuentas no se borran, ese `Id` sería de otra cosa, y conviene revisarlo en lugar de vaciarlo en silencio.
    - La consulta 3 del `verify.sql` las lista y dice cómo vaciar una: la cita conserva el nombre y la agenda la cruza por él.
-   - Bloquea `Appointments` desde la revisión hasta crear la llave, en la misma transacción, para que ninguna cita guardada mientras tanto se salte la revisión.
+   - Bloquea `Appointments` desde la revisión hasta crear la llave, en la misma transacción. La llave se crea revisando las filas (`WITH CHECK`), así que una cita guardada mientras tanto también la detendría (error 547); el candado hace que se detenga con este error y su mensaje.
 3. **`ServiceProductId` se queda sin llave, a propósito.**
    - Una llave con `ON DELETE SET NULL` vaciaría el vínculo al borrar el producto. También obligaría a vaciar los que ya apuntan a productos borrados. En los dos casos el crédito de la visita dejaría de encontrar lo pagado: la cotización pública, su envío y su conversión descontarían 0 en lugar de lo cobrado. Explorar dejaría de contar esa visita como nunca cotizada. Nada de eso se puede devolver.
    - Una llave sin cascada impediría borrar un servicio que tiene citas. Hoy se puede borrar aunque tenga citas o ventas.
    - Queda como `OrderItem.ProductId`: un `Id` de historial, revisado contra el negocio al guardar.
-4. **`SET LOCK_TIMEOUT 15000` en el `apply.sql`.** Crear la llave toma un candado de esquema sobre `AspNetUsers` hasta el commit (comprobado con `sys.dm_tran_locks`): mientras tanto nadie lee las cuentas. Si un candado tarda más de 15 s, el script se detiene sin cambiar nada y se vuelve a correr.
+4. **`sqlcmd -t 15` al correr el `apply.sql` y el `rollback.sql`.**
+   - Crear o borrar la llave toma un candado de esquema sobre `AspNetUsers` hasta el commit (comprobado con `sys.dm_tran_locks`). Mientras lo espera y lo tiene, nadie lee las cuentas: todas las solicitudes con sesión revisan la suya ahí, así que esperan.
+   - Con `-t 15`, un lote que tarda más (porque espera ese candado) se cancela; `XACT_ABORT` deshace su transacción sin cambiar nada y el script se vuelve a correr.
+   - El bloque `SET` de los scripts se queda como el del job `Migrations`, que lo compara.
 
 Ningún endpoint, código HTTP ni mensaje cambia.
 
@@ -39,7 +42,7 @@ Ningún endpoint, código HTTP ni mensaje cambia.
 - **Lo que logra:** la base ya no guarda una cita con una persona cuya cuenta no existe. Una cuenta con citas no se puede borrar, como ya pasaba con la del cliente.
 - **Compatibilidad:** la versión desplegada (master con la Fase 31G) no conoce la llave y sigue igual. Solo guarda a una persona activa del equipo del negocio, con su cuenta, y nada borra cuentas. Volver a ella funciona sin `rollback.sql`.
 - **Lo que limita:**
-  - **Mientras se crea la llave** (milisegundos o pocos segundos), los inicios de sesión y todo lo que lee cuentas esperan, y las citas no se guardan. Mejor en una hora tranquila.
+  - **Mientras se crea la llave** (milisegundos o pocos segundos con la tabla libre, hasta 15 s si espera), todas las solicitudes con sesión esperan y las citas no se guardan. Mejor en una hora tranquila.
   - **Que la persona sea del equipo del negocio** sigue en la aplicación, no en la base. Una persona que dejó el equipo sigue en sus citas de antes (la consulta 4 del `verify.sql` lo informa).
   - **`ServiceProductId` puede apuntar a un producto borrado:** es el historial, y lo leen el crédito de la visita y Explorar.
 - **Decisión por omisión** (sin preferencia expresa del dueño): detener la migración ante una cuenta que no existe en lugar de vaciarla; no poner llave al servicio.
