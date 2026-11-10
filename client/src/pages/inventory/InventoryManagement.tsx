@@ -44,14 +44,6 @@ const TABS: Array<{ key: InventoryTab; label: string }> = [
 
 const TAB_KEYS = TABS.map((tab) => tab.key).join();
 
-const EMPTY_ALERTS: InventoryAlertsDto = {
-  lowStockCount: 0,
-  criticalLowStockCount: 0,
-  outOfStockCount: 0,
-  missingRecipeProductCount: 0,
-  items: [],
-};
-
 /** A dialog that opens with a fresh form each time: the new key mounts it again. */
 function useDialog<T = never>() {
   const [state, setState] = useState<{ isOpen: boolean; target: T | null; key: number }>({
@@ -81,11 +73,16 @@ export default function InventoryManagement() {
   const movements = useMovementList(setError);
   const kardex = useKardexList(setError, activeTab === 'kardex');
 
-  const [alerts, setAlerts] = useState<InventoryAlertsDto>(EMPTY_ALERTS);
+  // Null until they are read: zeros that could not be read would say there is nothing to restock.
+  const [alerts, setAlerts] = useState<InventoryAlertsDto | null>(null);
   const [alertsLoading, setAlertsLoading] = useState(false);
   const [locations, setLocations] = useState<InventoryLocationDto[]>([]);
   const [locationsLoading, setLocationsLoading] = useState(true);
   const [supplyOptions, setSupplyOptions] = useState<SupplyItemDto[]>([]);
+  const [supplyOptionsComplete, setSupplyOptionsComplete] = useState(false);
+  // The supplies and locations being turned on or off: their button waits for the answer, since a second click would send
+  // the same change again. The list read again after it hides its rows meanwhile (DataTable shows it loading).
+  const [toggling, setToggling] = useState<ReadonlySet<string>>(() => new Set());
 
   const supplyDialog = useDialog<SupplyItemDto>();
   const locationDialog = useDialog<InventoryLocationDto>();
@@ -129,8 +126,10 @@ export default function InventoryManagement() {
         pageSize: 500,
       });
       setSupplyOptions(data.items);
-    } catch {
-      setSupplyOptions([]);
+      setSupplyOptionsComplete(data.items.length >= data.totalCount);
+    } catch (err: unknown) {
+      // The ones read before stay: the dialogs and the recipes still offer them.
+      setError(getApiErrorMessage(err, 'No se pudieron cargar los insumos para elegir.'));
     }
   }, []);
 
@@ -147,6 +146,7 @@ export default function InventoryManagement() {
   }, []);
 
   const recipe = useRecipeEditor({
+    enabled: activeTab === 'recipes',
     setError,
     setSuccess,
     onSaved: () => Promise.all([loadAlerts(), kardex.reload()]),
@@ -162,7 +162,20 @@ export default function InventoryManagement() {
     loadAlerts();
   }, [activeTab, loadAlerts]);
 
-  const toggleSupplyActive = async (supply: SupplyItemDto) => {
+  const whileToggling = async (id: string, work: () => Promise<void>) => {
+    setToggling((current) => new Set(current).add(id));
+    try {
+      await work();
+    } finally {
+      setToggling((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const toggleSupplyActive = (supply: SupplyItemDto) => whileToggling(supply.id, async () => {
     setError('');
     setSuccess('');
     try {
@@ -172,9 +185,9 @@ export default function InventoryManagement() {
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo actualizar el estado del insumo.'));
     }
-  };
+  });
 
-  const toggleLocationActive = async (location: InventoryLocationDto) => {
+  const toggleLocationActive = (location: InventoryLocationDto) => whileToggling(location.id, async () => {
     setError('');
     setSuccess('');
     try {
@@ -184,7 +197,7 @@ export default function InventoryManagement() {
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo actualizar el estado de la ubicación.'));
     }
-  };
+  });
 
   const openMovementDetail = async (movementId: string) => {
     setError('');
@@ -218,7 +231,7 @@ export default function InventoryManagement() {
       <PageTitle title="Inventario" />
 
       {error && (
-        <div className="alert alert-danger alert-dismissible fade show">
+        <div className="alert alert-danger alert-dismissible fade show" role="alert">
           {error}
           <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setError('')}></button>
         </div>
@@ -280,10 +293,13 @@ export default function InventoryManagement() {
                 )}
                 {activeTab === 'recipes' && (
                   <div className="d-flex align-items-center gap-2">
-                    <button type="button" className="btn btn-light btn-sm" onClick={recipe.reload}>
+                    <button type="button" className="btn btn-light btn-sm" onClick={recipe.reload}
+                      disabled={recipe.saving || recipe.loading || recipe.productsLoading}>
                       <i className="ri-refresh-line me-1" aria-hidden="true"></i>Recargar
                     </button>
-                    <button type="button" className="btn btn-primary btn-sm" onClick={recipe.save} disabled={recipe.saving || recipe.loading}>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={recipe.save}
+                      // A recipe that could not be read is not saved empty: that would erase the one saved.
+                      disabled={recipe.saving || recipe.loading || recipe.productsLoading || recipe.readFailed}>
                       <i className="ri-save-line me-1" aria-hidden="true"></i>{recipe.saving ? 'Guardando…' : 'Guardar receta'}
                     </button>
                   </div>
@@ -306,7 +322,7 @@ export default function InventoryManagement() {
               </div>
 
               {activeTab === 'supplies' && (
-                <SuppliesTab list={supplies} onEdit={supplyDialog.show} onToggleActive={toggleSupplyActive} />
+                <SuppliesTab list={supplies} toggling={toggling} onEdit={supplyDialog.show} onToggleActive={toggleSupplyActive} />
               )}
               {activeTab === 'stocks' && <StocksTab list={stocks} locations={locations} />}
               {activeTab === 'movements' && <MovementsTab list={movements} onOpenDetail={openMovementDetail} />}
@@ -342,6 +358,7 @@ export default function InventoryManagement() {
                 <RecipesTab
                   editor={recipe}
                   supplyOptions={supplyOptions}
+                  supplyOptionsComplete={supplyOptionsComplete}
                   locations={locations}
                   activeLocations={activeLocations}
                 />
@@ -366,6 +383,7 @@ export default function InventoryManagement() {
                 <LocationsTab
                   locations={locations}
                   loading={locationsLoading}
+                  toggling={toggling}
                   onEdit={locationDialog.show}
                   onToggleActive={toggleLocationActive}
                 />

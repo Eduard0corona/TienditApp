@@ -31,14 +31,21 @@ export default function CountsTab({ locations, filter, onFilterChange: setFilter
   return (
     <>
       {counts.isError && (
-        <div className="alert alert-danger" role="alert">{getApiErrorMessage(counts.error, 'Error al cargar los conteos.')}</div>
+        <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+          <span className="me-auto">{getApiErrorMessage(counts.error, 'Error al cargar los conteos.')}</span>
+          <button type="button" className="btn btn-sm btn-light" disabled={counts.isFetching} onClick={() => void counts.refetch()}>
+            Reintentar
+          </button>
+        </div>
       )}
       <DataTable
         data={counts.data?.items ?? []}
         columns={COLUMNS}
         keyExtractor={(item) => item.id}
         loading={counts.isLoading}
-        emptyMessage={filtered
+        emptyMessage={counts.isError
+          ? 'No se pudieron leer los conteos.'
+          : filtered
           ? 'Ningún conteo coincide con los filtros.'
           : 'Todavía no hay conteos. Empieza uno para cuadrar lo que hay en el anaquel con lo que dice el sistema.'}
         searchPlaceholder="Buscar por folio o ubicación"

@@ -67,14 +67,19 @@ export function useServerList<TItem, TFilters extends object>({
     onErrorRef.current = onError;
   });
 
+  // The last page asked for: one of filters changed since that arrives later does not replace it.
+  const latestRead = useRef(0);
+
   const reload = useCallback(async () => {
+    const read = ++latestRead.current;
     setLoading(true);
     try {
-      setData(await fetchRef.current({ filters, search, pageNumber: page, pageSize }));
+      const next = await fetchRef.current({ filters, search, pageNumber: page, pageSize });
+      if (read === latestRead.current) setData(next);
     } catch (err: unknown) {
-      onErrorRef.current(getApiErrorMessage(err, errorMessage));
+      if (read === latestRead.current) onErrorRef.current(getApiErrorMessage(err, errorMessage));
     } finally {
-      setLoading(false);
+      if (read === latestRead.current) setLoading(false);
     }
   }, [errorMessage, filters, page, pageSize, search]);
 

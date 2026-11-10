@@ -86,6 +86,12 @@ export interface RecipeLineFormState {
   quantity: string;
   wastePercent: string;
   notes: string;
+  /**
+   * The supply and location the saved recipe names: a supply or location turned off after is no longer among those
+   * that can be chosen, and the line still shows which it is.
+   */
+  savedSupplyLabel?: string;
+  savedLocationName?: string;
 }
 
 const optional = (value: string) => value.trim() || undefined;
@@ -318,6 +324,8 @@ export const toRecipeLines = (recipe: ProductRecipeDto): RecipeLineFormState[] =
     quantity: line.quantity.toString(),
     wastePercent: line.wastePercent.toString(),
     notes: line.notes ?? '',
+    savedSupplyLabel: `${line.supplyItemName} (${line.supplyCode || '-'})`,
+    savedLocationName: line.inventoryLocationName,
   }));
 
 export function toRecipeRequest(lines: RecipeLineFormState[]): FormResult<UpsertProductRecipeRequest> {

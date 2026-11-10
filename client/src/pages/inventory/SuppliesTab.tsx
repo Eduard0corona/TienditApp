@@ -18,12 +18,14 @@ const COLUMNS = [
 
 interface SuppliesTabProps {
   list: ServerList<SupplyItemDto, SupplyFilters>;
+  /** The supplies being turned on or off: their button waits for the answer, which a second click would send again. */
+  toggling: ReadonlySet<string>;
   onEdit: (supply: SupplyItemDto) => void;
   onToggleActive: (supply: SupplyItemDto) => void;
 }
 
 /** Supplies, and the stock of the products that control their own, with what each has on hand. */
-export default function SuppliesTab({ list, onEdit, onToggleActive }: SuppliesTabProps) {
+export default function SuppliesTab({ list, toggling, onEdit, onToggleActive }: SuppliesTabProps) {
   return (
     <DataTable
       data={list.data.items}
@@ -108,7 +110,7 @@ export default function SuppliesTab({ list, onEdit, onToggleActive }: SuppliesTa
                 ? 'Es la existencia de un producto: deja de controlarla desde el producto'
                 : item.isActive ? 'Desactivar' : 'Activar'}
               aria-label={item.isActive ? `Desactivar ${item.name}` : `Activar ${item.name}`}
-              disabled={!!item.productId && item.isActive}
+              disabled={(!!item.productId && item.isActive) || toggling.has(item.id)}
               onClick={() => onToggleActive(item)}
             >
               {item.isActive ? 'Desactivar' : 'Activar'}
