@@ -70,7 +70,8 @@ public sealed class OrderAuditHandlers :
         {
             domainEvent.PreviousStatus,
             domainEvent.Reason,
-            domainEvent.ByCustomer
+            domainEvent.ByCustomer,
+            domainEvent.AtCustomerRequest
         },
         // Its customer cancelled it (Fase 29R): the business reads «Cliente», as its history says, never the account's email.
         performedBy: domainEvent.ByCustomer ? Order.CustomerPerformedBy : null);

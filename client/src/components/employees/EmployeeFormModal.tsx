@@ -285,7 +285,7 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
                 {offersOrderCancellations && (
                   <NoticeSwitch
                     label="Pedidos cancelados"
-                    description="Cada pedido en línea que su cliente cancela antes de que lo acepten."
+                    description="Cada pedido en línea que su cliente cancela antes de que lo acepten, o que alguien más del equipo cancela porque el cliente lo pidió."
                     checked={orderCancellationEmails}
                     onChange={setOrderCancellationEmails}
                     missing={missingPermission('ManageOrders')}

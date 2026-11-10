@@ -1,12 +1,12 @@
 # Categorías con el mismo nombre en un negocio
 
-Procedimiento para revisar y, si hace falta, renombrar las categorías que un negocio tiene repetidas antes de aplicar `20261110022936_AddUniqueCategoryNamePerTenant` (Fase 31B). `verify.sql` solo lee; `repair.sql` solo cambia `Categories.Name` (y `UpdatedAt`/`UpdatedBy`) de las repetidas: no borra categorías ni mueve productos.
+Procedimiento para revisar y, si hace falta, renombrar las categorías que un negocio tiene repetidas antes de aplicar `20261110022936_AddUniqueCategoryNamePerTenant` (Fase 31C). `verify.sql` solo lee; `repair.sql` solo cambia `Categories.Name` (y `UpdatedAt`/`UpdatedBy`) de las repetidas: no borra categorías ni mueve productos.
 
 ## Qué pasó
 
-Hasta la Fase 31B el servidor aceptaba dos categorías con el mismo nombre en un negocio: `CreateCategoryCommand` solo revisaba el tope de 300 y `UpdateCategoryCommand` no revisaba el nombre. En el cliente, la Fase 30P cerró las dos maneras de crear dos veces desde la pantalla, pero dos personas o dos pestañas podían hacerlo.
+Hasta la Fase 31C el servidor aceptaba dos categorías con el mismo nombre en un negocio: `CreateCategoryCommand` solo revisaba el tope de 300 y `UpdateCategoryCommand` no revisaba el nombre. En el cliente, la Fase 30P cerró las dos maneras de crear dos veces desde la pantalla, pero dos personas o dos pestañas podían hacerlo.
 
-Desde la Fase 31B:
+Desde la Fase 31C:
 
 - crear o editar con un nombre que el negocio ya tiene, sin importar mayúsculas ni espacios y contando las archivadas, responde 400 con el nombre de la que lo tiene (`Category.NameKey`);
 - el índice único `IX_Categories_TenantId_Name` respalda esa regla cuando dos guardados se cruzan. Compara con la intercalación de la columna (`SQL_Latin1_General_CP1_CI_AS`: sin mayúsculas ni espacios al final, con acentos).

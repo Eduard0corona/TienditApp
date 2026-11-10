@@ -646,12 +646,65 @@ describe('OrdersList', () => {
     await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000123' })).getByRole('button', { name: 'Cancelar pedido' }));
 
     // The food is usually cooked when the app cancels: closing that question keeps the supplies as used.
-    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith('r1', 'DiDi lo canceló', false));
+    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith('r1', { reason: 'DiDi lo canceló', restockItems: false }));
     expect(dialogs.confirm).toHaveBeenCalledWith(expect.objectContaining({
       title: '¿Regresar los insumos al inventario?',
       confirmLabel: 'Sí, regresarlos',
       cancelLabel: 'No, ya se preparó',
     }));
+    // The app cancelled it, not a customer of the business.
+    expect(dialogs.confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks whether its customer asked to cancel an online order, and says so only when they did (Fase 31B)', async () => {
+    const user = userEvent.setup();
+    const online = order({
+      id: 'w1', orderNumber: 'ORD-000130', channel: OrderChannel.Online, createdByBusiness: false, status: 1, canCancel: true,
+      paidAmount: 0, balance: 120, items: [], payments: [], refunds: [], statusHistory: [], servicePieces: [], allowedTransitions: [], taxBreakdown: [],
+    });
+    renderOrders(TenantCapability.Food, [online]);
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: online } as Awaited<ReturnType<typeof ordersApi.getById>>);
+    vi.mocked(ordersApi.cancel).mockResolvedValue({} as Awaited<ReturnType<typeof ordersApi.cancel>>);
+    dialogs.prompt.mockResolvedValue('Llamó: ya no lo quiere');
+    dialogs.confirm.mockResolvedValue(true);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000130' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000130' })).getByRole('button', { name: 'Cancelar pedido' }));
+
+    // What it consumed goes back, as for any order that is not of a platform.
+    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith('w1', { reason: 'Llamó: ya no lo quiere', atCustomerRequest: true }));
+    expect(dialogs.confirm).toHaveBeenCalledTimes(1);
+    expect(dialogs.confirm).toHaveBeenCalledWith(expect.objectContaining({
+      title: '¿Lo pidió el cliente?',
+      message: 'Si llamó o escribió para cancelarlo, le llega un correo a quien recibe los pedidos cancelados.',
+      confirmLabel: 'Sí, lo pidió',
+      cancelLabel: 'No',
+    }));
+
+    // Closing the question says nobody asked.
+    vi.mocked(ordersApi.cancel).mockClear();
+    dialogs.confirm.mockResolvedValue(false);
+    await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000130' })).getByRole('button', { name: 'Cancelar pedido' }));
+    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith('w1', { reason: 'Llamó: ya no lo quiere', atCustomerRequest: false }));
+  });
+
+  it('does not ask it of an order placed with the QR of a table, which whoever serves it handles', async () => {
+    const user = userEvent.setup();
+    const ofATable = order({
+      id: 'w2', orderNumber: 'ORD-000131', channel: OrderChannel.Online, createdByBusiness: false, tableNumber: '4', status: 1,
+      canCancel: true, paidAmount: 0, balance: 120, items: [], payments: [], refunds: [], statusHistory: [], servicePieces: [],
+      allowedTransitions: [], taxBreakdown: [],
+    });
+    renderOrders(TenantCapability.Food, [ofATable]);
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: ofATable } as Awaited<ReturnType<typeof ordersApi.getById>>);
+    vi.mocked(ordersApi.cancel).mockResolvedValue({} as Awaited<ReturnType<typeof ordersApi.cancel>>);
+    dialogs.prompt.mockResolvedValue('Se fueron');
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000131' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000131' })).getByRole('button', { name: 'Cancelar pedido' }));
+
+    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith('w2', { reason: 'Se fueron' }));
+    expect(dialogs.confirm).not.toHaveBeenCalled();
   });
 
   it('keeps «Factura» on a cancelled order, where its invoices are downloaded or cancelled', async () => {
@@ -678,7 +731,7 @@ describe('OrdersList', () => {
     await user.click(await screen.findByRole('button', { name: 'ORD-000125' }));
     await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000125' })).getByRole('button', { name: 'Cancelar pedido' }));
 
-    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith('c1', undefined, undefined));
+    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith('c1', {}));
     expect(dialogs.confirm).not.toHaveBeenCalled();
   });
 

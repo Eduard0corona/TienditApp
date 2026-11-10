@@ -41,7 +41,24 @@ public class CustomerOrderCancellationTests
 
         order.Cancel(Food, "cajero", "Sin existencias");
 
-        Assert.False(Assert.IsType<OrderCancelledEvent>(order.DomainEvents.Last()).ByCustomer);
+        var cancelled = Assert.IsType<OrderCancelledEvent>(order.DomainEvents.Last());
+        Assert.Equal((false, false), (cancelled.ByCustomer, cancelled.AtCustomerRequest));
+        Assert.False(Assert.IsType<OrderCancelledEvent>(OnlineOrderCancelledByItsCustomer().DomainEvents.Last()).AtCustomerRequest);
+    }
+
+    [Fact]
+    public void TheBusinessCancellingBecauseItsCustomerAsked_ShouldSaySo_ItsHistorySayingWhoCancelledIt()
+    {
+        // Fase 31B (ADR 0084): accepted, the customer calls to cancel it.
+        var order = OnlineOrder();
+        order.TransitionTo(OrderStatus.Confirmed, Food, "cajero");
+
+        order.Cancel(Food, "cajero", "Llamó: ya no lo quiere", atCustomerRequest: true);
+
+        var cancelled = Assert.IsType<OrderCancelledEvent>(order.DomainEvents.Last());
+        Assert.Equal((OrderStatus.Confirmed, "Llamó: ya no lo quiere", false, true),
+            (cancelled.PreviousStatus, cancelled.Reason, cancelled.ByCustomer, cancelled.AtCustomerRequest));
+        Assert.Equal("cajero", order.StatusHistory.Last().ChangedBy);
     }
 
     [Fact]
@@ -84,6 +101,13 @@ public class CustomerOrderCancellationTests
     }
 
     private static string Refusal(Order order) => Assert.Throws<DomainException>(() => order.CancelByCustomer(Food)).Message;
+
+    private static Order OnlineOrderCancelledByItsCustomer()
+    {
+        var order = OnlineOrder();
+        order.CancelByCustomer(Food);
+        return order;
+    }
 
     private static Order OnlineOrder(OrderChannel channel = OrderChannel.Online, string? tableNumber = null)
     {

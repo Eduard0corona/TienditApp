@@ -40,7 +40,7 @@ El dueño del producto pidió avanzar estos puntos (el 9, el 10 y el 13), entre 
    - **Se queda** `IX_Appointments_OnlineRequests_CreatedAt` de la 29J: desde la 29M Explorar ya no lo usa, pero el recordatorio de la 29U busca con él las solicitudes que esperan ([ADR 0075](0075-answer-reminder.md)).
    - El detalle de la medición está en [la estrategia de pruebas](../development/testing-strategy.md).
 4. **Fuera de esta fase:**
-   - el correo de un pedido que el cliente cancela por teléfono o por WhatsApp (lo cancela el negocio);
+   - el correo de un pedido que el cliente cancela por teléfono o por WhatsApp (lo cancela el negocio). *Llegó en la Fase 31B* ([ADR 0084](0084-order-cancelled-at-customer-request-email.md));
    - una anticipación distinta por persona o por servicio;
    - recordar también los pedidos en línea sin confirmar por correo (se avisan en pantalla desde la 29X);
    - reescribir la lectura del tiempo de confirmar para que un índice filtrado la ayude. *Llegó en la Fase 30E* (ver el punto 3).

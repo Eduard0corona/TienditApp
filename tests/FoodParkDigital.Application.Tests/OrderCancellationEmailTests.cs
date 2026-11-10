@@ -1,3 +1,4 @@
+using System.Net;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -7,6 +8,7 @@ using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.CancellationNotices;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Application.Orders.EventHandlers;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -16,6 +18,7 @@ using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using static FoodParkDigital.Application.Tests.Support.NoticeEmailsSupport;
@@ -23,8 +26,9 @@ using static FoodParkDigital.Application.Tests.Support.NoticeEmailsSupport;
 namespace FoodParkDigital.Application.Tests;
 
 /// <summary>
-/// The email of an online order its customer cancelled before the business accepted it (Fase 30B, ADR 0082): one per member who
-/// gets them and may confirm orders, what it says and never says, when it is no longer sent, and each person's own choice.
+/// The email of an online order its customer cancelled before the business accepted it (Fase 30B, ADR 0082), or the business
+/// cancelled because its customer asked (Fase 31B, ADR 0084): one per member who gets them and may confirm orders, but not to
+/// whoever cancelled it, what it says and never says, when it is no longer sent, and each person's own choice.
 /// </summary>
 public class OrderCancellationEmailTests
 {
@@ -103,6 +107,104 @@ public class OrderCancellationEmailTests
         (await fixture.Context.Tenants.IgnoreQueryFilters().SingleAsync(t => t.Id == kitchen.Id)).SetStatus(TenantStatus.Suspended);
         await fixture.Context.SaveChangesAsync();
         Assert.Empty(await SendAsync(fixture, kitchen, order, owner));
+    }
+
+    [Fact]
+    public async Task AnOrderCancelledBecauseItsCustomerAsked_ShouldBeTold_ToWhoGetsThem_ButNotWhoCancelledIt()
+    {
+        // Fase 31B (ADR 0084): accepted, its customer calls, and the cashier cancels it.
+        var raised = new RaisedEvents();
+        await using var fixture = SalesTestFixture.Create(raised);
+        var (kitchen, tacos) = await KitchenAsync(fixture, "cocina", "Cocina Luna");
+        var owner = await MemberAsync(fixture, kitchen, "dueña", TenantUserRole.Owner);
+        var cashier = await MemberAsync(fixture, kitchen, "cajero", TenantUserRole.Staff, permissions: [TenantPermission.ManageOrders], chooseOrderCancellations: true);
+        await MemberAsync(fixture, kitchen, "mesero", TenantUserRole.Staff, permissions: [TenantPermission.ManageOrders]);
+        var (order, cancelled) = await CancelledAtCustomerRequestAsync(fixture, raised, kitchen, tacos, cashier, "Llamó: ya no lo quiere");
+        Assert.Equal((false, true), (cancelled.ByCustomer, cancelled.AtCustomerRequest));
+
+        var queued = await QueueAsync(fixture, kitchen, order, cancelled, cancelledBy: cashier);
+        Assert.Equal([(owner, true)], queued.Select(q => (q.Event.UserId, q.Event.AtCustomerRequest)));
+        Assert.All(queued, q => Assert.Equal((order.Id, (Guid?)kitchen.Id), (q.Event.OrderId, q.TenantId)));
+        // Had the owner cancelled it, the cashier would hear of it.
+        Assert.Equal([cashier], (await QueueAsync(fixture, kitchen, order, cancelled, cancelledBy: owner)).Select(q => q.Event.UserId));
+        // Cancelled by the business on its own: nobody needs to be told.
+        Assert.Empty(await QueueAsync(fixture, kitchen, order, cancelled with { AtCustomerRequest = false }, cancelledBy: cashier));
+
+        // Its customer cancelled theirs: whoever gets them hears they did, not that they asked.
+        var byCustomer = await CancelledByCustomerAsync(fixture, kitchen, tacos);
+        Assert.Equal(
+            new[] { (owner, false), (cashier, false) }.Order(),
+            (await QueueAsync(fixture, kitchen, byCustomer, byCustomer: true)).Select(q => (q.Event.UserId, q.Event.AtCustomerRequest)).Order());
+        // The owner cancelled their own order from their account: they know too.
+        var ownOrder = new OrderCancelledEvent(byCustomer.Id, kitchen.Id, OrderStatus.Pending, Order.CustomerCancellationReason, ByCustomer: true);
+        Assert.Equal([cashier], (await QueueAsync(fixture, kitchen, byCustomer, ownOrder, cancelledBy: owner)).Select(q => q.Event.UserId));
+
+        // A sale of the counter its customer asked to cancel: the emails are of the online orders.
+        var (counter, ofTheCounter) = await CancelledAtCustomerRequestAsync(fixture, raised, kitchen, tacos, cashier, null, online: false);
+        Assert.True(ofTheCounter.AtCustomerRequest);
+        Assert.Empty(await QueueAsync(fixture, kitchen, counter, ofTheCounter, cancelledBy: cashier));
+
+        // The business's activity says its customer asked, with the reason.
+        await new OrderAuditHandlers(fixture.Context).HandleAsync(cancelled, Context(kitchen) with { ActorUserId = cashier.ToString(), ActorName = CashierName }, CancellationToken.None);
+        await fixture.Context.SaveChangesAsync();
+        var activity = await fixture.Context.AuditLogs.IgnoreQueryFilters().SingleAsync(a => a.Action == "OrderCancelled" && a.EntityId == order.Id.ToString());
+        Assert.Contains("\"AtCustomerRequest\":true", activity.Metadata!);
+        Assert.Contains("\"ByCustomer\":false", activity.Metadata!);
+    }
+
+    [Fact]
+    public async Task TheEmail_ShouldSayItsCustomerAskedToCancelIt_AndWhy_NeverWhoCancelledIt()
+    {
+        var raised = new RaisedEvents();
+        await using var fixture = SalesTestFixture.Create(raised);
+        var (kitchen, tacos) = await KitchenAsync(fixture, "cocina", "Cocina <Luna>");
+        var owner = await MemberAsync(fixture, kitchen, "dueña", TenantUserRole.Owner);
+        var cashier = await MemberAsync(fixture, kitchen, "cajero", TenantUserRole.Staff, permissions: [TenantPermission.ManageOrders]);
+        var (order, _) = await CancelledAtCustomerRequestAsync(fixture, raised, kitchen, tacos, cashier, "Llamó:\n<i>ya no</i> lo quiere", customer: "<b>Mariana</b>");
+
+        var (to, subject, body) = Assert.Single(await SendAsync(fixture, kitchen, order, owner, atCustomerRequest: true));
+
+        Assert.Equal($"dueña.{kitchen.Slug}@demo.com", to);
+        Assert.Equal($"Pedido cancelado en Cocina <Luna>: {order.OrderNumber} por $120.00", subject);
+        Assert.Contains("<h2>Un cliente pidió cancelar su pedido</h2>", body);
+        Assert.Contains($"<strong>&lt;b&gt;Mariana&lt;/b&gt;</strong> pidió cancelar su pedido en línea <strong>{order.OrderNumber}</strong> de Cocina &lt;Luna&gt;, por un total de <strong>$120.00</strong>, y el equipo lo canceló.", body);
+        Assert.Contains("<p>Motivo: Llam&#243;: &lt;i&gt;ya no&lt;/i&gt; lo quiere</p>", body);
+        Assert.Contains("<p>Ya no tienes que prepararlo ni entregarlo.</p>", body);
+        Assert.Contains($"<a href='{AppUrl}/orders'>Abrir Pedidos</a>", body);
+        Assert.Contains("recibes los correos de los pedidos en línea de Cocina &lt;Luna&gt; que sus clientes cancelan o piden cancelar", body);
+        Assert.DoesNotContain("<b>", body);
+        Assert.DoesNotContain("<i>", body);
+        Assert.DoesNotContain("antes de que lo aceptaran", body);
+        Assert.DoesNotContain("1234", body);
+        // Nor who cancelled it, as written or encoded.
+        Assert.DoesNotContain(CashierName, body);
+        Assert.DoesNotContain(WebUtility.HtmlEncode(CashierName), body);
+        Assert.DoesNotContain("cajero.", body);
+
+        // Without a reason, none is said.
+        var (silent, _) = await CancelledAtCustomerRequestAsync(fixture, raised, kitchen, tacos, cashier, null);
+        Assert.DoesNotContain("Motivo", Assert.Single(await SendAsync(fixture, kitchen, silent, owner, atCustomerRequest: true)).Body);
+    }
+
+    [Fact]
+    public async Task EachEmail_ShouldGoOnlyAsItsOrderWasCancelled_ADayAgoOrLess()
+    {
+        var raised = new RaisedEvents();
+        await using var fixture = SalesTestFixture.Create(raised);
+        var (kitchen, tacos) = await KitchenAsync(fixture, "cocina", "Cocina Luna");
+        var owner = await MemberAsync(fixture, kitchen, "dueña", TenantUserRole.Owner);
+        var cashier = await MemberAsync(fixture, kitchen, "cajero", TenantUserRole.Staff, permissions: [TenantPermission.ManageOrders]);
+        var (asked, _) = await CancelledAtCustomerRequestAsync(fixture, raised, kitchen, tacos, cashier, "Llamó");
+        var byCustomer = await CancelledByCustomerAsync(fixture, kitchen, tacos);
+
+        // The email of one its customer asked to cancel, for one its customer cancelled, and the other way around: none.
+        Assert.Empty(await SendAsync(fixture, kitchen, byCustomer, owner, atCustomerRequest: true));
+        Assert.Empty(await SendAsync(fixture, kitchen, asked, owner));
+        Assert.Single(await SendAsync(fixture, kitchen, byCustomer, owner));
+
+        // A day after the business cancelled it, to the minute: still sent. A minute later, whoever confirms orders saw it.
+        Assert.Single(await SendAsync(fixture, kitchen, asked, owner, atCustomerRequest: true, after: TimeSpan.FromDays(1)));
+        Assert.Empty(await SendAsync(fixture, kitchen, asked, owner, atCustomerRequest: true, after: TimeSpan.FromDays(1) + TimeSpan.FromMinutes(1)));
     }
 
     [Fact]
@@ -231,6 +333,47 @@ public class OrderCancellationEmailTests
         return order;
     }
 
+    private const string CashierName = "Cajero Ramírez";
+
+    /// <summary>
+    /// An order of the online menu (or a sale of the counter) the business accepted, and <paramref name="cancelledBy"/> cancelled
+    /// as the API does, saying its customer asked; and the event it raised.
+    /// </summary>
+    private static async Task<(Order Order, OrderCancelledEvent Raised)> CancelledAtCustomerRequestAsync(
+        SalesTestFixture fixture, RaisedEvents raised, Tenant tenant, Product product, Guid cancelledBy, string? reason,
+        string customer = "Mariana Ortiz", bool online = true)
+    {
+        Order order;
+        if (online)
+        {
+            order = await PlaceAsync(fixture, product, tenant.Slug, customer);
+            await ChangeAsync(fixture, order.Id, o => o.TransitionTo(OrderStatus.Confirmed, OrderStateMachineFactory.Create(o.BusinessType, o.OrderType), "dueña"));
+        }
+        else
+        {
+            fixture.TenantService.SetTenant(tenant.Id);
+            var sold = await fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+            {
+                CustomerName = customer,
+                CustomerPhone = "55 1234 5678",
+                Items = [new CreateOrderItemDto { ProductId = product.Id, Quantity = 1 }]
+            }, CancellationToken.None);
+            Assert.True(sold.IsSuccess, sold.Error);
+            fixture.Context.ChangeTracker.Clear();
+            order = await fixture.Context.Orders.IgnoreQueryFilters().AsNoTracking().SingleAsync(o => o.Id == sold.Value.Id);
+            Assert.Equal(OrderChannel.Counter, order.Channel);
+        }
+
+        fixture.TenantService.SetTenant(tenant.Id);
+        fixture.CurrentUser.UserId = cancelledBy.ToString();
+        fixture.CurrentUser.UserName = CashierName;
+        var cancelled = await new CancelOrderCommandHandler(fixture.Context, fixture.CurrentUser, NoOpOrderInventoryService.Instance)
+            .Handle(new CancelOrderCommand { OrderId = order.Id, Reason = reason, AtCustomerRequest = true }, CancellationToken.None);
+        Assert.True(cancelled.IsSuccess, cancelled.Error);
+        fixture.Context.ChangeTracker.Clear();
+        return (order, raised.OfType<OrderCancelledEvent>().Last(e => e.OrderId == order.Id));
+    }
+
     private static async Task ChangeAsync(SalesTestFixture fixture, Guid orderId, Action<Order> change)
     {
         var order = await fixture.Context.Orders.IgnoreQueryFilters().Include(o => o.StatusHistory).SingleAsync(o => o.Id == orderId);
@@ -239,13 +382,19 @@ public class OrderCancellationEmailTests
         fixture.Context.ChangeTracker.Clear();
     }
 
-    private static async Task<List<(OrderCancellationEmailEvent Event, Guid? TenantId)>> QueueAsync(
+    private static Task<List<(OrderCancellationEmailEvent Event, Guid? TenantId)>> QueueAsync(
         SalesTestFixture fixture, Tenant tenant, Order order, bool byCustomer)
+        => QueueAsync(fixture, tenant, order, new OrderCancelledEvent(order.Id, tenant.Id, OrderStatus.Pending, null, byCustomer), cancelledBy: null);
+
+    /// <summary>What the outbox queues for <paramref name="cancelled"/>, raised by <paramref name="cancelledBy"/>.</summary>
+    private static async Task<List<(OrderCancellationEmailEvent Event, Guid? TenantId)>> QueueAsync(
+        SalesTestFixture fixture, Tenant tenant, Order order, OrderCancelledEvent cancelled, Guid? cancelledBy)
     {
+        Assert.Equal(order.Id, cancelled.OrderId);
         fixture.TenantService.SetTenant(tenant.Id);
         var outbox = new Outbox<OrderCancellationEmailEvent>();
         await new OrderCancelledEmailsHandler(fixture.Context, new MembersAccess(fixture.Context), outbox)
-            .HandleAsync(new OrderCancelledEvent(order.Id, tenant.Id, OrderStatus.Pending, null, byCustomer), Context(tenant), CancellationToken.None);
+            .HandleAsync(cancelled, Context(tenant) with { ActorUserId = cancelledBy?.ToString() }, CancellationToken.None);
         return outbox.Added;
     }
 
@@ -254,7 +403,8 @@ public class OrderCancellationEmailTests
     /// provider that fails when <paramref name="failing"/>.
     /// </summary>
     private static async Task<List<(string To, string Subject, string Body)>> SendAsync(
-        SalesTestFixture fixture, Tenant tenant, Order order, Guid userId, TimeSpan? after = null, bool failing = false)
+        SalesTestFixture fixture, Tenant tenant, Order order, Guid userId, TimeSpan? after = null, bool failing = false,
+        bool atCustomerRequest = false)
     {
         var cancelledAt = await fixture.Context.OrderStatusHistories.IgnoreQueryFilters().AsNoTracking()
             .Where(h => h.OrderId == order.Id && h.NewStatus == OrderStatus.Cancelled)
@@ -264,7 +414,7 @@ public class OrderCancellationEmailTests
         fixture.TenantService.SetTenant(tenant.Id);
         var emails = new Emails(fail: failing);
         await new OrderCancellationEmailHandler(fixture.Context, new MembersAccess(fixture.Context), emails, new Links(AppUrl), fixture.Clock)
-            .HandleAsync(new OrderCancellationEmailEvent(order.Id, userId), Context(tenant), CancellationToken.None);
+            .HandleAsync(new OrderCancellationEmailEvent(order.Id, userId, atCustomerRequest), Context(tenant), CancellationToken.None);
         return emails.Sent;
     }
 
@@ -288,5 +438,25 @@ public class OrderCancellationEmailTests
     {
         fixture.TenantService.SetTenant(tenant.Id);
         fixture.CurrentUser.UserId = userId.ToString();
+    }
+
+    /// <summary>What the context publishes once its changes are saved: the events the orders raised.</summary>
+    private sealed class RaisedEvents : List<object>, IMediator
+    {
+        public Task Publish(object notification, CancellationToken cancellationToken = default)
+        {
+            Add(notification);
+            return Task.CompletedTask;
+        }
+
+        public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
+            where TNotification : INotification
+            => Publish((object)notification, cancellationToken);
+
+        public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task Send<TRequest>(TRequest request, CancellationToken cancellationToken = default) where TRequest : IRequest => throw new NotSupportedException();
+        public Task<object?> Send(object request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public IAsyncEnumerable<TResponse> CreateStream<TResponse>(IStreamRequest<TResponse> request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

@@ -2,6 +2,7 @@ import api from './axios';
 import type {
   AddOrderPaymentRequest,
   AddServiceOrderPhotoRequest,
+  CancelOrderRequest,
   CancelTabItemRequest,
   CreateOrderItemRequest,
   CreateOrderRequest,
@@ -57,9 +58,8 @@ export const ordersApi = {
   dispatch: (id: string, request: DispatchOrderRequest) =>
     api.put(`/orders/${id}/delivery/dispatch`, request),
 
-  /** Cancels an order; what it consumed goes back to the stock unless `restockItems` is false. */
-  cancel: (id: string, reason?: string, restockItems?: boolean) =>
-    api.put(`/orders/${id}/cancel`, { reason, restockItems }),
+  /** Cancels an order. The request is built where it is cancelled: its names stay out of the first visit. */
+  cancel: (id: string, request: CancelOrderRequest) => api.put(`/orders/${id}/cancel`, request),
 
   addPayment: (id: string, data: AddOrderPaymentRequest) =>
     api.post<OrderDto>(`/orders/${id}/payments`, data),
