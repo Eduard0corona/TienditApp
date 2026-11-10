@@ -3369,6 +3369,34 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Mutaciones del servidor:** de 19, fallan las pruebas en las 19 (las dos últimas, después de la revisión de la PR: no preguntar a la base al revisar el nombre y no omitir en la plantilla lo que ella tiene por igual). Se probaron: crear o editar sin revisar, editar revisando también su propio nombre, quitar cada `catch` del índice (crear, editar, plantilla), no contar las archivadas, un solo mensaje para activas y archivadas, una clave con mayúsculas, solo con las orillas, solo con espacios o sin acentos, el diccionario del catálogo de ejemplo que lanza o que prefiere la archivada, el modelo sin el índice y la migración sin su guarda (SQL Server: 1505 en lugar de 50057). La primera corrida dejó viva una: no excluir a la propia categoría al buscar el nombre. Solo importa cuando el índice rechaza una repetida de antes renombrada como su gemela, y la prueba de esa gemela la cubre ahora.
   - **Scripts:** `apply.sql` y `rollback.sql` son, debajo de su cabecera, lo que genera el CI (se comparó con el mismo procedimiento del job). Se ensayaron con el `sqlcmd` clásico en SQL Server 2022 (Docker); el detalle está en el README de `data-repair/20261110_RepeatedCategoryNames`. El job `Migrations` también se repitió localmente: desde `PRODUCTION_BASELINE`, aplicar, aplicar otra vez con la caché de planes vacía sin cambios, revertir dos veces, aplicar de nuevo y crear una base nueva.
   - **Servidor:** con .NET 10.0.403, `dotnet build` y `dotnet test FoodParkDigital.sln` en verde con `master` en la 31D: Domain 1,452, Application 2,243, Infrastructure 380 y WebApi 355 (las de SQL Server se omiten sin su variable). Con `TIENDITAPP_TEST_SQLSERVER` apuntando a SQL Server 2022 (Docker), las suites `SqlServerTests` completas pasaron antes de traer de `master` la 30W a la 31D (Infrastructure 336 y WebApi 158), y las de categorías otra vez con la 30Z. En CI, el job `Migrations` las corre todas en cada push. `has-pending-model-changes` no encuentra cambios. El cliente no cambia: el diálogo de Categorías ya muestra el `detail` del 400 (Fase 30P).
+
+- Fase 31F, el segundo paso del inicio de sesión probado (sin ADR):
+  - **Qué cambia:** la verificación en dos pasos al entrar (`TwoFactorLoginStep`) era la única pantalla de la cuenta sin prueba. No cambia el código.
+  - **Cliente:**
+    - `TwoFactorLoginStep.test.tsx` (12, nuevo):
+      - el campo listo para el código de la app (foco, sin marcar como inválido, `one-time-code`, numérico, 7 caracteres);
+      - manda el código con el reto del inicio de sesión y sigue cuando el servidor lo toma;
+      - acepta los 6 dígitos con un espacio o un guion en medio y los manda como se escribieron;
+      - no manda uno vacío ni uno que no sea de 6 dígitos, y lo dice junto al campo (`aria-invalid` y su descripción);
+      - si el servidor lo rechaza (401, como lo contesta) dice su mensaje, se queda y deja intentar de nuevo; sin motivo, «No se pudo verificar el código»;
+      - con un código de recuperación acepta cualquiera que se escriba y lo manda como tal; vacío, lo pide;
+      - cambiar entre la app y un código de recuperación vacía el campo y quita el error del servidor y el aviso de los 6 dígitos, con el foco en el campo, y al volver a la app se revisan otra vez los 6 dígitos;
+      - mientras verifica, nada más se puede apretar: ni otra vez (tampoco con Enter), ni el otro código, ni volver;
+      - «Volver al inicio de sesión» regresa sin mandar nada.
+    - `Login.test.tsx` (+3):
+      - con la verificación en dos pasos pide el código en vez de entrar, y con él va a la página de donde venía;
+      - «Volver al inicio de sesión» trae el formulario como estaba, y entrar otra vez pide un código nuevo;
+      - si la verificación expiró, volver y entrar otra vez verifica con el reto nuevo, sin el aviso del anterior.
+  - **Mutaciones:** de 12, fallan las pruebas en las 12:
+    - el aviso de código de recuperación, el reto o los espacios del código;
+    - no vaciar el campo ni quitar el error al cambiar de código, ni al mandar;
+    - seguir aunque el servidor lo rechace;
+    - los botones que no se deshabilitan mientras verifica;
+    - pedir 6 dígitos también a un código de recuperación;
+    - «Volver» que no regresa, y entrar sin pedir el código.
+  - **Revisión independiente:** sin bloqueantes. Encontró tres mutaciones que sobrevivían (el guion del código, el aviso de los 6 dígitos que se quedaba al cambiar de código y `aria-invalid` fijo), el reto que expira sin probar, un error del servidor que no era el que contesta y la deuda técnica que seguía diciendo que faltaban pantallas. Todo quedó corregido; las tres mutaciones ya hacen fallar las pruebas.
+  - **Verificación:** cliente con 248 archivos y 2,117 pruebas, lint y `tsc` en verde. Las de `pages/auth` pasan también en orden aleatorio.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
