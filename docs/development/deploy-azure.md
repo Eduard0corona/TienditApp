@@ -1127,6 +1127,18 @@ La Fase 30B trae una migración, [`database/production/20261108150147_AddOrderCa
 - **Volver a la versión anterior:** funciona sin tocar la base; deja de mandar el correo y vuelve a recordar una hora antes. Lo que cada quien eligió se queda guardado.
 - **Dejar también la base como estaba:** el `rollback.sql` quita las dos columnas y su restricción; se pierde quién eligió los pedidos cancelados y cuánto antes recuerda cada negocio, sin cambiar ninguna persona, negocio ni pedido.
 
+## Un nombre por categoría en cada negocio (Fase 30W)
+
+La Fase 30W trae una migración, [`database/production/20261110022936_AddUniqueCategoryNamePerTenant`](../../database/production/20261110022936_AddUniqueCategoryNamePerTenant). Su `apply.sql` va antes del merge ([ADR 0083](../adr/0083-unique-category-name-per-business.md)).
+
+- **Antes del `apply.sql`:** la consulta 3 de su `verify.sql` tiene que salir vacía. Si lista categorías de un negocio con el mismo nombre (sin contar mayúsculas ni espacios al final), el `apply.sql` se detiene con el error 50057 sin cambiar nada. Se renombra una de cada grupo: el dueño desde Catálogo › Categorías, o con [`data-repair/20261110_RepeatedCategoryNames`](../../database/production/data-repair/20261110_RepeatedCategoryNames) después de avisarle (su README dice cómo).
+- **La migración:** crea el índice único `IX_Categories_TenantId_Name` sobre `Categories` (`TenantId`, `Name`), con la intercalación de la columna. Bloquea la tabla hasta crearlo, en milisegundos con 300 categorías por negocio como máximo. No agrega columnas ni cambia datos.
+- **Mientras se publica:** la versión de `master` (la 30V) no conoce el índice y sigue creando y editando categorías. Solo una con el nombre de otra de su negocio falla, con 500 (la nueva responde 400 con el nombre de la que lo tiene).
+- **Sin `apply.sql`:** a la versión nueva le falta una migración, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base.
+- **Dejar también la base como estaba:** el `rollback.sql` borra el índice sin tocar ninguna fila. Los nombres que haya cambiado `repair.sql` no regresan solos: su salida los lista.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
