@@ -859,7 +859,7 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 ## Servicio y citas
 
 - Una pieza inicia `Accepted`; pasa a `InProgress`, luego `Completed`, o puede cancelarse desde los dos primeros estados.
-- Una pieza completada/cancelada no puede asignarse.
+- Una pieza completada/cancelada no puede asignarse ni liberarse: quién la trabajó queda en su historial. El agregado y el caso de uso lo rechazan, también para un administrador.
 - El caso de uso sincroniza estado de la orden desde las piezas trackeables. Los cambios de pieza pasan por `Order.ChangeServicePieceStatus` para que el rowversion de la orden detecte cambios simultáneos.
 - Completar una pieza consume su receta en el mismo guardado; si falta stock y el negocio bloquea (por defecto), la pieza no se completa y el mensaje nombra el insumo; con "vender y avisar" se completa y el insumo queda en negativo.
 - Las citas tienen su propio enum y método de cambio de estado; deben mantener reglas en el agregado. «Por confirmar» (una cita agendada en línea, Fase 24D) solo sale aceptada, rechazada o cancelada por su cliente.

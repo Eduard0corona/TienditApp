@@ -96,6 +96,10 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
 
     public void ReleaseAssignment()
     {
+        // Who worked a closed piece is part of its history: releasing it would erase it.
+        if (Status is ServiceOrderPieceStatus.Completed or ServiceOrderPieceStatus.Cancelled)
+            throw new DomainException("No se puede liberar una pieza completada o cancelada.");
+
         AssignedToUserId = null;
         AssignedToName = null;
         AssignedAt = null;
