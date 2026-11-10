@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -45,8 +46,26 @@ public class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategoryComman
             .FirstOrDefaultAsync(c => c.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Category", request.Id);
 
+        // Only a new name is checked: a category repeated before the rule can still change its description or order.
+        if (Category.NameKey(request.Name) != Category.NameKey(category.Name)
+            && await CategoryNames.FindTakenAsync(_context, request.Name, category.Id, cancellationToken) is { } taken)
+            return Result.Failure<CategoryDto>(taken);
+
         category.Update(request.Name, request.Description, request.SortOrder);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Another category took the name at the same moment (the unique index): this edit is undone, and the person
+            // is told which one has it.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
+            if (await CategoryNames.FindTakenAsync(_context, request.Name, request.Id, cancellationToken) is { } meanwhile)
+                return Result.Failure<CategoryDto>(meanwhile);
+            throw;
+        }
+
         return Result.Success(category.ToDto());
     }
 }

@@ -52,14 +52,17 @@ public class InstallCategoryTemplateCommandHandler : IRequestHandler<InstallCate
             .ToListAsync(cancellationToken);
 
         var normalizedNames = new HashSet<string>(
-            existingNames.Select(NormalizeCategoryName),
+            existingNames.Select(Category.NameKey),
             StringComparer.Ordinal);
 
         var toCreate = new List<Category>();
         foreach (var item in template.Categories.OrderBy(x => x.SortOrder))
         {
-            var normalizedName = NormalizeCategoryName(item.Name);
+            var normalizedName = Category.NameKey(item.Name);
             if (!normalizedNames.Add(normalizedName))
+                continue;
+            // The collation of the database may take one of its names as this one (a full-width letter, «ß» and «ss»).
+            if (await CategoryNames.DatabaseHasAsync(_context, item.Name, cancellationToken))
                 continue;
 
             toCreate.Add(new Category(
@@ -77,7 +80,23 @@ public class InstallCategoryTemplateCommandHandler : IRequestHandler<InstallCate
         if (createdCount > 0)
         {
             _context.Categories.AddRange(toCreate);
-            await _context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                // Someone created one of these names at the same moment (the unique index): none is created, and
+                // installing again skips it.
+                await _context.DiscardUnitOfWorkAsync(cancellationToken);
+                foreach (var category in toCreate)
+                {
+                    if (await CategoryNames.FindTakenAsync(_context, category.Name, null, cancellationToken) is not null)
+                        return Result.Failure<InstallCategoryTemplateResultDto>(TakenMeanwhile(category.Name));
+                }
+
+                throw;
+            }
         }
 
         var total = template.Categories.Count;
@@ -91,15 +110,6 @@ public class InstallCategoryTemplateCommandHandler : IRequestHandler<InstallCate
         });
     }
 
-    private static string NormalizeCategoryName(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return string.Empty;
-
-        return string.Join(
-            ' ',
-            value.Trim()
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            .ToLowerInvariant();
-    }
+    public static string TakenMeanwhile(string name)
+        => $"Alguien agregó la categoría «{name}» mientras instalabas la plantilla. Instálala otra vez: se omiten las que ya tienes.";
 }

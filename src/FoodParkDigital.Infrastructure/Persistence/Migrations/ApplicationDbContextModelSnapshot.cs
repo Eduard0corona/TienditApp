@@ -839,6 +839,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId");
 
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
                     b.ToTable("Categories", (string)null);
                 });
 
