@@ -1,6 +1,8 @@
+using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
@@ -9,8 +11,10 @@ using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
+using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Infrastructure.Tests;
 
@@ -19,7 +23,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// version of its own, so both go through its order (<see cref="Order.AssignServicePiece"/> and
 /// <see cref="Order.ReleaseServicePiece"/>): a change saved by another request meanwhile is caught by the order's row
 /// version, and the request is decided again with what the other one saved. A piece completed meanwhile keeps who worked
-/// it, one cancelled meanwhile is not taken, and one taken meanwhile stays with whoever has it.
+/// it, one cancelled meanwhile is not taken, one taken meanwhile stays with whoever has it, and one released while someone
+/// completes it stays with whoever completed it.
 /// </summary>
 public class ServiceOrderPieceAssignmentSqlServerTests
 {
@@ -122,6 +127,33 @@ public class ServiceOrderPieceAssignmentSqlServerTests
         Assert.Empty(board.PieceUpdates);
     }
 
+    [SqlServerFact]
+    public async Task Completing_APieceReleasedMeanwhile_ShouldLeaveItWithWhoCompletesIt()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var shop = await SeedShopAsync(database);
+        var pieceId = await SeedPieceAsync(database, shop, ServiceOrderPieceStatus.InProgress, assignedTo: shop.Ana);
+        var orderId = (await LoadPieceAsync(database, shop.TenantId, pieceId)).OrderId;
+        // Ana releases the piece with the use case while the owner completes it, and saves first. The release writes the
+        // order row, so the completion is decided again with the piece free and the owner takes it as she completes it,
+        // instead of leaving a completed piece with nobody.
+        await using var racing = database.CreateProductionLikeContext(Tenant(shop.TenantId), new InMemoryApplicationDbContext.NullMediator(),
+            new SavedMeanwhile(async () =>
+            {
+                await using var other = database.CreateContext(shop.TenantId);
+                var released = await ReleaseAsync(other, shop, shop.Ana, pieceId, new RecordingBoard());
+                Assert.True(released.IsSuccess, released.Error);
+            }));
+
+        var result = await CompleteAsync(racing, shop, shop.Owner, orderId, pieceId);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var stored = await LoadPieceAsync(database, shop.TenantId, pieceId);
+        Assert.Equal(ServiceOrderPieceStatus.Completed, stored.Status);
+        Assert.Equal((shop.Owner.Id, shop.Owner.UserName), (stored.AssignedToUserId, stored.AssignedToName));
+        Assert.NotNull(stored.AssignedAt);
+    }
+
     private static readonly (Guid?, string?, DateTimeOffset?) Nobody = (null, null, null);
 
     private static (Guid?, string?, DateTimeOffset?) Assignment(Member member, DateTimeOffset at) => (member.Id, member.UserName, at);
@@ -136,6 +168,24 @@ public class ServiceOrderPieceAssignmentSqlServerTests
     private static Task<Result> AssignAsync(ApplicationDbContext context, Shop shop, Member member, Guid pieceId, RecordingBoard board)
         => new AssignServiceOrderPieceToMeCommandHandler(context, member, Access(member, shop.TenantId), board)
             .Handle(new AssignServiceOrderPieceToMeCommand { PieceId = pieceId }, CancellationToken.None);
+
+    /// <summary>
+    /// Completes the piece as a request does: through <see cref="TransactionBehavior{TRequest, TResponse}"/>, which runs the
+    /// change again with fresh data when its save finds the order changed meanwhile (Fase 31G).
+    /// </summary>
+    private static Task<Result> CompleteAsync(ApplicationDbContext context, Shop shop, Member member, Guid orderId, Guid pieceId)
+    {
+        var command = new UpdateServiceOrderPieceStatusCommand
+        {
+            OrderId = orderId,
+            PieceId = pieceId,
+            NewStatus = ServiceOrderPieceStatus.Completed
+        };
+        var handler = new UpdateServiceOrderPieceStatusCommandHandler(context, member, Access(member, shop.TenantId),
+            new OrderInventoryService(context, new Clock(), new FolioGenerator(context), NullLogger<OrderInventoryService>.Instance));
+        return new TransactionBehavior<UpdateServiceOrderPieceStatusCommand, Result>(context)
+            .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
+    }
 
     /// <summary>
     /// A context whose first save is preceded by <paramref name="change"/> of the piece through its order, saved by another
@@ -177,14 +227,17 @@ public class ServiceOrderPieceAssignmentSqlServerTests
         return piece.Id;
     }
 
-    /// <summary>A shop with the service board and two employees with an account (a piece points to its user).</summary>
+    /// <summary>
+    /// A shop with the service board, its owner and two employees, each with an account (a piece points to its user).
+    /// </summary>
     private static async Task<Shop> SeedShopAsync(SqlServerTestDatabase database)
     {
         var tenant = new Tenant("Lavado de Tenis Norte", "tenis-norte", BusinessType.Service, "tenis@demo.com");
-        var shop = new Shop(tenant.Id, new Member("Ana", nameof(TenantUserRole.Staff)), new Member("Luis", nameof(TenantUserRole.Staff)));
+        var shop = new Shop(tenant.Id, new Member("Ana", nameof(TenantUserRole.Staff)), new Member("Luis", nameof(TenantUserRole.Staff)),
+            new Member("Marta", nameof(TenantUserRole.Owner)));
         await using var seed = database.CreateContext();
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Service));
-        seed.Users.AddRange(UserOf(shop.Ana), UserOf(shop.Luis));
+        seed.Users.AddRange(UserOf(shop.Ana), UserOf(shop.Luis), UserOf(shop.Owner));
         await seed.SaveChangesAsync();
         return shop;
     }
@@ -202,7 +255,7 @@ public class ServiceOrderPieceAssignmentSqlServerTests
             FirstName = member.UserName,
             LastName = "Tenis",
             SecurityStamp = Guid.NewGuid().ToString("N"),
-            Role = UserRole.Staff,
+            Role = member.TenantRole == nameof(TenantUserRole.Owner) ? UserRole.TenantAdmin : UserRole.Staff,
             IsActive = true
         };
     }
@@ -216,7 +269,7 @@ public class ServiceOrderPieceAssignmentSqlServerTests
 
     private static CurrentAccessContext Access(Member member, Guid tenantId) => new(member, Tenant(tenantId), new MembershipOf(member));
 
-    private sealed record Shop(Guid TenantId, Member Ana, Member Luis);
+    private sealed record Shop(Guid TenantId, Member Ana, Member Luis, Member Owner);
 
     /// <summary>A member of the business with the service board, by name and membership role.</summary>
     private sealed class Member(string name, string tenantRole) : ICurrentUserService
@@ -236,7 +289,7 @@ public class ServiceOrderPieceAssignmentSqlServerTests
         private bool IsManager => member.TenantRole is nameof(TenantUserRole.Owner) or nameof(TenantUserRole.Admin);
 
         public Task<TenantAccessSnapshot> GetAccessSnapshotAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
-            => Task.FromResult(new TenantAccessSnapshot(true, TenantCapability.Service, member.Permissions, IsManager));
+            => Task.FromResult(new TenantAccessSnapshot(true, TenantCapability.Service, member.Permissions, IsManager: IsManager));
 
         public Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(true);
 
@@ -251,6 +304,11 @@ public class ServiceOrderPieceAssignmentSqlServerTests
 
         public Task<bool> HasPermissionAsync(Guid userId, Guid tenantId, TenantPermission permission, CancellationToken cancellationToken)
             => Task.FromResult(member.Permissions.Contains(permission.ToString()));
+    }
+
+    private sealed class Clock : IDateTimeProvider
+    {
+        public DateTimeOffset UtcNow => AssignedAt.AddHours(2);
     }
 
     /// <summary>What the live service board heard of each piece.</summary>
