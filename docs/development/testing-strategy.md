@@ -3427,8 +3427,8 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - una cita con una cuenta que no existe detiene la migración sin llave, sin índice y sin tocar las citas; vaciada como dice el `verify.sql`, se aplica, la cita conserva el nombre y la buena conserva su persona;
     - la llave rechaza una cita con una cuenta que no existe y el borrado de la cuenta de quien atiende (`NO_ACTION`); borrar el producto, como lo hace `DeleteProductCommand`, deja a la cita con su `ServiceProductId`;
     - el rollback borra solo la llave y su índice y vuelve a aceptar una cuenta que no existe; volver a aplicar revisa otra vez y se detiene.
-  - **Mutaciones:** MUT31H
-  - **Verificación:** VER31H
+  - **Mutaciones:** de 4, fallan las pruebas en las 4: la migración sin detenerse ante una cuenta que no existe, sin la llave, con la llave en cascada y con un rollback que no borra el índice. Quitar el candado de la revisión es equivalente (la llave `WITH CHECK` también detendría una cita colada, con 547) y no se cuenta.
+  - **Verificación:** Domain 1,462, Application 2,252, Infrastructure 732 (con las de SQL Server; 7 omitidas) y WebApi 515 en verde, sobre `fbd15a0` (con la 31G). El `apply.sql` y el `rollback.sql` coinciden con lo que genera el job `Migrations` (comparados en local con su `set-options.sql`). Sin cambios en el cliente ni en las dependencias.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
