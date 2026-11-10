@@ -3268,6 +3268,39 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `dotnet build` y `dotnet test` de la solución, con SQL Server: 1,440 + 2,220 + 513 + 711 pruebas en verde, 7 omitidas.
     - Cliente: 240 archivos y 2,053 pruebas, lint, `tsc`, `visual:typecheck` y build en verde.
     - Primera visita: 180,390 B de 180,400 B; `vendor-signalr` sigue fuera de ella y el hook va en un chunk que solo cargan «Mis pedidos» y el detalle.
+- Fase 31B, el correo del pedido que el negocio cancela porque su cliente lo pidió (punto 17; [ADR 0084](../adr/0084-order-cancelled-at-customer-request-email.md)):
+  - **Backend:**
+    - `CustomerOrderCancellationTests` (Domain, +1): el negocio que cancela un pedido aceptado porque su cliente lo pidió lo dice en el evento, con el motivo, y el historial dice quién lo canceló; cancelar por su cuenta, o el cliente desde su enlace, no lo dice.
+    - `OrderCancellationEmailTests` (+3):
+      - el pedido que el cajero cancela porque su cliente lo pidió se avisa a quien recibe «Pedidos cancelados», menos al cajero (cancelado por la dueña, el cajero sí lo oye);
+      - sin la pregunta no sale nada; una venta del mostrador tampoco;
+      - el cliente que cancela el suyo desde su enlace se avisa como antes, y la dueña que cancela su propio pedido desde su cuenta no se avisa a sí misma;
+      - la actividad del negocio dice que lo pidió;
+      - el correo dice que el cliente pidió cancelarlo y el motivo en una línea, codificado, y que ya no hay que prepararlo ni entregarlo; nunca el teléfono ni quién lo canceló; sin motivo no dice «Motivo»;
+      - cada correo sale solo como se canceló su pedido (el de «lo pidió» no sale de uno que canceló su cliente, ni al revés), hasta un día después.
+    - `OutboxTests` (+1): los dos eventos guardados antes se leen como «no lo pidió».
+    - `NoticeEmailsChangedEmailTests`: el texto de «Pedidos cancelados» dice también «o piden cancelar».
+    - `CrossTenantRealtimeSqlServerTests` (+1, SQL Server): la dueña acepta un pedido en línea y el cajero lo cancela por la API diciendo que lo pidió el cliente: a la dueña le llega el correo con el motivo, sin el teléfono ni el correo del cajero, y al cajero no; otro que cancela por su cuenta no avisa a nadie.
+  - **Cliente:**
+    - `OrdersList.test.tsx` (+2): al cancelar un pedido en línea pregunta «¿Lo pidió el cliente?» y manda la respuesta; cerrarla es «No». Uno de una mesa, de una plataforma o del mostrador no lo pregunta.
+    - `EmployeeFormModal.test.tsx` y `NoticeEmailsCard.test.tsx`: la descripción de «Pedidos cancelados».
+  - **Mutaciones:**
+    - Backend: de 15, fallan las pruebas en las 15 (la pregunta, el canal, quién canceló, en los dos caminos, la revisión al mandarlo, el texto, el motivo, el comando, el dominio, la actividad, el día y el controlador).
+    - Cliente: de 4, fallan las pruebas en las 4 (preguntar en todos los canales o en las mesas, no mandar la respuesta, mandar siempre «Sí»).
+  - **Revisión independiente:** sin bloqueantes ni mayores. Encontró:
+    - una prueba que no podía fallar: el nombre del cajero se buscaba sin codificar;
+    - quién canceló, sin probar en el camino del cliente;
+    - el ADR, que decía «como el de la 30B» cuando ahora entran también los pedidos aceptados, y la pregunta en los pedidos de una mesa;
+    - las reglas de negocio y esta estrategia sin la fase;
+    - «Ya no tienes que prepararlo» para un pedido listo o en camino, el pie del correo, que el motivo va como se escribió, y que no se probaban los eventos guardados antes.
+
+    Todo quedó corregido; las pruebas nuevas fallan sin el arreglo.
+  - **Quedan fuera** (en el ADR y la deuda técnica): el pedido no guarda que lo pidió el cliente (ni su detalle ni el enlace lo dicen), y cambiar el estado a «Cancelado» o anular con reembolso no lo pregunta.
+  - **Verificación:**
+    - `dotnet test` de la solución con SQL Server: 1,441 + 2,224 + 514 + 711 pruebas en verde, 7 omitidas; después de la revisión, otra vez las de Application (2,224), `OutboxTests` y las dos de SQL Server de los pedidos cancelados.
+    - Cliente: 240 archivos y 2,056 pruebas, lint, `tsc`, `visual:typecheck` y build en verde.
+    - Primera visita: 180,387 B de 180,400 B (`master`: 180,390 B). `ordersApi` va en ella, y con un parámetro más subía a 180,401 B: `cancel` recibe ahora el cuerpo de la petición (`CancelOrderRequest`, como `dispatch`), que arma Pedidos en su propio chunk.
+    - `client/openapi/openapi.json` y `schema.ts` regenerados desde la API en Development.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

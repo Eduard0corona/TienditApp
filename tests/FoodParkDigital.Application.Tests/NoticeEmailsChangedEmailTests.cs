@@ -139,9 +139,9 @@ public class NoticeEmailsChangedEmailTests
         var (_, _, on) = Assert.Single(await SendAsync(fixture, salon, cashier, owner, orderCancellationEmails: true));
         var (_, _, off) = Assert.Single(await SendAsync(fixture, salon, waiter, owner, orderCancellationEmails: false));
 
-        Assert.Contains("<li>Ahora te llegan los pedidos en línea que sus clientes cancelan.</li>", on);
+        Assert.Contains("<li>Ahora te llegan los pedidos en línea que sus clientes cancelan o piden cancelar.</li>", on);
         Assert.DoesNotContain("cotizaciones", on);
-        Assert.Contains("<li>Ya no te llegan los pedidos en línea que sus clientes cancelan.</li>", off);
+        Assert.Contains("<li>Ya no te llegan los pedidos en línea que sus clientes cancelan o piden cancelar.</li>", off);
         // Turned off again since: this one no longer says what they get.
         Assert.Empty(await SendAsync(fixture, salon, waiter, owner, orderCancellationEmails: true));
     }

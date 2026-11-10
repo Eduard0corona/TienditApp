@@ -20771,6 +20771,10 @@
           "restockItems": {
             "type": "boolean",
             "nullable": true
+          },
+          "atCustomerRequest": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false

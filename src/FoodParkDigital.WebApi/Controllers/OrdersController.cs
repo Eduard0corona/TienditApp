@@ -269,7 +269,8 @@ public class OrdersController : ControllerBase
         {
             OrderId = id,
             Reason = request?.Reason,
-            RestockItems = request?.RestockItems ?? true
+            RestockItems = request?.RestockItems ?? true,
+            AtCustomerRequest = request?.AtCustomerRequest ?? false
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -447,6 +448,9 @@ public record CancelOrderRequest
 
     /// <summary>Whether what the order consumed goes back to the stock; true when left out.</summary>
     public bool? RestockItems { get; init; }
+
+    /// <summary>Whether its customer asked for it, by phone or by WhatsApp (Fase 31B); false when left out.</summary>
+    public bool? AtCustomerRequest { get; init; }
 }
 
 public record AddOrderPaymentRequest

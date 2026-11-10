@@ -6,4 +6,8 @@ namespace FoodParkDigital.Domain.Orders.Events;
 /// The email of an online order its customer cancelled, to one member of its business (Fase 30B, ADR 0082). Each member's is
 /// its own message in the outbox, retried on its own: one that fails does not send the others' again.
 /// </summary>
-public sealed record OrderCancellationEmailEvent(Guid OrderId, Guid UserId) : DomainEvent;
+/// <param name="AtCustomerRequest">
+/// The business cancelled it because its customer asked (Fase 31B, ADR 0084). Missing in the messages queued before, which
+/// were all of orders their customers cancelled.
+/// </param>
+public sealed record OrderCancellationEmailEvent(Guid OrderId, Guid UserId, bool AtCustomerRequest = false) : DomainEvent;

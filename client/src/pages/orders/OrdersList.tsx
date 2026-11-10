@@ -299,11 +299,21 @@ export default function OrdersList() {
         cancelLabel: 'No, ya se preparó',
       })
       : undefined;
+    // Its customer called or wrote to cancel an order of the online menu (Fase 31B): whoever gets the emails of the cancelled
+    // orders hears of it. Closing the question says no. One ordered with the QR of a table is handled by whoever serves it.
+    const atCustomerRequest = order.channel === OrderChannel.Online && !order.tableNumber
+      ? await confirm({
+        title: '¿Lo pidió el cliente?',
+        message: 'Si llamó o escribió para cancelarlo, le llega un correo a quien recibe los pedidos cancelados.',
+        confirmLabel: 'Sí, lo pidió',
+        cancelLabel: 'No',
+      })
+      : undefined;
 
     setStatusSubmitting(true);
     setStatusError('');
     try {
-      await ordersApi.cancel(order.id, reason || undefined, restockItems);
+      await ordersApi.cancel(order.id, { reason: reason || undefined, restockItems, atCustomerRequest });
       void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
       toast.success(`Pedido ${order.orderNumber} cancelado.`);

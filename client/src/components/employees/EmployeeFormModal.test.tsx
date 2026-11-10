@@ -91,7 +91,7 @@ describe('EmployeeFormModal: the notices by email of each person (Fase 29Q)', ()
     expect(screen.queryByRole('switch', { name: 'Cotizaciones' })).not.toBeInTheDocument();
     const orders = screen.getByRole('switch', { name: 'Pedidos cancelados' });
     expect(orders).not.toBeChecked();
-    expect(orders).toHaveAccessibleDescription('Cada pedido en línea que su cliente cancela antes de que lo acepten.');
+    expect(orders).toHaveAccessibleDescription('Cada pedido en línea que su cliente cancela antes de que lo acepten, o que alguien más del equipo cancela porque el cliente lo pidió.');
     await user.click(orders);
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 

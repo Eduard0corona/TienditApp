@@ -6,6 +6,7 @@ using System.Text.Json;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.WebApi.Tests;
 
@@ -348,6 +349,49 @@ public sealed class CrossTenantRealtimeSqlServerTests
         await _api.DispatchOutboxAsync();
         Assert.Single(_api.PlainEmailsTo(mine.Email), e => e.Subject.StartsWith("Pedido cancelado"));
         Assert.Equal(2, _api.PlainEmailsTo(cashierEmail).Count(e => e.Subject.StartsWith("Pedido cancelado")));
+    }
+
+    [SqlServerFact]
+    public async Task OnlineOrdersCancelledBecauseTheirCustomerAsked_ShouldReachByEmailWhoGetsThem_ButNotWhoCancelledThem()
+    {
+        // Fase 31B (ADR 0084).
+        var mine = await _api.SignUpAsync("pide-cancelar", TwoBusinessesApi.FoodBusiness);
+        var (cashier, _, cashierEmail, _) = await EmployeeAsync(mine, "ManageOrders");
+        Assert.True((await TwoBusinessesApi.ReadAsync(await cashier.PutAsJsonAsync(OrderCancellationEmails, new { enabled = true }))).GetProperty("enabled").GetBoolean());
+        using var stranger = _api.AnonymousClient();
+        var kitchen = await KitchenAsync(mine);
+
+        // The owner accepts an order of the online menu; its customer calls, and the cashier cancels it saying they asked.
+        var asked = await AcceptedOrderAsync(stranger, kitchen, "5522107768");
+        Assert.Equal(HttpStatusCode.NoContent, (await cashier.PutAsJsonAsync($"/api/v1/orders/{asked}/cancel",
+            new { reason = "Llamó: ya no lo quiere", atCustomerRequest = true })).StatusCode);
+        // Another one the cashier cancels on their own: nobody is told.
+        var onItsOwn = await AcceptedOrderAsync(stranger, kitchen, "5522107769");
+        Assert.Equal(HttpStatusCode.NoContent, (await cashier.PutAsJsonAsync($"/api/v1/orders/{onItsOwn}/cancel", new { reason = "Sin existencias" })).StatusCode);
+        await _api.DispatchOutboxAsync();
+
+        var ownerGot = Assert.Single(_api.PlainEmailsTo(mine.Email), e => e.Subject.StartsWith("Pedido cancelado"));
+        Assert.StartsWith("Pedido cancelado en Negocio PIDE-CANCELAR: ORD-", ownerGot.Subject);
+        Assert.Contains("pidió cancelar su pedido en línea", WebUtility.HtmlDecode(ownerGot.Body));
+        Assert.Contains("<p>Motivo: Llam&#243;: ya no lo quiere</p>", ownerGot.Body);
+        Assert.DoesNotContain("5522107768", ownerGot.Body + ownerGot.Subject);
+        Assert.DoesNotContain(cashierEmail, ownerGot.Body);
+        // Whoever cancelled it knows.
+        Assert.DoesNotContain(_api.PlainEmailsTo(cashierEmail), e => e.Subject.StartsWith("Pedido cancelado"));
+    }
+
+    /// <summary>An order of the online menu that the owner of the kitchen accepted: its id.</summary>
+    private async Task<Guid> AcceptedOrderAsync(HttpClient customer, (SignedUp Owner, string Slug, Guid Product) kitchen, string phone)
+    {
+        var token = (await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync($"/api/v1/public/menu/{kitchen.Slug}/orders", new
+        {
+            customerName = "Valeria Ruiz",
+            customerPhone = phone,
+            items = new[] { new { productId = kitchen.Product, quantity = 1 } }
+        }))).GetProperty("trackingToken").GetString()!;
+        var id = await _api.QueryAsync(kitchen.Owner.TenantId, db => db.Orders.Where(o => o.TrackingToken == token).Select(o => o.Id).SingleAsync());
+        Assert.Equal(HttpStatusCode.NoContent, (await kitchen.Owner.Client.PutAsJsonAsync($"/api/v1/orders/{id}/status", new { newStatus = 1 })).StatusCode);
+        return id;
     }
 
     /// <summary>The owner's kitchen taking online orders, with its drawer open: its slug and a product.</summary>
