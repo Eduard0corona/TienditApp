@@ -1,5 +1,7 @@
-import type { OrderDto, ProductDto } from '../../types';
+import { HomeVisitChargePolicy } from '../../api/generated/enums';
+import type { AppointmentDto, CategoryDto, OrderDto, ProductDto } from '../../types';
 import { OrderChannel, PlatformCollectedBy, UnitType } from '../../types';
+import { formatInBusinessZone } from '../../utils/dates';
 
 // Same limits as the API (OrderLimits).
 export const MAX_QUANTITY_PER_LINE = 10_000;
@@ -8,6 +10,9 @@ export const MAX_LINES = 200;
 export const CATALOG_PAGE_SIZE = 500;
 // How often Vender tries to replace the catalog saved on the device while the server does not answer.
 export const CATALOG_RETRY_MS = 60_000;
+
+/** A line of the ticket for a product of the catalog, with its prices and IVA (`useSellCart`). */
+export type ToCartLine = (product: ProductDto, quantity: number, notes?: string, optionIds?: string[]) => CartLine;
 
 export interface CartLine {
   /** Product plus its options: the same product with other options is another line. */
@@ -178,4 +183,62 @@ export function isServiceProduct(product: ProductDto): boolean {
 export function isPlausiblePhone(value: string): boolean {
   const digits = value.replace(/\D/g, '');
   return digits.length >= 8 && digits.length <= 15;
+}
+
+/** The categories that have something to sell, in the business's order. */
+export function categoriesInUse(categories: CategoryDto[], products: ProductDto[]): CategoryDto[] {
+  const used = new Set(products.map((product) => product.categoryId));
+  return categories
+    .filter((category) => used.has(category.id))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+}
+
+/** What the catalog shows: the category chosen (or the featured ones), by name, SKU or the whole barcode; featured first. */
+export function filterCatalog(products: ProductDto[], categoryFilter: CategoryFilter, search: string): ProductDto[] {
+  const term = search.trim().toLowerCase();
+  return products
+    .filter((product) => {
+      if (categoryFilter === 'featured' && !product.isFeatured) return false;
+      if (categoryFilter !== 'all' && categoryFilter !== 'featured' && product.categoryId !== categoryFilter) return false;
+      if (!term) return true;
+      return product.name.toLowerCase().includes(term)
+        || (product.sku ?? '').toLowerCase().includes(term)
+        || (product.barcode ?? '') === term;
+    })
+    .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+}
+
+/** What a barcode scanner typed (the code, then Enter): the product with that barcode, or that SKU in any case. */
+export function scannedProduct(products: ProductDto[], term: string): ProductDto | undefined {
+  return products.find((product) => product.barcode === term || product.sku?.toLowerCase() === term.toLowerCase());
+}
+
+/** The options a product with variants starts with: the first available one of each group that takes exactly one. */
+export function preselectedOptions(product: ProductDto): string[] {
+  return (product.optionGroups ?? [])
+    .filter((group) => group.minSelections === 1 && group.maxSelections === 1)
+    .flatMap((group) => group.options.filter((option) => option.isAvailable).slice(0, 1).map((option) => option.id));
+}
+
+/**
+ * The sale of an appointment of the agenda: its banner, and the service of the catalog it charges. A visit to quote
+ * «Sin costo» (Fase 29B) does not charge its service, only what else the cashier adds.
+ */
+export function saleOfAppointment(
+  data: AppointmentDto,
+  products: ProductDto[],
+): { appointment: SaleAppointment; service?: ProductDto; freeVisit: boolean } {
+  const when = formatInBusinessZone(data.startAt, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const freeVisit = data.visit?.chargePolicy === HomeVisitChargePolicy.Free;
+  return {
+    appointment: {
+      id: data.id,
+      customerName: data.customerName,
+      description: `${data.serviceName} · ${when}`,
+      visitFee: data.visit && data.visit.fee > 0 ? data.visit.fee : null,
+      zoneName: data.visit?.zoneName ?? null,
+    },
+    service: data.serviceProductId && !freeVisit ? products.find((product) => product.id === data.serviceProductId) : undefined,
+    freeVisit,
+  };
 }
