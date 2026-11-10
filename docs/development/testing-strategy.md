@@ -3421,6 +3421,15 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la pieza del taller o la cancelación del cliente reintentando dentro de la transacción, como antes de la fase.
   - **Verificación:** Domain 1,462, Application 2,252, Infrastructure 729 (con las de SQL Server; 7 omitidas) y WebApi 515 en verde, sobre `d3a945d` (con la 31F). Sin cambios en el cliente ni en las dependencias.
 
+- Fase 31H, las llaves foráneas del servicio y de quien atiende una cita (punto 12; [ADR 0088](../adr/0088-appointment-foreign-keys.md)):
+  - **Qué cambia:** `Appointment.ServiceProductId` apunta a `Products` con `ON DELETE SET NULL` y `StaffUserId` a `AspNetUsers` sin cascada, con índices filtrados. La migración `AddAppointmentForeignKeys` vacía antes los vínculos que no apuntan a nada; cada cita conserva el nombre del servicio y de quien atiende. Ningún endpoint ni mensaje cambia.
+  - **Infrastructure:** `AppointmentForeignKeysMigrationSqlServerTests` (3, nuevo, SQL Server, de la migración anterior a esta):
+    - los vínculos a un producto borrado y a una cuenta que no existe se vacían con sus nombres intactos, el vínculo bueno se queda y las llaves quedan revisadas (`SET_NULL` y `NO_ACTION`);
+    - las llaves rechazan una cita con un servicio o una persona que no existe y el borrado de la cuenta de quien atiende; borrar el producto, como lo hace `DeleteProductCommand` (y la versión anterior), deja a su cita con su nombre y lo demás igual, sin el vínculo;
+    - el rollback borra solo las llaves y sus índices, deja las citas como estaban y vuelve a aceptar un vínculo a nada; volver a aplicar lo vacía otra vez.
+  - **Mutaciones:** MUT31H
+  - **Verificación:** VER31H
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

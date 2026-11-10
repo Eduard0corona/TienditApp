@@ -1139,6 +1139,18 @@ La Fase 31E trae una migración, [`database/production/20261110022936_AddUniqueC
 - **Volver a la versión anterior:** funciona sin tocar la base.
 - **Dejar también la base como estaba:** el `rollback.sql` borra el índice sin tocar ninguna fila. Los nombres que haya cambiado `repair.sql` no regresan solos: su salida los lista.
 
+## Las llaves foráneas de las citas (Fase 31H)
+
+La Fase 31H trae una migración, [`database/production/20261110192224_AddAppointmentForeignKeys`](../../database/production/20261110192224_AddAppointmentForeignKeys). Su `apply.sql` va antes del merge ([ADR 0088](../adr/0088-appointment-foreign-keys.md)).
+
+- **Antes del `apply.sql`:** las consultas 3 y 4 de su `verify.sql` listan las citas cuyo servicio apunta a un producto que ya se borró y cuya persona apunta a una cuenta que no existe. No bloquean: la migración les vacía ese vínculo y cada una conserva el nombre del servicio y de quien la atiende. La consulta 5 lista citas con un servicio de otro negocio (se esperan cero; la migración no las cambia).
+- **La migración:** vacía esos vínculos y crea `FK_Appointments_Products_ServiceProductId` (`ON DELETE SET NULL`), `FK_Appointments_AspNetUsers_StaffUserId` (sin cascada) y sus índices filtrados. Bloquea `Appointments`, y deja leer pero no borrar `Products`, hasta crear las llaves: milisegundos o pocos segundos, según cuántas citas haya.
+- **Mientras se publica:** la versión de `master` (la 31G) no conoce las llaves y sigue agendando, editando y borrando productos igual. Al borrar un producto, la base vacía el vínculo de sus citas.
+- **Sin `apply.sql`:** a la versión nueva le falta una migración, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base.
+- **Dejar también la base como estaba:** el `rollback.sql` borra las dos llaves y sus índices sin tocar ninguna fila. Los vínculos que vació el `apply.sql` siguen vacíos (apuntaban a algo que no existe).
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
