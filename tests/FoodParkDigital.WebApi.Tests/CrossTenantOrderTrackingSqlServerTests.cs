@@ -190,14 +190,18 @@ public sealed class CrossTenantOrderTrackingSqlServerTests
         var guestsId = ids.Single(o => o.TrackingToken == guestsLink).Id;
         var betosId = ids.Single(o => o.TrackingToken == betosLink).Id;
 
-        // The business accepts the three, Beto's last, and then prepares Ana's: what reached Ana's screen before that
-        // would have arrived first.
+        // Each account hears its order placed first.
+        await WaitUntilAsync(() => heardByAna.Any(heard => OrderOf(heard) == anasId) && heardByBeto.Any(heard => OrderOf(heard) == betosId));
+        var betoHeardPlaced = heardByBeto.Count;
+
+        // The business accepts the three, Beto's last: Beto hearing it means Ana's and the guest's went out before.
         foreach (var id in new[] { anasId, guestsId, betosId })
             Assert.Equal(HttpStatusCode.NoContent, (await business.Client.PutAsJsonAsync($"/api/v1/orders/{id}/status", new { newStatus = 1 })).StatusCode);
-        await WaitUntilAsync(() => heardByBeto.Any(heard => OrderOf(heard) == betosId));
-        var heardBefore = heardByAna.Count;
+        await WaitUntilAsync(() => heardByBeto.Count > betoHeardPlaced);
+        // Then it prepares Ana's: whatever had been sent to Ana's screen before arrives ahead of it.
+        var anaHeardAccepted = heardByAna.Count;
         Assert.Equal(HttpStatusCode.NoContent, (await business.Client.PutAsJsonAsync($"/api/v1/orders/{anasId}/status", new { newStatus = 2 })).StatusCode);
-        await WaitUntilAsync(() => heardByAna.Count > heardBefore);
+        await WaitUntilAsync(() => heardByAna.Count > anaHeardAccepted);
 
         Assert.NotEmpty(heardByAna);
         Assert.All(heardByAna, heard => Assert.Equal(anasId, OrderOf(heard)));
