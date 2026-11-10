@@ -4,16 +4,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import TwoFactorLoginStep from './TwoFactorLoginStep';
 
-const refused = (message: string, status = 400) => ({ isAxiosError: true, response: { status, data: { error: message } } });
+// As the API answers a code it does not take: 401 with ProblemDetails (TwoFactorController).
+const refused = (detail: string) => ({
+  isAxiosError: true,
+  response: { status: 401, data: { code: 'unauthorized', detail, error: detail } },
+});
 
 function deferred() {
   let resolve: () => void = () => undefined;
-  let reject: (reason: unknown) => void = () => undefined;
-  const promise = new Promise<void>((res, rej) => {
+  const promise = new Promise<void>((res) => {
     resolve = res;
-    reject = rej;
   });
-  return { promise, resolve, reject };
+  return { promise, resolve };
 }
 
 function renderStep(completeTwoFactorLogin = vi.fn().mockResolvedValue(undefined)) {
@@ -38,6 +40,7 @@ describe('TwoFactorLoginStep (Fase 31E)', () => {
     expect(screen.getByText('Ingresa el código de 6 dígitos de tu app de autenticación.')).toBeInTheDocument();
     const field = screen.getByLabelText('Código de verificación');
     expect(field).toHaveFocus();
+    expect(field).toHaveAttribute('aria-invalid', 'false');
     expect(field).toHaveAttribute('autocomplete', 'one-time-code');
     expect(field).toHaveAttribute('inputmode', 'numeric');
     expect(field).toHaveAttribute('maxlength', '7');
@@ -54,13 +57,13 @@ describe('TwoFactorLoginStep (Fase 31E)', () => {
     expect(onSuccess).toHaveBeenCalledOnce();
   });
 
-  it('takes the 6 digits with a space or a dash in the middle, as the app shows them, and sends them as typed', async () => {
+  it.each(['123 456', '123-456'])('takes the 6 digits written as %s, as an app shows them, and sends them as typed', async (code) => {
     const { completeTwoFactorLogin, onSuccess } = renderStep();
 
-    await userEvent.type(codeField(), '123 456');
+    await userEvent.type(codeField(), code);
     await verify();
 
-    expect(completeTwoFactorLogin).toHaveBeenCalledWith(expect.objectContaining({ code: '123 456' }));
+    expect(completeTwoFactorLogin).toHaveBeenCalledWith(expect.objectContaining({ code }));
     expect(onSuccess).toHaveBeenCalledOnce();
   });
 
@@ -86,14 +89,14 @@ describe('TwoFactorLoginStep (Fase 31E)', () => {
 
   it('says what the server answered when it refuses the code, keeps the person here and lets them try again', async () => {
     const completeTwoFactorLogin = vi.fn()
-      .mockRejectedValueOnce(refused('El código no es válido o ya expiró.'))
+      .mockRejectedValueOnce(refused('Código de autenticación inválido.'))
       .mockResolvedValueOnce(undefined);
     const { onSuccess } = renderStep(completeTwoFactorLogin);
 
     await userEvent.type(codeField(), '000000');
     await verify();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('El código no es válido o ya expiró.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Código de autenticación inválido.');
     expect(onSuccess).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Verificar' })).toBeEnabled();
 
@@ -107,7 +110,7 @@ describe('TwoFactorLoginStep (Fase 31E)', () => {
   });
 
   it('says it could not verify the code when the server gives no reason', async () => {
-    renderStep(vi.fn().mockRejectedValueOnce(new Error('boom')));
+    renderStep(vi.fn().mockRejectedValueOnce({ isAxiosError: true, response: { status: 500, data: {} } }));
 
     await userEvent.type(codeField(), '123456');
     await verify();
@@ -138,8 +141,22 @@ describe('TwoFactorLoginStep (Fase 31E)', () => {
     expect(onSuccess).toHaveBeenCalledOnce();
   });
 
+  it('switching to a recovery code takes away the 6-digit warning of the field', async () => {
+    renderStep();
+
+    await userEvent.type(codeField(), '12345');
+    await verify();
+    expect(await screen.findByText('El código debe tener 6 dígitos')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Usar un código de recuperación' }));
+
+    expect(screen.queryByText('El código debe tener 6 dígitos')).not.toBeInTheDocument();
+    expect(codeField()).toHaveAttribute('aria-invalid', 'false');
+    expect(codeField()).not.toHaveAccessibleDescription();
+  });
+
   it('switching between the app and a recovery code empties the field and takes away the error', async () => {
-    const { completeTwoFactorLogin } = renderStep(vi.fn().mockRejectedValueOnce(refused('El código no es válido o ya expiró.')));
+    const { completeTwoFactorLogin } = renderStep(vi.fn().mockRejectedValueOnce(refused('Código de autenticación inválido.')));
 
     await userEvent.type(codeField(), '111111');
     await verify();
@@ -152,6 +169,7 @@ describe('TwoFactorLoginStep (Fase 31E)', () => {
     await userEvent.type(codeField(), 'ABCDE-12345');
     await userEvent.click(screen.getByRole('button', { name: 'Usar el código de la app de autenticación' }));
     expect(screen.getByLabelText('Código de verificación')).toHaveValue('');
+    expect(screen.getByLabelText('Código de verificación')).toHaveFocus();
     expect(screen.getByText('Ingresa el código de 6 dígitos de tu app de autenticación.')).toBeInTheDocument();
 
     // Back with the app, the 6 digits are checked again.
@@ -163,7 +181,7 @@ describe('TwoFactorLoginStep (Fase 31E)', () => {
 
   it('while it verifies, nothing else can be pressed: not again, not the other kind of code, not back', async () => {
     const pending = deferred();
-    const { onSuccess, onCancel } = renderStep(vi.fn().mockReturnValueOnce(pending.promise));
+    const { completeTwoFactorLogin, onSuccess, onCancel } = renderStep(vi.fn().mockReturnValueOnce(pending.promise));
 
     await userEvent.type(codeField(), '123456');
     await verify();
@@ -171,7 +189,13 @@ describe('TwoFactorLoginStep (Fase 31E)', () => {
     expect(screen.getByRole('button', { name: 'Verificando...' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Usar un código de recuperación' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Volver al inicio de sesión' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Verificando...' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Usar un código de recuperación' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Volver al inicio de sesión' }));
+    await userEvent.type(codeField(), '{Enter}');
+    expect(completeTwoFactorLogin).toHaveBeenCalledOnce();
     expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Código de verificación')).toBeInTheDocument();
 
     pending.resolve();
     expect(await screen.findByRole('button', { name: 'Verificar' })).toBeEnabled();

@@ -3346,19 +3346,20 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 - Fase 31E, el segundo paso del inicio de sesión probado (sin ADR):
   - **Qué cambia:** la verificación en dos pasos al entrar (`TwoFactorLoginStep`) era la única pantalla de la cuenta sin prueba. No cambia el código.
   - **Cliente:**
-    - `TwoFactorLoginStep.test.tsx` (10, nuevo):
-      - el campo listo para el código de la app (foco, `one-time-code`, numérico, 7 caracteres);
+    - `TwoFactorLoginStep.test.tsx` (12, nuevo):
+      - el campo listo para el código de la app (foco, sin marcar como inválido, `one-time-code`, numérico, 7 caracteres);
       - manda el código con el reto del inicio de sesión y sigue cuando el servidor lo toma;
       - acepta los 6 dígitos con un espacio o un guion en medio y los manda como se escribieron;
       - no manda uno vacío ni uno que no sea de 6 dígitos, y lo dice junto al campo (`aria-invalid` y su descripción);
-      - si el servidor lo rechaza dice su mensaje, se queda y deja intentar de nuevo; sin motivo, «No se pudo verificar el código»;
+      - si el servidor lo rechaza (401, como lo contesta) dice su mensaje, se queda y deja intentar de nuevo; sin motivo, «No se pudo verificar el código»;
       - con un código de recuperación acepta cualquiera que se escriba y lo manda como tal; vacío, lo pide;
-      - cambiar entre la app y un código de recuperación vacía el campo y quita el error, y al volver a la app se revisan otra vez los 6 dígitos;
-      - mientras verifica, nada más se puede apretar;
+      - cambiar entre la app y un código de recuperación vacía el campo y quita el error del servidor y el aviso de los 6 dígitos, con el foco en el campo, y al volver a la app se revisan otra vez los 6 dígitos;
+      - mientras verifica, nada más se puede apretar: ni otra vez (tampoco con Enter), ni el otro código, ni volver;
       - «Volver al inicio de sesión» regresa sin mandar nada.
-    - `Login.test.tsx` (+2):
+    - `Login.test.tsx` (+3):
       - con la verificación en dos pasos pide el código en vez de entrar, y con él va a la página de donde venía;
-      - «Volver al inicio de sesión» trae el formulario como estaba, y entrar otra vez pide un código nuevo.
+      - «Volver al inicio de sesión» trae el formulario como estaba, y entrar otra vez pide un código nuevo;
+      - si la verificación expiró, volver y entrar otra vez verifica con el reto nuevo, sin el aviso del anterior.
   - **Mutaciones:** de 12, fallan las pruebas en las 12:
     - el aviso de código de recuperación, el reto o los espacios del código;
     - no vaciar el campo ni quitar el error al cambiar de código, ni al mandar;
@@ -3366,7 +3367,8 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - los botones que no se deshabilitan mientras verifica;
     - pedir 6 dígitos también a un código de recuperación;
     - «Volver» que no regresa, y entrar sin pedir el código.
-  - **Verificación:** cliente con 248 archivos y 2,114 pruebas, lint y `tsc` en verde. Las pruebas nuevas pasan en orden aleatorio.
+  - **Revisión independiente:** sin bloqueantes. Encontró tres mutaciones que sobrevivían (el guion del código, el aviso de los 6 dígitos que se quedaba al cambiar de código y `aria-invalid` fijo), el reto que expira sin probar, un error del servidor que no era el que contesta y la deuda técnica que seguía diciendo que faltaban pantallas. Todo quedó corregido; las tres mutaciones ya hacen fallar las pruebas.
+  - **Verificación:** cliente con 248 archivos y 2,117 pruebas, lint y `tsc` en verde. Las de `pages/auth` pasan también en orden aleatorio.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
