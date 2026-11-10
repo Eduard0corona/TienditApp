@@ -6,7 +6,7 @@
 --
 -- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory]. En una base que
 -- ya tiene 20261108150147_AddOrderCancellationEmailsAndAnswerReminder (lo que exige master hoy,
--- con la Fase 30Z) solo ejecuta 20261110022936_AddUniqueCategoryNamePerTenant:
+-- con la Fase 31A) solo ejecuta 20261110022936_AddUniqueCategoryNamePerTenant:
 --   - [IX_Categories_TenantId_Name]: índice único nuevo sobre [Categories] ([TenantId], [Name]): un
 --     nombre por categoría en cada negocio, archivadas incluidas, con la intercalación de la columna
 --     (la de siempre no distingue mayúsculas ni espacios al final; sí acentos).
@@ -18,7 +18,7 @@
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
 -- vacía): revisa antes el verify.sql de database/production/20261108150147_AddOrderCancellationEmailsAndAnswerReminder.
 --
--- Compatible con la versión desplegada (master con la Fase 30Z): no conoce el índice y sigue
+-- Compatible con la versión desplegada (master con la Fase 31A): no conoce el índice y sigue
 -- creando y editando categorías; solo una con el nombre de otra de su negocio falla ahora (500 en
 -- esa versión; la nueva responde 400 con el nombre de la que lo tiene). /health/schema sigue sano.
 -- Volver a ella (redespliegue, o swap si el slot de staging está activo) funciona sin rollback.sql.

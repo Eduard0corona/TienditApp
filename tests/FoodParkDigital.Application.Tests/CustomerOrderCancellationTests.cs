@@ -185,13 +185,84 @@ public class CustomerOrderCancellationTests
         Assert.True((await CancelByLinkAsync(fixture, receipt.TrackingToken!, new RecordingInventory())).IsSuccess);
         var cancelled = Assert.Single(mediator.Published.OfType<OrderCancelledEvent>());
         var screens = new RecordingOrderScreens();
-        await new OrderRealtimeNotifications(fixture.Context, screens, NullLogger<OrderRealtimeNotifications>.Instance)
+        var accounts = new RecordingCustomerOrders();
+        await new OrderRealtimeNotifications(fixture.Context, screens, accounts, NullLogger<OrderRealtimeNotifications>.Instance)
             .Handle(cancelled, CancellationToken.None);
 
         Assert.True(cancelled.ByCustomer);
         Assert.Equal(
             (tenant.Id, cancelled.OrderId, OrderStatus.Pending, Order.CustomerCancellationReason, receipt.OrderNumber, true),
             Assert.Single(screens.Cancelled));
+        // Placed without signing in: no account hears it.
+        Assert.Empty(accounts.Changed);
+    }
+
+    [Fact]
+    public async Task TheAccount_ShouldHearOnlyThatItsOwnOrderChanged_ByItsId()
+    {
+        var mediator = new RecordingMediator();
+        await using var fixture = SalesTestFixture.Create(mediator);
+        var (_, tacos) = await StoreAsync(fixture);
+        var mariana = await AccountAsync(fixture, "mariana@demo.com");
+        var other = await AccountAsync(fixture, "otra@demo.com");
+        SignIn(fixture, mariana);
+        var token = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
+        var id = (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.TrackingToken == token)).Id;
+        var created = Assert.Single(mediator.Published.OfType<OrderCreatedEvent>());
+        mediator.Published.Clear();
+
+        // The account's request comes with another business in context: cancelling puts the order's, as every command
+        // that changes an order does before saving, and the handler reads the order with it (ADR 0083).
+        fixture.TenantService.SetTenant(Guid.NewGuid());
+        Assert.True((await CancelMineAsync(fixture, id, new RecordingInventory())).IsSuccess);
+        var accounts = new RecordingCustomerOrders();
+        var handler = new OrderRealtimeNotifications(
+            fixture.Context, new RecordingOrderScreens(), accounts, NullLogger<OrderRealtimeNotifications>.Instance);
+
+        // Each kind of change reaches the account once: created, a change of status, cancelled and gone out.
+        await handler.Handle(created, CancellationToken.None);
+        Assert.Equal([(mariana.Id, id)], accounts.Changed);
+        await handler.Handle(new OrderStatusChangedEvent(id, created.TenantId, OrderStatus.Pending, OrderStatus.Confirmed), CancellationToken.None);
+        Assert.Equal(2, accounts.Changed.Count);
+        await handler.Handle(Assert.Single(mediator.Published.OfType<OrderCancelledEvent>()), CancellationToken.None);
+        Assert.Equal(3, accounts.Changed.Count);
+        // The screens of the business fail to hear the trip (this fake refuses it): the account hears it all the same.
+        await handler.Handle(new OrderDeliveryUpdatedEvent(id, created.TenantId, WentOut: true), CancellationToken.None);
+        Assert.Equal(4, accounts.Changed.Count);
+
+        Assert.All(accounts.Changed, heard => Assert.Equal((mariana.Id, id), heard));
+        Assert.DoesNotContain(accounts.Changed, heard => heard.CustomerUserId == other.Id);
+        // An event naming another business finds nothing: no account hears it.
+        await handler.Handle(new OrderDeliveryUpdatedEvent(id, Guid.NewGuid(), WentOut: true), CancellationToken.None);
+        Assert.Equal(4, accounts.Changed.Count);
+        // Nor with another business in context: it fails closed, without telling anyone.
+        fixture.TenantService.SetTenant(Guid.NewGuid());
+        await handler.Handle(new OrderStatusChangedEvent(id, created.TenantId, OrderStatus.Confirmed, OrderStatus.Ready), CancellationToken.None);
+        Assert.Equal(4, accounts.Changed.Count);
+    }
+
+    [Fact]
+    public async Task TheAccountFailingToHear_ShouldNotStopTheBusinessScreens()
+    {
+        var mediator = new RecordingMediator();
+        await using var fixture = SalesTestFixture.Create(mediator);
+        var (tenant, tacos) = await StoreAsync(fixture);
+        SignIn(fixture, await AccountAsync(fixture, "mariana@demo.com"));
+        var token = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
+        var id = (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.TrackingToken == token)).Id;
+        var screens = new RecordingOrderScreens();
+        var handler = new OrderRealtimeNotifications(
+            fixture.Context, screens, new UnreachableAccounts(), NullLogger<OrderRealtimeNotifications>.Instance);
+
+        await handler.Handle(new OrderCancelledEvent(id, tenant.Id, OrderStatus.Pending, "Sin existencias", ByCustomer: false), CancellationToken.None);
+
+        Assert.Equal(id, Assert.Single(screens.Cancelled).OrderId);
+    }
+
+    /// <summary>The hub of the accounts is down.</summary>
+    private sealed class UnreachableAccounts : ICustomerOrderNotificationService
+    {
+        public Task NotifyOrderChanged(Guid customerUserId, Guid orderId) => throw new InvalidOperationException("Sin conexión");
     }
 
     [Fact]
@@ -395,8 +466,8 @@ public class CustomerOrderCancellationTests
 
         public Task NotifyOrderUpdated(Guid tenantId, Guid orderId) => throw new NotSupportedException();
         public Task NotifyOrderCreated(Guid tenantId, Guid orderId, string orderNumber, BusinessType businessType, decimal total,
-            OrderStatus status, OrderChannel channel, string? externalOrderNumber) => throw new NotSupportedException();
-        public Task NotifyOrderStatusChanged(Guid tenantId, Guid orderId, OrderStatus previousStatus, OrderStatus newStatus) => throw new NotSupportedException();
+            OrderStatus status, OrderChannel channel, string? externalOrderNumber) => Task.CompletedTask;
+        public Task NotifyOrderStatusChanged(Guid tenantId, Guid orderId, OrderStatus previousStatus, OrderStatus newStatus) => Task.CompletedTask;
         public Task NotifyKitchenTicketsChanged(Guid tenantId, Guid orderId, int round) => throw new NotSupportedException();
         public Task NotifyServiceBoardPieceUpdated(Guid tenantId, Guid orderId, Guid pieceId, ServiceOrderPieceStatus status, Guid? assignedToUserId)
             => throw new NotSupportedException();

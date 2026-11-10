@@ -3236,6 +3236,38 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - 239 archivos y 2,048 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las pruebas de Plataforma y de la cuenta pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
     - Primera visita: 180,386 B de 180,400 B. Su código es el mismo que en `master` (180,398 B): comparé los cuatro archivos normalizando los hashes.
   - **Escenas:** de las 185 de la consola, la caja, la configuración y las pantallas públicas y de la cuenta, ninguna cambia contra `master` (`5e405f5`).
+- Fase 31A, «Mis pedidos» se entera al momento (punto 13; [ADR 0083](../adr/0083-my-orders-live.md)):
+  - **Backend:**
+    - `CustomerOrderCancellationTests`:
+      - la cuenta oye una vez cada cambio de su pedido (creado, un cambio de estado, cancelado y salió), solo por su id, y otra cuenta nada;
+      - un evento con otro negocio, o con otro negocio en contexto, no avisa (falla cerrado);
+      - si el hub de las cuentas falla, las pantallas del negocio se enteran igual, y al revés.
+    - `CourierSettlementFlowTests`: una venta de mostrador no avisa a ninguna cuenta.
+    - `HubAccessSweeperTests`: una conexión de la cuenta sigue mientras su sesión está abierta, sin negocio en su token o con uno que ya le quitó el acceso, y se cierra al salir. El acceso a un negocio solo se lee para las conexiones del equipo.
+    - `CrossTenantOrderTrackingSqlServerTests` (SQL Server y WebSockets): dos clientes y un invitado piden en el mismo negocio. Cada cuenta oye solo el id de sus pedidos cuando el negocio los acepta y prepara, el del invitado no llega a nadie, y sin sesión el hub no abre.
+  - **Cliente:**
+    - `useMyOrdersLive.test.tsx` (4): vuelve a leer los pedidos de la cuenta con cada aviso y al conectarse, nada de un negocio; no conecta si la pantalla se fue antes de que llegara SignalR; deja de escuchar al salir.
+    - `MyOrders.test.tsx` y `MyOrderPage.test.tsx` (+1 cada una): las dos pantallas escuchan.
+  - **Mutaciones:**
+    - Cliente: de 8, fallan las pruebas en las 8.
+    - Backend: de 8, fallan las pruebas en las 8. Son las que la revisión encontró sin detectar: quitar el aviso de cada evento, el filtro del negocio del evento o la captura de errores, y saltarse o invertir la revisión del acceso en el barrido.
+  - **Revisión independiente, con foco en seguridad:** sin bloqueantes ni mayores. No hay fuga entre cuentas ni entre negocios, y el barrido sigue revisando las conexiones del equipo (lo probó con mutaciones). Encontró:
+    - `SECURITY.md` y `multi-tenancy.md`, que seguían diciendo que todos los hubs agrupan por negocio;
+    - pruebas del manejador que no fallaban al quitar el aviso de un evento, el filtro del negocio del evento o la captura de errores;
+    - el ADR, que decía que el pedido se lee «del negocio del evento» cuando también depende del de contexto;
+    - el límite de conexiones de `/hubs`;
+    - detalles de pruebas: el desmontaje antes de que llegue SignalR y una cuenta del equipo que abre «Mis pedidos».
+
+    Todo quedó corregido o anotado; las pruebas fallan sin el arreglo.
+  - **Quedan fuera** (en el ADR y la deuda técnica):
+    - el seguimiento con el enlace sigue preguntando cada 20 segundos;
+    - sin avisos en el navegador;
+    - los pagos, los platillos de una cuenta abierta y un pedido ligado después no avisan;
+    - `/hubs` no limita conexiones por cuenta.
+  - **Verificación:**
+    - `dotnet build` y `dotnet test` de la solución, con SQL Server: 1,440 + 2,220 + 513 + 711 pruebas en verde, 7 omitidas.
+    - Cliente: 240 archivos y 2,053 pruebas, lint, `tsc`, `visual:typecheck` y build en verde.
+    - Primera visita: 180,390 B de 180,400 B; `vendor-signalr` sigue fuera de ella y el hook va en un chunk que solo cargan «Mis pedidos» y el detalle.
 - Fase 31B, un nombre por categoría en cada negocio ([ADR 0084](../adr/0084-unique-category-name-per-business.md)):
   - **Qué cambia:** crear o editar una categoría con un nombre que el negocio ya tiene, sin importar mayúsculas ni espacios y contando las archivadas, responde 400 con el nombre de la que lo tiene. Los acentos cuentan. Editar solo revisa un nombre nuevo. El índice único `IX_Categories_TenantId_Name` respalda la regla cuando dos guardados se cruzan; su migración se detiene (50057) mientras un negocio tenga dos iguales.
   - **Domain:** `CategoryNameKeyTests` (11, nuevo):
@@ -3260,7 +3292,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **WebApi:** `CrossTenantCategoryNamesSqlServerTests` (1, nuevo, SQL Server): por la API real, crear y editar con el nombre de otra categoría del negocio responde 400 con su nombre en `detail`, y otro negocio crea el mismo nombre.
   - **Mutaciones del servidor:** de 17, fallan las pruebas en las 17. Se probaron: crear o editar sin revisar, editar revisando también su propio nombre, quitar cada `catch` del índice (crear, editar, plantilla), no contar las archivadas, un solo mensaje para activas y archivadas, una clave con mayúsculas, solo con las orillas, solo con espacios o sin acentos, el diccionario del catálogo de ejemplo que lanza o que prefiere la archivada, el modelo sin el índice y la migración sin su guarda (SQL Server: 1505 en lugar de 50057). La primera corrida dejó viva una: no excluir a la propia categoría al buscar el nombre. Solo importa cuando el índice rechaza una repetida de antes renombrada como su gemela, y la prueba de esa gemela la cubre ahora.
   - **Scripts:** `apply.sql` y `rollback.sql` son, debajo de su cabecera, lo que genera el CI (se comparó con el mismo procedimiento del job). Se ensayaron con el `sqlcmd` clásico en SQL Server 2022 (Docker); el detalle está en el README de `data-repair/20261110_RepeatedCategoryNames`. El job `Migrations` también se repitió localmente: desde `PRODUCTION_BASELINE`, aplicar, aplicar otra vez con la caché de planes vacía sin cambios, revertir dos veces, aplicar de nuevo y crear una base nueva.
-  - **Servidor:** con .NET 10.0.403, `dotnet build` y `dotnet test FoodParkDigital.sln` en verde con `master` en la 30Z: Domain 1,451, Application 2,238, Infrastructure 379 y WebApi 354 (las de SQL Server se omiten sin su variable). Con `TIENDITAPP_TEST_SQLSERVER` apuntando a SQL Server 2022 (Docker), las suites `SqlServerTests` completas pasaron antes de traer la 30W a la 30Z (Infrastructure 336 y WebApi 158), y las de categorías otra vez después. `has-pending-model-changes` no encuentra cambios. El cliente no cambia: el diálogo de Categorías ya muestra el `detail` del 400 (Fase 30P).
+  - **Servidor:** con .NET 10.0.403, `dotnet build` y `dotnet test FoodParkDigital.sln` en verde con `master` en la 31A: Domain 1,451, Application 2,240, Infrastructure 379 y WebApi 355 (las de SQL Server se omiten sin su variable). Con `TIENDITAPP_TEST_SQLSERVER` apuntando a SQL Server 2022 (Docker), las suites `SqlServerTests` completas pasaron antes de traer de `master` la 30W a la 31A (Infrastructure 336 y WebApi 158), y las de categorías otra vez con la 30Z. En CI, el job `Migrations` las corre todas en cada push. `has-pending-model-changes` no encuentra cambios. El cliente no cambia: el diálogo de Categorías ya muestra el `detail` del 400 (Fase 30P).
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

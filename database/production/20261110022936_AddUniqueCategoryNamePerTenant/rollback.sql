@@ -7,7 +7,7 @@
 --
 -- Borra el índice único [IX_Categories_TenantId_Name]: no se pierde ningún dato, y la base vuelve a
 -- aceptar dos categorías con el mismo nombre en un negocio (la versión anterior no lo revisa).
--- Córrelo después de regresar el código a master con la Fase 30Z; volver a ese código funciona
+-- Córrelo después de regresar el código a master con la Fase 31A; volver a ese código funciona
 -- también sin este script.
 -- Idempotente: no hace nada si la migración no está aplicada.
 --     sqlcmd -S <servidor> -d <base> <autenticación> -b -i rollback.sql

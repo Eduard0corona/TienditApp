@@ -83,7 +83,8 @@ public sealed class HubAccessSweeper : BackgroundService
         {
             var connection = live[i];
             var allowed = open[i];
-            if (allowed)
+            // The hub of an account (ADR 0083) asks for an open session and nothing of a business.
+            if (allowed && connection.Allowed is not null)
             {
                 var user = connection.Context.User;
                 var key = (user?.FindFirst(ClaimTypes.NameIdentifier)?.Value, user?.FindFirst("tenant_id")?.Value);

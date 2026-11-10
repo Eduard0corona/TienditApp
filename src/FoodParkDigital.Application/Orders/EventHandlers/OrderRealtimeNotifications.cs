@@ -9,7 +9,8 @@ namespace FoodParkDigital.Application.Orders.EventHandlers;
 /// <summary>
 /// Screen refreshes (SignalR) for order events. They run in-process right after the commit and are
 /// best-effort: screens also reload when they reconnect and on their polling fallback. Durable effects
-/// (audit, customer messages) are outbox handlers.
+/// (audit, customer messages) are outbox handlers. Since Fase 31A (ADR 0083) «Mis pedidos» of the customer's account
+/// also hears that their order was created, changed status, was cancelled or went out.
 /// </summary>
 public sealed class OrderRealtimeNotifications :
     INotificationHandler<OrderCreatedEvent>,
@@ -23,20 +24,24 @@ public sealed class OrderRealtimeNotifications :
 {
     private readonly IApplicationDbContext _context;
     private readonly IOrderNotificationService _notificationService;
+    private readonly ICustomerOrderNotificationService _customerNotifications;
     private readonly ILogger<OrderRealtimeNotifications> _logger;
 
     public OrderRealtimeNotifications(
         IApplicationDbContext context,
         IOrderNotificationService notificationService,
+        ICustomerOrderNotificationService customerNotifications,
         ILogger<OrderRealtimeNotifications> logger)
     {
         _context = context;
         _notificationService = notificationService;
+        _customerNotifications = customerNotifications;
         _logger = logger;
     }
 
-    public Task Handle(OrderCreatedEvent notification, CancellationToken cancellationToken)
-        => NotifyAsync(notification, () => _notificationService.NotifyOrderCreated(
+    public async Task Handle(OrderCreatedEvent notification, CancellationToken cancellationToken)
+    {
+        await NotifyAsync(notification, () => _notificationService.NotifyOrderCreated(
             notification.TenantId,
             notification.OrderId,
             notification.OrderNumber,
@@ -45,16 +50,22 @@ public sealed class OrderRealtimeNotifications :
             notification.Status,
             notification.Channel,
             notification.ExternalOrderNumber));
+        await NotifyCustomerAsync(notification, notification.TenantId, notification.OrderId, cancellationToken);
+    }
 
-    public Task Handle(OrderStatusChangedEvent notification, CancellationToken cancellationToken)
-        => NotifyAsync(notification, () => _notificationService.NotifyOrderStatusChanged(
+    public async Task Handle(OrderStatusChangedEvent notification, CancellationToken cancellationToken)
+    {
+        await NotifyAsync(notification, () => _notificationService.NotifyOrderStatusChanged(
             notification.TenantId,
             notification.OrderId,
             notification.PreviousStatus,
             notification.NewStatus));
+        await NotifyCustomerAsync(notification, notification.TenantId, notification.OrderId, cancellationToken);
+    }
 
-    public Task Handle(OrderCancelledEvent notification, CancellationToken cancellationToken)
-        => NotifyAsync(notification, async () =>
+    public async Task Handle(OrderCancelledEvent notification, CancellationToken cancellationToken)
+    {
+        await NotifyAsync(notification, async () =>
         {
             var orderNumber = await _context.Orders
                 .AsNoTracking()
@@ -69,6 +80,8 @@ public sealed class OrderRealtimeNotifications :
                 orderNumber ?? string.Empty,
                 notification.ByCustomer);
         });
+        await NotifyCustomerAsync(notification, notification.TenantId, notification.OrderId, cancellationToken);
+    }
 
     public Task Handle(TabRoundSentEvent notification, CancellationToken cancellationToken)
         => NotifyAsync(notification, () => _notificationService.NotifyKitchenTicketsChanged(
@@ -90,8 +103,11 @@ public sealed class OrderRealtimeNotifications :
             notification.Round));
 
     // The trip written down or the order sent out with the courier: Pedidos reads the order again.
-    public Task Handle(OrderDeliveryUpdatedEvent notification, CancellationToken cancellationToken)
-        => NotifyAsync(notification, () => _notificationService.NotifyOrderUpdated(notification.TenantId, notification.OrderId));
+    public async Task Handle(OrderDeliveryUpdatedEvent notification, CancellationToken cancellationToken)
+    {
+        await NotifyAsync(notification, () => _notificationService.NotifyOrderUpdated(notification.TenantId, notification.OrderId));
+        await NotifyCustomerAsync(notification, notification.TenantId, notification.OrderId, cancellationToken);
+    }
 
     public Task Handle(ServiceOrderPieceStatusChangedEvent notification, CancellationToken cancellationToken)
         => NotifyAsync(notification, async () =>
@@ -110,6 +126,22 @@ public sealed class OrderRealtimeNotifications :
                 notification.PieceId,
                 piece.Status,
                 piece.AssignedToUserId);
+        });
+
+    /// <summary>
+    /// The account the order belongs to, if any, hears that it changed (ADR 0083): an order placed without signing in,
+    /// or at the counter, has none. Apart from the business's screens, so one failing does not stop the other.
+    /// </summary>
+    private Task NotifyCustomerAsync(Domain.Common.DomainEvent domainEvent, Guid tenantId, Guid orderId, CancellationToken cancellationToken)
+        => NotifyAsync(domainEvent, async () =>
+        {
+            var customerUserId = await _context.Orders
+                .AsNoTracking()
+                .Where(o => o.Id == orderId && o.TenantId == tenantId)
+                .Select(o => o.CustomerUserId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (customerUserId is { } userId)
+                await _customerNotifications.NotifyOrderChanged(userId, orderId);
         });
 
     private async Task NotifyAsync(Domain.Common.DomainEvent domainEvent, Func<Task> notify)
