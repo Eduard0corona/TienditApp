@@ -10,3 +10,6 @@
 **/Dockerfile
 **/*.md
 **/tests
+# What the client's visual scenes and end-to-end tests leave locally (builds, the published API, reports).
+client/visual/.work
+client/e2e/.work

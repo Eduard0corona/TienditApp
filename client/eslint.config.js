@@ -9,6 +9,8 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores(['dist']),
   globalIgnores(['visual/.work', 'visual/.snapshots']),
+  // The end-to-end tests' API, published with the client's build, and their reports.
+  globalIgnores(['e2e/.work']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -35,9 +37,10 @@ export default defineConfig([
       }],
     },
   },
-  // The visual scenes run in Node through Playwright: they read files and the process, and have no React.
+  // The visual scenes and the end-to-end tests run in Node through Playwright: they read files and the process, and
+  // have no React.
   {
-    files: ['visual/**/*.ts'],
+    files: ['visual/**/*.ts', 'e2e/**/*.ts'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
     rules: { 'react-hooks/rules-of-hooks': 'off' },
   },

@@ -13,7 +13,10 @@
     "api:types": "openapi-typescript openapi/openapi.json -o src/api/generated/schema.ts && node scripts/generate-enums.mjs",
     "visual:baseline": "node visual/run.mjs baseline",
     "visual:compare": "node visual/run.mjs compare",
-    "visual:typecheck": "tsc -p visual"
+    "visual:typecheck": "tsc -p visual",
+    "e2e": "playwright test --config e2e/playwright.config.ts",
+    "e2e:publish": "npm run build && dotnet publish ../src/FoodParkDigital.WebApi/FoodParkDigital.WebApi.csproj --configuration Release --output e2e/.work/api",
+    "e2e:typecheck": "tsc -p e2e"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",
