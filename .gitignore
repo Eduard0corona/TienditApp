@@ -49,3 +49,5 @@ src/FoodParkDigital.WebApi/App_Data/
 # Visual scenes of the client (client/visual/README.md): baselines, builds and reports stay local.
 client/visual/.snapshots/
 client/visual/.work/
+# End-to-end tests of the client (client/e2e/README.md): the published API, reports, traces and the API's log stay local.
+client/e2e/.work/

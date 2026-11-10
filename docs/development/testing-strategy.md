@@ -3317,6 +3317,32 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - un nombre que escondía otro.
 
     Todo quedó corregido, con pruebas que fallan sin el arreglo.
+- Fase 31D, pruebas de extremo a extremo ([ADR 0085](../adr/0085-end-to-end-tests.md), [README](../../client/e2e/README.md)):
+  - **Qué cambia:** `client/e2e` con Playwright en Chromium sobre la API publicada (`npm run e2e:publish`), en Development y contra SQL Server. `start-api.mjs` la arranca y escribe su log en `e2e/.work/api.log`; el enlace de activación sale de ahí. CI corre un job nuevo (`End to end`) en cada PR, con SQL Server 2022 de la misma imagen que el de migraciones, y el job del cliente revisa que compilen (`npm run e2e:typecheck`). No cambia la API ni el cliente.
+  - **Pruebas:**
+    - `primera-venta.spec.ts`: registro con giro «Alimentos», el correo de activación, entrar, Primeros pasos (lo que propone, los precios y la plantilla «Taquería»), «Hacer mi primera venta», la caja cerrada que pide abrirse con $500 de fondo, dos tacos al pastor en el ticket, cobro en efectivo ya elegido, $100 recibidos con $56.00 de cambio, «Venta ORD-… cobrada»; en Pedidos la venta confirmada y pagada por $44.00, y en Mi caja $500.00 de fondo, $44.00 que entraron en efectivo y $544.00 que debe haber.
+    - `pedido-en-linea.spec.ts`: la dueña abre su caja y prende «Menú con pedidos»; un cliente sin cuenta, en otro contexto del navegador, abre el enlace del menú, agrega un taco, pide con su nombre y teléfono, ve «lo confirmará en unos minutos» y abre el seguimiento en «Recibido»; en Pedidos el pedido está en línea, con su nombre y su teléfono, pendiente y por cobrar $22.00; la dueña lo confirma desde su detalle y la fila cambia; el seguimiento del cliente, al recargar, está en «Confirmado» con «Recibido» hecho.
+  - **Mutaciones:** de 4, fallan las pruebas en las 4, cada una en su paso:
+    - Vender manda una pieza de cada línea: el cobro no sale;
+    - el detalle del pedido sin los cambios de estado: no se puede confirmar;
+    - en el servidor, el seguimiento se queda en «Recibido» con el pedido confirmado;
+    - en el servidor, Mi caja no cuenta el efectivo de los cobros: «Entró en efectivo» dice $0.00.
+  - **Revisión independiente:** sin bloqueantes. Encontró:
+    - la API tomaba la configuración de quien las corre (user-secrets, `appsettings.Development.local.json`, correo, SMS y telemetría del ambiente): con un SMTP configurado, el correo de activación salía de verdad a un dominio ajeno;
+    - la cadena de conexión sin MARS, que llevan las de la app;
+    - el log podía perder el error de un arranque fallido;
+    - que un SQL Server remoto no se migra, sin decirlo;
+    - el ADR, que no listaba todo lo que cambia en Development;
+    - la frase de esta estrategia que decía que el pipeline completo «solo» se prueba en proceso;
+    - `.dockerignore` sin las carpetas `.work`;
+    - y, menores, el enlace sin anclar en su comilla, selectores por subcadena, `E2E_BASE_URL` sin su log y los comandos sin PowerShell.
+
+    Todo quedó corregido. Las pruebas usan correos de `example.com`, un paso que no puede pasar falla a los 15 segundos y Pedidos y Mi caja se leen con el monto al final.
+  - **Verificación:**
+    - Contra la API publicada desde este árbol (sobre `688cd7c`, con la 31C) y una base nueva, las 2 pasan en 57 s con la migración; ya migrada, en 36 s. Después de los arreglos de la revisión, dos corridas seguidas. También contra una API que ya corría (`E2E_BASE_URL`).
+    - Con una contraseña equivocada, la API no arranca, el log guarda el error de SQL Server y `start-api.mjs` dice dónde está. El log no lleva la contraseña.
+    - Cliente: 247 archivos y 2,102 pruebas, lint, `tsc`, `e2e:typecheck`, `visual:typecheck` y build en verde. Primera visita: 180,362 B, sin cambio. `check-pins.py` en verde.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
@@ -3360,7 +3386,9 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 
 Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 724 pruebas, contando el muestrario, en estos grupos: Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, Reportes › Liquidaciones (desde la 22G) y sus Retenciones (desde la 22J), Reportes › Factura global (desde la 28B) y CFDI emitidos (desde la 28H, con los que se quedaron timbrando desde la 28K), la Agenda a domicilio (desde la 22E), Explorar (desde la 24A), Cuenta y comprar con la cuenta (desde la 24B), el seguimiento del pedido (desde la 24C), las citas en línea (desde la 24D), la tienda del menú en línea (desde la 24E), «Cerca de mí» (desde la 24G), las reseñas (desde la 24H), las pantallas públicas y de cuenta con el marco, el marco en cada tamaño y el anillo de foco. Salen iguales en cada corrida: sin transiciones, animaciones CSS ni desplazamiento suave, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).
 
-El pipeline HTTP completo solo se prueba en la suite de aislamiento entre negocios (Fases 8 a 15, con hubs, webhook y el acceso de soporte), en las rondas de una cuenta con existencias (Fase 14) y sus platillos cancelados (Fase 15), en el controller de sondeo de `RequestCancellationTests` y en la entrega del cliente (`ClientDeliveryTests`, Fase 20); la integración con SQL Server real cubre folios, proyecciones, ventas, sesiones y aislamiento. El workflow `CI` compila y ejecuta las pruebas, valida migraciones pendientes, aplica las migraciones en SQL Server 2022 con el script y el `sqlcmd` de producción (job `Migrations`, ver [migraciones](database-migrations.md)) y corre lint, pruebas, build y `npm audit` del cliente en cada PR; el despliegue repite build, pruebas y lint antes de publicar. Producción y pruebas apuntan a .NET 10.
+Pruebas de extremo a extremo (Fase 31D, `client/e2e`, [README](../../client/e2e/README.md), [ADR 0085](../adr/0085-end-to-end-tests.md)): Playwright en Chromium sobre el cliente que sirve la API publicada (`npm run e2e:publish`), en Development y contra SQL Server, sin nada simulado. El enlace de activación se lee del log de la API, donde Development escribe el correo que no pudo mandar. Recorren la primera venta (registro, activación, Primeros pasos con la plantilla «Taquería», abrir la caja desde Vender, cobrar en efectivo; la venta en Pedidos y el efectivo en Mi caja) y un pedido del menú en línea (el cliente pide sin cuenta desde otro navegador, el negocio lo confirma en Pedidos y el seguimiento lo dice). Corren en CI en cada PR (job `End to end`), que sube el reporte, las trazas y el log de la API si fallan.
+
+El pipeline HTTP completo se prueba en proceso en la suite de aislamiento entre negocios (Fases 8 a 15, con hubs, webhook y el acceso de soporte), en las rondas de una cuenta con existencias (Fase 14) y sus platillos cancelados (Fase 15), en el controller de sondeo de `RequestCancellationTests` y en la entrega del cliente (`ClientDeliveryTests`, Fase 20); la integración con SQL Server real cubre folios, proyecciones, ventas, sesiones y aislamiento, y desde la Fase 31D las pruebas de extremo a extremo recorren la API publicada desde el navegador. El workflow `CI` compila y ejecuta las pruebas, valida migraciones pendientes, aplica las migraciones en SQL Server 2022 con el script y el `sqlcmd` de producción (job `Migrations`, ver [migraciones](database-migrations.md)), y corre lint, pruebas, build y `npm audit` del cliente y las pruebas de extremo a extremo en cada PR; el despliegue repite build, pruebas y lint antes de publicar. Producción y pruebas apuntan a .NET 10.
 
 ## Pirámide esperada
 
@@ -3405,4 +3433,12 @@ Escenas visuales del cliente, desde `client/`:
 ```bash
 npm run visual:baseline   # capturas de origin/master
 npm run visual:compare    # este árbol contra ellas
+```
+
+Pruebas de extremo a extremo, desde `client/` (con .NET, Chromium y un SQL Server local; el [README](../../client/e2e/README.md) tiene las variables):
+
+```powershell
+npm run e2e:publish                                # cliente y API publicados en e2e/.work/api
+$env:E2E_SQLSERVER = 'Server=localhost,1433;User ID=…;Password=…;Encrypt=True;TrustServerCertificate=True'
+npm run e2e
 ```

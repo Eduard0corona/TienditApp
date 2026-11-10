@@ -409,5 +409,81 @@ jobs:
       - name: Typecheck the visual scenes
         run: npm run visual:typecheck
 
+      - name: Typecheck the end-to-end tests
+        run: npm run e2e:typecheck
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+
+  # The end-to-end tests (client/e2e/README.md): the client as the API serves it, published as in production, against a
+  # SQL Server 2022 in Chromium. Nothing is mocked: a business signs up, makes its first sale and takes an online order.
+  e2e:
+    name: End to end (Playwright, API and SQL Server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: client
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # As in the migrations job: the SA password is created inside the job and masked in the logs.
+      - name: Start SQL Server 2022
+        run: |
+          password="$(openssl rand -hex 24)Aa1"
+          echo "::add-mask::$password"
+          echo "E2E_SQLSERVER=Server=127.0.0.1,1433;User ID=sa;Password=$password;Encrypt=True;TrustServerCertificate=True" >> "$GITHUB_ENV"
+          MSSQL_SA_PASSWORD="$password" SQLCMDPASSWORD="$password" docker run --detach --name mssql \
+            --env ACCEPT_EULA=Y --env MSSQL_SA_PASSWORD --env SQLCMDPASSWORD \
+            --publish 127.0.0.1:1433:1433 \
+            mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
+          for _ in $(seq 60); do
+            if docker exec mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -l 2 -Q "SELECT 1" > /dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs mssql
+          echo "::error::SQL Server did not accept connections."
+          exit 1
+
+      # The client's build goes into the API's wwwroot when it publishes, as in the Docker image.
+      - name: Publish the API with the client
+        run: npm run e2e:publish
+
+      # The Chromium of the @playwright/test version in package-lock.json, with the libraries it needs.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the end-to-end tests
+        run: npm run e2e
+
+      # The report, a trace of each failed test (every request and screen) and the log of the API.
+      - name: Upload the report
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: e2e-report
+          path: |
+            client/e2e/.work/report/
+            client/e2e/.work/results/
+            client/e2e/.work/api.log
+          if-no-files-found: ignore
