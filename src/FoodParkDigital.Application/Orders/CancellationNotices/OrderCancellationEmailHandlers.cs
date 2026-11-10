@@ -8,9 +8,10 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Orders.CancellationNotices;
 
 /// <summary>
-/// After its customer cancels an online order (Fase 30B, ADR 0082), the email of each member who gets them: one message per
-/// member in the outbox (<see cref="OrderCancellationEmailEvent"/>), saved with the record that this ran, so each is sent and
-/// retried on its own. None for one the business cancelled.
+/// After its customer cancels an online order (Fase 30B, ADR 0082), or the business cancels one because its customer asked
+/// (Fase 31B, ADR 0084), the email of each member who gets them: one message per member in the outbox
+/// (<see cref="OrderCancellationEmailEvent"/>), saved with the record that this ran, so each is sent and retried on its own.
+/// None for one the business cancelled on its own, nor to whoever cancelled it.
 /// </summary>
 public sealed class OrderCancelledEmailsHandler : IOutboxEventHandler<OrderCancelledEvent>
 {
@@ -27,20 +28,31 @@ public sealed class OrderCancelledEmailsHandler : IOutboxEventHandler<OrderCance
 
     public async Task HandleAsync(OrderCancelledEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
     {
-        if (!domainEvent.ByCustomer)
+        var atCustomerRequest = domainEvent.AtCustomerRequest && !domainEvent.ByCustomer;
+        if (!domainEvent.ByCustomer && !atCustomerRequest)
+            return;
+        // Asked of an order of another channel: the emails are of the online orders.
+        if (atCustomerRequest && !await _context.Orders.AnyAsync(
+                o => o.Id == domainEvent.OrderId && o.TenantId == domainEvent.TenantId && o.Channel == OrderChannel.Online,
+                cancellationToken))
             return;
 
+        // Whoever cancelled it knows.
+        Guid? cancelledBy = Guid.TryParse(context.ActorUserId, out var actor) ? actor : null;
         foreach (var recipient in await OrderCancellationEmailRecipients.ListAsync(
                      _context, _access, domainEvent.TenantId, null, cancellationToken))
-            _outbox.Add(new OrderCancellationEmailEvent(domainEvent.OrderId, recipient.UserId), domainEvent.TenantId);
+        {
+            if (recipient.UserId != cancelledBy)
+                _outbox.Add(new OrderCancellationEmailEvent(domainEvent.OrderId, recipient.UserId, atCustomerRequest), domainEvent.TenantId);
+        }
     }
 }
 
 /// <summary>
-/// Sends one member the email of an online order its customer cancelled (Fase 30B, ADR 0082), from the platform's provider. It
-/// checks again that the order stays cancelled by its customer, a day ago or less, and that the member still gets them and
-/// may confirm orders, as either may have changed since it was queued; then nothing is sent. A failure of the provider throws,
-/// and the outbox retries this member's email alone.
+/// Sends one member the email of an online order its customer cancelled (Fase 30B, ADR 0082), or the business cancelled because
+/// its customer asked (Fase 31B, ADR 0084), from the platform's provider. It checks again that the order stays cancelled so, a
+/// day ago or less, and that the member still gets them and may confirm orders, as either may have changed since it was queued;
+/// then nothing is sent. A failure of the provider throws, and the outbox retries this member's email alone.
 /// </summary>
 public sealed class OrderCancellationEmailHandler : IOutboxEventHandler<OrderCancellationEmailEvent>
 {
@@ -65,6 +77,7 @@ public sealed class OrderCancellationEmailHandler : IOutboxEventHandler<OrderCan
         if (context.TenantId is not { } tenantId)
             return;
 
+        var atCustomerRequest = domainEvent.AtCustomerRequest;
         var order = await _context.Orders
             .AsNoTracking()
             .Where(o => o.Id == domainEvent.OrderId && o.TenantId == tenantId && o.Channel == OrderChannel.Online)
@@ -74,14 +87,16 @@ public sealed class OrderCancellationEmailHandler : IOutboxEventHandler<OrderCan
                 o.OrderNumber,
                 o.CustomerName,
                 o.Total,
-                // Its history says the customer cancelled it, and when (Fase 29R).
-                CancelledByCustomerAt = _context.OrderStatusHistories
-                    .Where(h => h.TenantId == tenantId && h.OrderId == o.Id
-                        && h.NewStatus == OrderStatus.Cancelled && h.ChangedBy == Order.CustomerPerformedBy)
+                o.CancellationReason,
+                // When its history says it was cancelled (once: it stays so): by its customer (Fase 29R), unless the business
+                // cancelled it at their request, which only the event says.
+                CancelledAt = _context.OrderStatusHistories
+                    .Where(h => h.TenantId == tenantId && h.OrderId == o.Id && h.NewStatus == OrderStatus.Cancelled
+                        && (atCustomerRequest ? h.ChangedBy != Order.CustomerPerformedBy : h.ChangedBy == Order.CustomerPerformedBy))
                     .Max(h => (DateTimeOffset?)h.ChangedAt)
             })
             .FirstOrDefaultAsync(cancellationToken);
-        if (order is null || !OrderCancellationEmail.Worth(order.Status, order.CancelledByCustomerAt, _clock.UtcNow))
+        if (order is null || !OrderCancellationEmail.Worth(order.Status, order.CancelledAt, _clock.UtcNow))
             return;
 
         var recipient = (await OrderCancellationEmailRecipients.ListAsync(_context, _access, tenantId, domainEvent.UserId, cancellationToken))
@@ -94,8 +109,10 @@ public sealed class OrderCancellationEmailHandler : IOutboxEventHandler<OrderCan
             .Where(t => t.Id == tenantId)
             .Select(t => t.Name)
             .FirstAsync(cancellationToken);
-        var (subject, body) = OrderCancellationEmail.Compose(
-            business, order.CustomerName, order.OrderNumber, order.Total, _links.BaseUrl);
+        var (subject, body) = atCustomerRequest
+            ? OrderCancellationEmail.ComposeAtCustomerRequest(
+                business, order.CustomerName, order.OrderNumber, order.Total, order.CancellationReason, _links.BaseUrl)
+            : OrderCancellationEmail.Compose(business, order.CustomerName, order.OrderNumber, order.Total, _links.BaseUrl);
         await _email.SendEmailAsync(recipient.Email, subject, body);
     }
 }

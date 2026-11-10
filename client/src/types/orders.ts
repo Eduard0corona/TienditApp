@@ -349,6 +349,15 @@ export interface OrderDeliveryInput {
   paysWith?: number;
 }
 
+/** Cancels an order (`PUT /orders/{id}/cancel`). */
+export interface CancelOrderRequest {
+  reason?: string;
+  /** What it consumed goes back to the stock unless false. */
+  restockItems?: boolean;
+  /** Its customer asked for it (Fase 31B): whoever gets the emails of the cancelled online orders hears of it. */
+  atCustomerRequest?: boolean;
+}
+
 /** The order goes out with the courier (Fase 22D): the trip, and whether the courier collects the balance in cash. */
 export interface DispatchOrderRequest {
   courier: DeliveryCourier;

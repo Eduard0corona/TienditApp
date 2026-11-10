@@ -16487,6 +16487,7 @@ export interface components {
         CancelOrderRequest: {
             reason?: string | null;
             restockItems?: boolean | null;
+            atCustomerRequest?: boolean | null;
         };
         CancelTabItemRequest: {
             /** Format: uuid */

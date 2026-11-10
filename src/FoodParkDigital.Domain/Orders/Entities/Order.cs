@@ -663,8 +663,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             OpenTableId = null;
     }
 
-    public void Cancel(IOrderStateMachine stateMachine, string? performedBy, string? reason = null)
-        => CancelAs(stateMachine, performedBy, reason, byCustomer: false);
+    /// <summary>The business cancels it.</summary>
+    /// <param name="atCustomerRequest">
+    /// Its customer asked for it, by phone or by WhatsApp (Fase 31B, ADR 0084): the event says so, for the business's emails.
+    /// </param>
+    public void Cancel(IOrderStateMachine stateMachine, string? performedBy, string? reason = null, bool atCustomerRequest = false)
+        => CancelAs(stateMachine, performedBy, reason, byCustomer: false, atCustomerRequest);
 
     /// <summary>Who the history says cancelled an order its customer cancelled (Fase 29R).</summary>
     public const string CustomerPerformedBy = "Cliente";
@@ -711,11 +715,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (PaidAmount > 0 || WrittenOffAmount > 0)
             throw new DomainException(CustomerCancelPaidMessage);
 
-        CancelAs(stateMachine, CustomerPerformedBy, CustomerCancellationReason, byCustomer: true);
+        CancelAs(stateMachine, CustomerPerformedBy, CustomerCancellationReason, byCustomer: true, atCustomerRequest: false);
         return true;
     }
 
-    private void CancelAs(IOrderStateMachine stateMachine, string? performedBy, string? reason, bool byCustomer)
+    private void CancelAs(IOrderStateMachine stateMachine, string? performedBy, string? reason, bool byCustomer, bool atCustomerRequest)
     {
         if (!stateMachine.CanCancel(Status))
             throw new InvalidOrderStateTransitionException(Status, OrderStatus.Cancelled, BusinessType);
@@ -740,7 +744,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         foreach (var piece in _servicePieces.Where(p => p.Status is ServiceOrderPieceStatus.Accepted or ServiceOrderPieceStatus.InProgress))
             piece.UpdateStatus(ServiceOrderPieceStatus.Cancelled);
 
-        AddDomainEvent(new OrderCancelledEvent(Id, TenantId, previousStatus, reason, byCustomer));
+        AddDomainEvent(new OrderCancelledEvent(Id, TenantId, previousStatus, reason, byCustomer, atCustomerRequest));
     }
 
     /// <summary>A new order is built before its folio is taken (<see cref="AssignNumber"/>).</summary>

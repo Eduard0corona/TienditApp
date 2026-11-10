@@ -37,8 +37,8 @@ internal static class NoticeEmailsChangedEmail
                 : "Ya no te llegan las respuestas de los clientes a las cotizaciones.");
         if (orderCancellationEmails is { } orders)
             changes.Add(orders
-                ? "Ahora te llegan los pedidos en línea que sus clientes cancelan."
-                : "Ya no te llegan los pedidos en línea que sus clientes cancelan.");
+                ? "Ahora te llegan los pedidos en línea que sus clientes cancelan o piden cancelar."
+                : "Ya no te llegan los pedidos en línea que sus clientes cancelan o piden cancelar.");
 
         var subject = $"{who} cambió tus avisos por correo en {business}";
         var profile = app is null ? "Mi perfil de TienditApp" : $"<a href='{app}/profile'>Mi perfil</a>";

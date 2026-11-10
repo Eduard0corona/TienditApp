@@ -22,6 +22,12 @@ public record CancelOrderCommand : IRequest<Result>
     /// already cooked when its app cancels it: then nothing goes back.
     /// </summary>
     public bool RestockItems { get; init; } = true;
+
+    /// <summary>
+    /// Its customer asked for it, by phone or by WhatsApp (Fase 31B, ADR 0084): whoever gets the emails of the online orders
+    /// their customers cancel hears of it, except whoever cancelled it.
+    /// </summary>
+    public bool AtCustomerRequest { get; init; }
 }
 
 public class CancelOrderCommandValidator : AbstractValidator<CancelOrderCommand>
@@ -57,7 +63,7 @@ public class CancelOrderCommandHandler : IRequestHandler<CancelOrderCommand, Res
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 
         var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
-        order.Cancel(stateMachine, _currentUserService.UserName, request.Reason);
+        order.Cancel(stateMachine, _currentUserService.UserName, request.Reason, request.AtCustomerRequest);
         if (request.RestockItems)
             await _orderInventoryService.ReverseConsumptionForOrderAsync(order, request.Reason, cancellationToken);
 

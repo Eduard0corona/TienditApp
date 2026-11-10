@@ -77,7 +77,7 @@ describe('NoticeEmailsCard (Fases 29N and 29O)', () => {
     const orders = await screen.findByRole('switch', { name: 'Pedidos cancelados' });
     await waitFor(() => expect(orders).toBeEnabled());
     expect(orders).not.toBeChecked();
-    expect(orders).toHaveAccessibleDescription('Cada pedido en línea de Estética Luna que su cliente cancela antes de que lo aceptes.');
+    expect(orders).toHaveAccessibleDescription('Cada pedido en línea de Estética Luna que su cliente cancela antes de que lo aceptes, o que alguien más del equipo cancela porque el cliente lo pidió.');
     expect(screen.queryByRole('switch', { name: 'Citas en línea' })).not.toBeInTheDocument();
 
     await user.click(orders);

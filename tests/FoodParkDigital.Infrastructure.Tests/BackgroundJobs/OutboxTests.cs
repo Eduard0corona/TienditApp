@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using FoodParkDigital.Application.Common.Events;
+using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Fiscal.Events;
 using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.OnlinePayments.Events;
@@ -447,6 +448,28 @@ public class OutboxTests
 
         Assert.False(restored.ByCustomer);
         Assert.Equal((current.OrderId, current.Reason), (restored.OrderId, restored.Reason));
+    }
+
+    [Fact]
+    public void CancellationsStoredBeforeTheyCouldSayTheCustomerAsked_ShouldReadAsNotAsked()
+    {
+        // Messages waiting in the outbox during the deploy of Fase 31B (ADR 0084).
+        var cancelled = new OrderCancelledEvent(Guid.NewGuid(), TenantA, OrderStatus.Confirmed, "Llamó", AtCustomerRequest: true);
+        var email = new OrderCancellationEmailEvent(Guid.NewGuid(), Guid.NewGuid(), AtCustomerRequest: true);
+
+        var restoredCancelled = Assert.IsType<OrderCancelledEvent>(WithoutAtCustomerRequest(cancelled));
+        var restoredEmail = Assert.IsType<OrderCancellationEmailEvent>(WithoutAtCustomerRequest(email));
+
+        Assert.Equal((cancelled.OrderId, "Llamó", false, false),
+            (restoredCancelled.OrderId, restoredCancelled.Reason, restoredCancelled.ByCustomer, restoredCancelled.AtCustomerRequest));
+        Assert.Equal((email.OrderId, email.UserId, false), (restoredEmail.OrderId, restoredEmail.UserId, restoredEmail.AtCustomerRequest));
+    }
+
+    private static object WithoutAtCustomerRequest(DomainEvent domainEvent)
+    {
+        var payload = JsonNode.Parse(OutboxEventSerializer.Serialize(domainEvent))!.AsObject();
+        Assert.True(payload.Remove("atCustomerRequest"));
+        return OutboxEventSerializer.Deserialize(OutboxEventSerializer.TypeNameOf(domainEvent), payload.ToJsonString())!;
     }
 
     private sealed class ReceivedCodeRequests

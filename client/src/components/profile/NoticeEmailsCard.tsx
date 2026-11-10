@@ -79,7 +79,7 @@ export default function NoticeEmailsCard({ businessName, agenda, quotes, orders 
                 path={ORDER_CANCELLATION_EMAILS}
                 query={cancellations}
                 label="Pedidos cancelados"
-                description={`Cada pedido en línea${inBusiness} que su cliente cancela antes de que lo aceptes.`}
+                description={`Cada pedido en línea${inBusiness} que su cliente cancela antes de que lo aceptes, o que alguien más del equipo cancela porque el cliente lo pidió.`}
               />
             )}
             {loaded.some((notice) => !notice.emailConfirmed) && (
