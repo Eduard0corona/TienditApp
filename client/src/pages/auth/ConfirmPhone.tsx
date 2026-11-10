@@ -36,6 +36,13 @@ export default function ConfirmPhone() {
   // Coming straight from registration the first code was just sent: wait before offering another one.
   const [cooldown, setCooldown] = useState(() => (routerState?.userId ? RESEND_COOLDOWN_SECONDS : 0));
 
+  // Confirmed, it opens the login after a moment; leaving before that cancels it.
+  useEffect(() => {
+    if (!success) return;
+    const timeoutId = window.setTimeout(() => navigate('/login'), 2000);
+    return () => window.clearTimeout(timeoutId);
+  }, [success, navigate]);
+
   useEffect(() => {
     if (cooldown <= 0) return;
     const timeoutId = window.setTimeout(() => setCooldown((seconds) => seconds - 1), 1000);
@@ -51,7 +58,6 @@ export default function ConfirmPhone() {
     try {
       await authApi.confirmPhone(userId, data.code);
       setSuccess('Número confirmado. Ahora puedes iniciar sesión.');
-      setTimeout(() => navigate('/login'), 2000);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'El código no es válido o ya expiró. Pide uno nuevo.'));
     }
@@ -136,14 +142,18 @@ export default function ConfirmPhone() {
             <div className="form-text">La que elegiste al registrarte: así sabemos que la cuenta es tuya.</div>
           </div>
           <div className="d-flex justify-content-end gap-2">
-            <button type="button" className="btn btn-light" onClick={() => setChangingPhone(false)}>Cancelar</button>
+            <button type="button" className="btn btn-light" onClick={() => setChangingPhone(false)}
+              disabled={changeForm.formState.isSubmitting}>
+              Cancelar
+            </button>
             <button className="btn btn-primary" type="submit" disabled={changeForm.formState.isSubmitting || cooldown > 0}>
-              {cooldown > 0 ? `Espera ${cooldown} s` : 'Enviar código'}
+              {changeForm.formState.isSubmitting ? 'Enviando…' : cooldown > 0 ? `Espera ${cooldown} s` : 'Enviar código'}
             </button>
           </div>
         </form>
       ) : (
-        <form key="confirm" onSubmit={confirmForm.handleSubmit(onSubmit)}>
+        // noValidate, like the other forms: the browser's own check of `pattern` would stop the messages below.
+        <form key="confirm" onSubmit={confirmForm.handleSubmit(onSubmit)} noValidate>
           <div className="mb-3">
             <label htmlFor="code" className="form-label">Código</label>
             <input
@@ -193,7 +203,8 @@ export default function ConfirmPhone() {
                 setInfo('');
                 setChangingPhone(true);
               }}
-              disabled={Boolean(success)}
+              // Not while a code is on its way: its answer would leave the change waiting a minute.
+              disabled={Boolean(success) || resending}
             >
               ¿Número equivocado? Cambiarlo
             </button>

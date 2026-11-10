@@ -3173,6 +3173,69 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - 4 nuevas: Bajas y Recordatorios de citas, en escritorio y teléfono, que no tenían.
     - Para que cumplan el contrato, sus datos simulados usan uuid (las bajas, la plantilla de la cita y las citas de los mensajes) y la configuración trae `creditDueSoonPlaceholders`.
     - De las 94 escenas de Clientes y mensajes, Recordatorios del fiado, el aviso antes de vencer y Cotizaciones, ninguna cambia contra `master` (`bd96f31`), tampoco las 4 nuevas: el formulario de Bajas y el `fieldset` de los recordatorios se ven igual.
+- Fase 30Z, pruebas de la consola de Plataforma y de las pantallas de la cuenta (punto 10; sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Pruebas nuevas:**
+    - `PlatformConsole.test.tsx` (13) monta la consola con la API simulada (la cobranza y las solicitudes falsas tienen sus pruebas). Cubre:
+      - el resumen y cada negocio con su plan, su estado y cuándo vence;
+      - la cobranza con el negocio como lo trae la lista;
+      - la búsqueda al dejar de escribir;
+      - los filtros desde la primera página;
+      - las filas del filtro anterior en `aria-busy`;
+      - la paginación que no pasa del final, y la página que se queda vacía;
+      - los dos textos de lista vacía, solo con lo leído;
+      - la carga anunciada, y los errores con «Reintentar», con y sin lo ya leído.
+    - `AccountRecovery.test.tsx` (18) cubre aceptar una invitación, confirmar el teléfono, recuperar la contraseña por correo o por SMS y restablecerla con el enlace:
+      - las reglas de la contraseña antes de mandar;
+      - lo que contesta el servidor;
+      - los enlaces incompletos;
+      - las esperas para pedir otro código;
+      - cambiar el número;
+      - que nada cambie de canal o de formulario mientras algo va en camino.
+  - **Qué arreglan:**
+    - **Consola de Plataforma:**
+      - La búsqueda mandaba una petición por tecla.
+      - Los errores no se anunciaban ni se podían reintentar.
+      - Decía «No hay negocios con esos filtros.» sin filtros.
+      - Dos clics en «Siguiente» se pasaban del final: «Página 3 de 2» y «no hay negocios».
+      - Si la cobranza sacaba del filtro al último negocio de una página, decía que no había y escondía la paginación.
+      - El texto vacío se adelantaba a la lectura del filtro nuevo.
+      - La búsqueda no tenía el límite de 100 caracteres de la API.
+      - La carga no tenía nombre.
+    - **Confirmar el teléfono:**
+      - La validación del navegador (`pattern`) tapaba los mensajes del código.
+      - Abría el inicio de sesión aunque la persona ya se hubiera ido.
+      - Durante un reenvío se podía abrir «Cambiarlo», que se quedaba un minuto esperando.
+      - Se podía cancelar el cambio de número mientras se mandaba.
+    - **Recuperar la contraseña:**
+      - Dos clics pedían dos códigos.
+      - Se podía cambiar de canal mientras se mandaba, y la respuesta hablaba del otro.
+      - Un reenvío fallido dejaba el aviso anterior.
+    - **Restablecerla:** «Guardando…».
+  - **Mutaciones:** de 31, fallan las pruebas en las 31. Tres sobrevivían al principio:
+    - la paginación, cuya prueba de doble clic no era determinista y ahora espera una lectura pendiente;
+    - el límite de la búsqueda;
+    - una revisión de la página vacía que sobraba (React vuelve a dibujar antes de mostrarla) y se quitó.
+  - **Revisión independiente:**
+    - Encontró como mayor la paginación que se pasaba del final o se quedaba en una página vacía sin forma de volver (venía de antes; el texto nuevo lo hacía más visible).
+    - Como menores encontró:
+      - el texto vacío adelantado;
+      - el cambio de canal durante un envío;
+      - «Cambiarlo» durante un reenvío.
+    - Como detalles encontró:
+      - el «Enviando…» del cambio de número;
+      - títulos de pruebas que prometían más;
+      - un mensaje de servidor que revelaría si la cuenta existe;
+      - el límite de la búsqueda.
+    - Todo quedó corregido con pruebas que fallan sin el arreglo.
+    - Quedan fuera:
+      - el token de una invitación viaja en la consulta de `GET /auth/invitation` y, como el de restablecer, se queda en la barra de direcciones (el `Referrer-Policy` evita que salga en el Referer);
+      - los formularios de la cuenta no ligan sus errores a los campos con `aria-invalid` ni `aria-describedby`;
+      - `ResetPassword` no usa `AuthCard`, como las demás.
+  - **Pruebas que fallan con el código anterior:** 17 de las 31.
+  - **Cliente:**
+    - 239 archivos y 2,048 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las pruebas de Plataforma y de la cuenta pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - Primera visita: 180,386 B de 180,400 B. Su código es el mismo que en `master` (180,398 B): comparé los cuatro archivos normalizando los hashes.
+  - **Escenas:** de las 185 de la consola, la caja, la configuración y las pantallas públicas y de la cuenta, ninguna cambia contra `master` (`5e405f5`).
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

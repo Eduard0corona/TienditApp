@@ -33,6 +33,7 @@ export default function ForgotPassword() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [cooldown, setCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -42,6 +43,8 @@ export default function ForgotPassword() {
 
   const requestForm = useForm<RequestForm>();
   const resetForm = useForm<SmsResetForm>();
+  // While something is on its way, the channel stays: its answer would speak of the other one.
+  const sending = requestForm.formState.isSubmitting || resetForm.formState.isSubmitting || resending;
 
   const chooseChannel = (next: Channel) => {
     setChannel(next);
@@ -85,11 +88,15 @@ export default function ForgotPassword() {
 
   const resend = async () => {
     if (cooldown > 0) return;
+    setResending(true);
     setError('');
+    setInfo('');
     try {
       await requestCode(smsEmail);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo reenviar el código.'));
+    } finally {
+      setResending(false);
     }
   };
 
@@ -112,6 +119,7 @@ export default function ForgotPassword() {
               type="button"
               className={`btn btn-sm ${channel === 'email' ? 'btn-primary' : 'btn-light'}`}
               aria-pressed={channel === 'email'}
+              disabled={sending}
               onClick={() => chooseChannel('email')}
             >
               <i className="ri-mail-line me-1" aria-hidden="true"></i>Por correo
@@ -120,6 +128,7 @@ export default function ForgotPassword() {
               type="button"
               className={`btn btn-sm ${channel === 'sms' ? 'btn-primary' : 'btn-light'}`}
               aria-pressed={channel === 'sms'}
+              disabled={sending}
               onClick={() => chooseChannel('sms')}
             >
               <i className="ri-message-2-line me-1" aria-hidden="true"></i>Por SMS
@@ -173,8 +182,9 @@ export default function ForgotPassword() {
                 <button className="btn btn-primary" type="submit" disabled={resetForm.formState.isSubmitting}>
                   {resetForm.formState.isSubmitting ? 'Guardando…' : 'Guardar contraseña'}
                 </button>
-                <button type="button" className="btn btn-link btn-sm" onClick={() => void resend()} disabled={cooldown > 0}>
-                  {cooldown > 0 ? `Pedir otro código en ${cooldown} s` : '¿No te llegó? Pedir otro código'}
+                {/* It waits for the code on its way: a second click would send two. */}
+                <button type="button" className="btn btn-link btn-sm" onClick={() => void resend()} disabled={cooldown > 0 || resending}>
+                  {resending ? 'Enviando…' : cooldown > 0 ? `Pedir otro código en ${cooldown} s` : '¿No te llegó? Pedir otro código'}
                 </button>
               </div>
             </form>
