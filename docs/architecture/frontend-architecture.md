@@ -430,6 +430,7 @@ Comprar con tu cuenta (Fase 24B, [ADR 0022](../adr/0022-shopping-with-an-account
   - «Entregar en…» (`PostalCodeChip`) pide el código postal una vez, lo recuerda en el dispositivo y lo manda como `postalCode` de la búsqueda. Las tarjetas dicen el envío (`deliveryToPostalCode` en `utils/businessCategories.ts`).
   - Si hay un carrito sin enviar (`latestCart`), ofrece «Seguir con el pedido».
 - **`MyOrders`:** «Pedir otra vez» guarda el pedido como carrito de esa tienda (`linesOfOrder`, `reorderOf`) y la abre.
+- **En vivo** (Fase 31A, [ADR 0083](../adr/0083-my-orders-live.md)): «Mis pedidos» y el detalle de un pedido escuchan `/hubs/my-orders` (`useMyOrdersLive`, con SignalR cargado aparte) y vuelven a leer los pedidos de la cuenta (`['me', 'orders']`) con cada `MyOrderChanged` y al conectarse otra vez. El aviso trae solo el id; la lectura sigue por `/api/v1/me`. Siguen preguntando cada 20 segundos detrás.
 - **Cuenta (`/cuenta`, `pages/account/AccountPage`):** dentro de `CustomerLayout` (`ProtectedRoute` y `AccessRoute` `myOrders`), con el ícono «Mi cuenta» del marco. Muestra los datos de la cuenta con el enlace al perfil y «Tus direcciones», que se agregan y cambian en un diálogo (`AddressDialog`) y se borran con `ConfirmDialog`. Con 10, «Agregar dirección» se apaga. `api/accountApi.ts` las pide.
 - **`utils/savedCart.ts`:** el carrito de cada tienda en `localStorage` (`tienditapp.carts`): sin precios, 7 días, 10 tiendas, 50 líneas y 99 piezas por línea, como el validador del pedido. Un valor que no se lee se ignora.
 - **Escenas:**

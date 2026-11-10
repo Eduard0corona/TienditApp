@@ -163,6 +163,63 @@ public sealed class CrossTenantOrderTrackingSqlServerTests
             .CountAsync(h => h.NewStatus == FoodParkDigital.Domain.Orders.Enums.OrderStatus.Cancelled)));
     }
 
+    [SqlServerFact]
+    public async Task MyOrders_ShouldHearOnlyThatTheirOwnOrdersChanged_ByTheirId()
+    {
+        // Fase 31A (ADR 0083): the hub of an account, without any business in its token.
+        var business = await _api.SignUpAsync("vivo-a", TwoBusinessesApi.FoodBusiness);
+        var tacos = await ProductAsync(business.Client, "Tacos al pastor");
+        await TwoBusinessesApi.IdAsync(business.Client, "/api/v1/cash/open", new { openingAmount = 100m });
+        var slug = await MenuWithOrdersAsync(business.Client);
+        var ana = await _api.SignUpCustomerAsync("vivo-ana");
+        var beto = await _api.SignUpCustomerAsync("vivo-beto");
+        using var stranger = _api.AnonymousClient();
+        var heardByAna = new ConcurrentQueue<JsonElement>();
+        var heardByBeto = new ConcurrentQueue<JsonElement>();
+        await using var anasScreen = await MyOrdersAsync(ana.Client, heardByAna);
+        await using var betosScreen = await MyOrdersAsync(beto.Client, heardByBeto);
+
+        var anasLink = await OrderAsync(ana.Client, slug, tacos);
+        var guestsLink = await OrderAsync(stranger, slug, tacos);
+        var betosLink = await OrderAsync(beto.Client, slug, tacos);
+        var ids = await _api.QueryAsync(business.TenantId, db => db.Orders
+            .Where(o => o.TrackingToken == anasLink || o.TrackingToken == guestsLink || o.TrackingToken == betosLink)
+            .Select(o => new { o.Id, o.TrackingToken })
+            .ToListAsync());
+        var anasId = ids.Single(o => o.TrackingToken == anasLink).Id;
+        var guestsId = ids.Single(o => o.TrackingToken == guestsLink).Id;
+        var betosId = ids.Single(o => o.TrackingToken == betosLink).Id;
+
+        // The business accepts the three, Beto's last, and then prepares Ana's: what reached Ana's screen before that
+        // would have arrived first.
+        foreach (var id in new[] { anasId, guestsId, betosId })
+            Assert.Equal(HttpStatusCode.NoContent, (await business.Client.PutAsJsonAsync($"/api/v1/orders/{id}/status", new { newStatus = 1 })).StatusCode);
+        await WaitUntilAsync(() => heardByBeto.Any(heard => OrderOf(heard) == betosId));
+        var heardBefore = heardByAna.Count;
+        Assert.Equal(HttpStatusCode.NoContent, (await business.Client.PutAsJsonAsync($"/api/v1/orders/{anasId}/status", new { newStatus = 2 })).StatusCode);
+        await WaitUntilAsync(() => heardByAna.Count > heardBefore);
+
+        Assert.NotEmpty(heardByAna);
+        Assert.All(heardByAna, heard => Assert.Equal(anasId, OrderOf(heard)));
+        Assert.All(heardByBeto, heard => Assert.Equal(betosId, OrderOf(heard)));
+        // Only the id travels: nothing of the business or the order.
+        Assert.All(heardByAna.Concat(heardByBeto), heard => Assert.Equal(["orderId"], heard.EnumerateObject().Select(p => p.Name)));
+
+        // Without a session the hub of the accounts does not open.
+        await using var anonymous = _api.Hub("/hubs/my-orders", "");
+        await Assert.ThrowsAnyAsync<Exception>(() => anonymous.StartAsync());
+    }
+
+    private async Task<HubConnection> MyOrdersAsync(HttpClient customer, ConcurrentQueue<JsonElement> heard)
+    {
+        var connection = _api.Hub("/hubs/my-orders", customer.DefaultRequestHeaders.Authorization!.Parameter!);
+        connection.On<JsonElement>("MyOrderChanged", payload => heard.Enqueue(payload.Clone()));
+        await connection.StartAsync();
+        return connection;
+    }
+
+    private static Guid OrderOf(JsonElement heard) => heard.GetProperty("orderId").GetGuid();
+
     private async Task<HubConnection> CancellationsAsync(string accessToken, ConcurrentQueue<(Guid OrderId, bool ByCustomer)> heard)
     {
         var connection = _api.Hub("/hubs/orders", accessToken);

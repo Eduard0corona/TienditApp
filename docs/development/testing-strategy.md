@@ -3236,6 +3236,38 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - 239 archivos y 2,048 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las pruebas de Plataforma y de la cuenta pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
     - Primera visita: 180,386 B de 180,400 B. Su código es el mismo que en `master` (180,398 B): comparé los cuatro archivos normalizando los hashes.
   - **Escenas:** de las 185 de la consola, la caja, la configuración y las pantallas públicas y de la cuenta, ninguna cambia contra `master` (`5e405f5`).
+- Fase 31A, «Mis pedidos» se entera al momento (punto 13; [ADR 0083](../adr/0083-my-orders-live.md)):
+  - **Backend:**
+    - `CustomerOrderCancellationTests`:
+      - la cuenta oye una vez cada cambio de su pedido (creado, un cambio de estado, cancelado y salió), solo por su id, y otra cuenta nada;
+      - un evento con otro negocio, o con otro negocio en contexto, no avisa (falla cerrado);
+      - si el hub de las cuentas falla, las pantallas del negocio se enteran igual, y al revés.
+    - `CourierSettlementFlowTests`: una venta de mostrador no avisa a ninguna cuenta.
+    - `HubAccessSweeperTests`: una conexión de la cuenta sigue mientras su sesión está abierta, sin negocio en su token o con uno que ya le quitó el acceso, y se cierra al salir. El acceso a un negocio solo se lee para las conexiones del equipo.
+    - `CrossTenantOrderTrackingSqlServerTests` (SQL Server y WebSockets): dos clientes y un invitado piden en el mismo negocio. Cada cuenta oye solo el id de sus pedidos cuando el negocio los acepta y prepara, el del invitado no llega a nadie, y sin sesión el hub no abre.
+  - **Cliente:**
+    - `useMyOrdersLive.test.tsx` (4): vuelve a leer los pedidos de la cuenta con cada aviso y al conectarse, nada de un negocio; no conecta si la pantalla se fue antes de que llegara SignalR; deja de escuchar al salir.
+    - `MyOrders.test.tsx` y `MyOrderPage.test.tsx` (+1 cada una): las dos pantallas escuchan.
+  - **Mutaciones:**
+    - Cliente: de 8, fallan las pruebas en las 8.
+    - Backend: de 8, fallan las pruebas en las 8. Son las que la revisión encontró sin detectar: quitar el aviso de cada evento, el filtro del negocio del evento o la captura de errores, y saltarse o invertir la revisión del acceso en el barrido.
+  - **Revisión independiente, con foco en seguridad:** sin bloqueantes ni mayores. No hay fuga entre cuentas ni entre negocios, y el barrido sigue revisando las conexiones del equipo (lo probó con mutaciones). Encontró:
+    - `SECURITY.md` y `multi-tenancy.md`, que seguían diciendo que todos los hubs agrupan por negocio;
+    - pruebas del manejador que no fallaban al quitar el aviso de un evento, el filtro del negocio del evento o la captura de errores;
+    - el ADR, que decía que el pedido se lee «del negocio del evento» cuando también depende del de contexto;
+    - el límite de conexiones de `/hubs`;
+    - detalles de pruebas: el desmontaje antes de que llegue SignalR y una cuenta del equipo que abre «Mis pedidos».
+
+    Todo quedó corregido o anotado; las pruebas fallan sin el arreglo.
+  - **Quedan fuera** (en el ADR y la deuda técnica):
+    - el seguimiento con el enlace sigue preguntando cada 20 segundos;
+    - sin avisos en el navegador;
+    - los pagos, los platillos de una cuenta abierta y un pedido ligado después no avisan;
+    - `/hubs` no limita conexiones por cuenta.
+  - **Verificación:**
+    - `dotnet build` y `dotnet test` de la solución, con SQL Server: 1,440 + 2,220 + 513 + 711 pruebas en verde, 7 omitidas.
+    - Cliente: 240 archivos y 2,053 pruebas, lint, `tsc`, `visual:typecheck` y build en verde.
+    - Primera visita: 180,390 B de 180,400 B; `vendor-signalr` sigue fuera de ella y el hook va en un chunk que solo cargan «Mis pedidos» y el detalle.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

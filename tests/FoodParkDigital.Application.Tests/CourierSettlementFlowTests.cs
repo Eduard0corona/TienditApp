@@ -233,11 +233,14 @@ public class CourierSettlementFlowTests
         var sale = await SellAsync(fixture, Delivery(tacos));
         await DispatchAsync(fixture, sale.Value.Id, "PQ1234", null, collectsCash: true, paysWith: null);
         var realtime = new RecordingOrderNotifications();
-        var handler = new OrderRealtimeNotifications(fixture.Context, realtime, NullLogger<OrderRealtimeNotifications>.Instance);
+        var accounts = new RecordingCustomerOrders();
+        var handler = new OrderRealtimeNotifications(fixture.Context, realtime, accounts, NullLogger<OrderRealtimeNotifications>.Instance);
 
         await handler.Handle(Assert.Single(mediator.Published.OfType<OrderDeliveryUpdatedEvent>()), CancellationToken.None);
 
         Assert.Equal([(tenant.Id, sale.Value.Id)], realtime.Updated);
+        // A sale at the counter belongs to no account: nobody else hears it.
+        Assert.Empty(accounts.Changed);
     }
 
     [Fact]

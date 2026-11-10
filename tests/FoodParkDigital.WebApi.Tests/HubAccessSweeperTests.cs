@@ -62,6 +62,44 @@ public class HubAccessSweeperTests
         Assert.True(connection.Aborted);
     }
 
+    [Fact]
+    public async Task AccountConnections_ShouldStayWhileTheirSessionIsOpen_WithoutAnyBusiness()
+    {
+        // Fase 31A (ADR 0083): «Mis pedidos» of a customer, whose token names no business.
+        var customer = Guid.NewGuid();
+        var open = AccountConnection(customer, Guid.NewGuid());
+        var signedOut = AccountConnection(customer, Guid.NewGuid());
+        // Someone of a team opens «Mis pedidos» too: their token names their business, which took their access away.
+        var cashier = Guid.NewGuid();
+        var staff = Connection(cashier, Guid.NewGuid());
+        var cashiersOrders = Connection(cashier, Guid.NewGuid());
+        var access = new FakeAccess();
+        var (sweeper, connections) = Sweeper(new FakeSessions(closed: SessionOf(signedOut)), access, staff);
+        connections.AddAccount(open);
+        connections.AddAccount(signedOut);
+        connections.AddAccount(cashiersOrders);
+
+        var closed = await sweeper.SweepAsync(CancellationToken.None);
+
+        // The staff connection lost its permission; the account ones keep theirs while their session is open.
+        Assert.Equal(2, closed);
+        Assert.False(open.Aborted);
+        Assert.False(cashiersOrders.Aborted);
+        Assert.True(signedOut.Aborted);
+        Assert.True(staff.Aborted);
+        Assert.Equal(new[] { open.ConnectionId, cashiersOrders.ConnectionId }.Order(),
+            connections.Snapshot().Select(c => c.Context.ConnectionId).Order());
+        // The business access is read for the staff connection only, though the cashier's other one names it too.
+        Assert.Equal(1, access.Reads);
+    }
+
+    private static FakeContext AccountConnection(Guid userId, Guid sessionId) => new(new ClaimsPrincipal(new ClaimsIdentity(
+    [
+        new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+        new Claim(ClaimTypes.Role, "CUSTOMER"),
+        new Claim(SessionClaims.SessionId, sessionId.ToString())
+    ], authenticationType: "Test")));
+
     private static (HubAccessSweeper Sweeper, HubConnections Connections) Sweeper(
         IAccessTokenSessionValidator sessions,
         ITenantAccessService access,
