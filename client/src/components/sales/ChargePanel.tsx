@@ -512,7 +512,7 @@ export default function ChargePanel({
         </p>
       )}
 
-      {(localError || error) && <div className="alert alert-danger py-2 mt-2 mb-0">{localError || error}</div>}
+      {(localError || error) && <div className="alert alert-danger py-2 mt-2 mb-0" role="alert">{localError || error}</div>}
 
       <div className="charge-actions mt-3">
         <button type="button" className="btn btn-light btn-touch" onClick={onCancel} disabled={submitting}>

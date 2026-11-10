@@ -32,6 +32,11 @@ interface DataTableProps<T> {
   serverSide?: ServerSideConfig;
   loading?: boolean;
   emptyMessage?: string;
+  /**
+   * The list could not be read: says so instead of the empty message, also with something in the search box (where «No
+   * se encontraron resultados» would say the search found nothing).
+   */
+  failedMessage?: string;
   pageSizeOptions?: number[];
   searchPlaceholder?: string;
   /** Text already in the search box: a search that came in the link, or the one the page kept while another tab was open. */
@@ -77,6 +82,7 @@ export default function DataTable<T>({
   serverSide,
   loading = false,
   emptyMessage = 'Todavía no hay nada aquí.',
+  failedMessage,
   pageSizeOptions = DEFAULT_PAGE_SIZES,
   searchPlaceholder = 'Buscar…',
   initialSearch = '',
@@ -224,7 +230,7 @@ export default function DataTable<T>({
         </div>
       ) : displayData.length === 0 ? (
         <div className="text-center py-4">
-          <p className="text-muted mb-0">{search ? 'No se encontraron resultados.' : emptyMessage}</p>
+          <p className="text-muted mb-0">{failedMessage ?? (search ? 'No se encontraron resultados.' : emptyMessage)}</p>
         </div>
       ) : (
         <div className="table-responsive" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
