@@ -84,7 +84,9 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
         Status = status;
     }
 
-    public void AssignTo(Guid userId, string? userName, DateTimeOffset assignedAt)
+    // Assigning and releasing are internal: they go through Order.AssignServicePiece and Order.ReleaseServicePiece, which
+    // mark the order row so the save checks its row version (the piece has no concurrency token of its own).
+    internal void AssignTo(Guid userId, string? userName, DateTimeOffset assignedAt)
     {
         if (Status is ServiceOrderPieceStatus.Completed or ServiceOrderPieceStatus.Cancelled)
             throw new DomainException("No se puede asignar una pieza completada o cancelada.");
@@ -94,7 +96,7 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
         AssignedAt = assignedAt;
     }
 
-    public void ReleaseAssignment()
+    internal void ReleaseAssignment()
     {
         // Who worked a closed piece is part of its history: releasing it would erase it.
         if (Status is ServiceOrderPieceStatus.Completed or ServiceOrderPieceStatus.Cancelled)

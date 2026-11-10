@@ -480,11 +480,42 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public void ChangeServicePieceStatus(ServiceOrderPiece piece, ServiceOrderPieceStatus newStatus, DateTimeOffset changedAt)
     {
-        if (!_servicePieces.Contains(piece))
-            throw new DomainException("La pieza indicada no existe dentro de la orden.");
+        EnsureOwnServicePiece(piece);
 
         piece.UpdateStatus(newStatus);
         UpdatedAt = changedAt;
+    }
+
+    /// <summary>
+    /// Assigns a piece of the service board through the aggregate root, like <see cref="ChangeServicePieceStatus"/>: the
+    /// order row is marked as changed so the save checks its row version. A piece completed, cancelled or taken by someone
+    /// else meanwhile then conflicts instead of being assigned from a stale copy.
+    /// </summary>
+    public void AssignServicePiece(ServiceOrderPiece piece, Guid userId, string? userName, DateTimeOffset assignedAt)
+    {
+        EnsureOwnServicePiece(piece);
+
+        piece.AssignTo(userId, userName, assignedAt);
+        UpdatedAt = assignedAt;
+    }
+
+    /// <summary>
+    /// Releases a piece of the service board through the aggregate root, like <see cref="ChangeServicePieceStatus"/>: the
+    /// order row is marked as changed so the save checks its row version. A piece completed meanwhile then conflicts
+    /// instead of losing who worked it to a release decided on a stale copy.
+    /// </summary>
+    public void ReleaseServicePiece(ServiceOrderPiece piece, DateTimeOffset releasedAt)
+    {
+        EnsureOwnServicePiece(piece);
+
+        piece.ReleaseAssignment();
+        UpdatedAt = releasedAt;
+    }
+
+    private void EnsureOwnServicePiece(ServiceOrderPiece piece)
+    {
+        if (!_servicePieces.Contains(piece))
+            throw new DomainException("La pieza indicada no existe dentro de la orden.");
     }
 
     public const string PhotosOnlyForServicesMessage = "Solo una orden de servicio lleva fotos.";
