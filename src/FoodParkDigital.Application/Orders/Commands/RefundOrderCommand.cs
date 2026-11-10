@@ -12,9 +12,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
-/// <summary>Gives money back for an order, optionally for returned units that go back to inventory.</summary>
+/// <summary>
+/// Gives money back for an order, optionally for returned units that go back to inventory. One transaction (Fase 31G): the
+/// refund, the drawer, the balance and the folio of the return are saved together or not at all.
+/// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record RefundOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions
+public record RefundOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions, ITransactionalRequest
 {
     public Guid OrderId { get; init; }
     public decimal Amount { get; init; }

@@ -211,6 +211,9 @@ public class OrderInventoryService : IOrderInventoryService
         var shortages = await CheckShortagesAsync(order.TenantId, groupedConsumptions, supplies, stockByKey, shortageHandling, cancellationToken);
 
         var movementDate = _dateTimeProvider.UtcNow;
+        if (await PostedMeanwhileAsync(order.TenantId, externalReference, movementDate, cancellationToken))
+            return NoShortages;
+
         var movement = new InventoryMovement(
             tenantId: order.TenantId,
             movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
@@ -341,6 +344,9 @@ public class OrderInventoryService : IOrderInventoryService
         var shortages = await CheckShortagesAsync(order.TenantId, groupedConsumptions, supplies, stockByKey, shortageHandling, cancellationToken);
 
         var movementDate = _dateTimeProvider.UtcNow;
+        if (await PostedMeanwhileAsync(order.TenantId, externalReference, movementDate, cancellationToken))
+            return NoShortages;
+
         var movement = new InventoryMovement(
             tenantId: order.TenantId,
             movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
@@ -443,6 +449,9 @@ public class OrderInventoryService : IOrderInventoryService
             x => x);
 
         var movementDate = _dateTimeProvider.UtcNow;
+        if (await PostedMeanwhileAsync(order.TenantId, reversalExternalReference, movementDate, cancellationToken))
+            return;
+
         var reversalMovement = new InventoryMovement(
             tenantId: order.TenantId,
             movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
@@ -543,6 +552,21 @@ public class OrderInventoryService : IOrderInventoryService
             }
         }
 
+        var lines = new List<(Guid SupplyItemId, Guid InventoryLocationId, decimal Quantity, decimal? UnitCost)>();
+        foreach (var ((supplyItemId, locationId), requested) in toReturn)
+        {
+            if (!consumedByKey.TryGetValue((supplyItemId, locationId), out var consumed))
+                continue;
+
+            var quantity = Math.Min(requested, consumed.Quantity);
+            if (quantity > 0)
+                lines.Add((supplyItemId, locationId, quantity, consumed.UnitCost));
+        }
+
+        // The folio is taken only when something comes back (Fase 31G): a recipe changed since the sale may return nothing.
+        if (lines.Count == 0)
+            return;
+
         var movementDate = _dateTimeProvider.UtcNow;
         var movement = new InventoryMovement(
             tenantId: order.TenantId,
@@ -554,22 +578,15 @@ public class OrderInventoryService : IOrderInventoryService
             externalReference: returnExternalReference,
             notes: $"Devolución de la orden {order.OrderNumber}: {refund.Reason}");
 
-        var supplyIds = toReturn.Keys.Select(k => k.SupplyItemId).Distinct().ToList();
-        var locationIds = toReturn.Keys.Select(k => k.InventoryLocationId).Distinct().ToList();
+        var supplyIds = lines.Select(x => x.SupplyItemId).Distinct().ToList();
+        var locationIds = lines.Select(x => x.InventoryLocationId).Distinct().ToList();
         var stocks = await _context.InventoryStocks
             .Where(x => x.TenantId == order.TenantId && supplyIds.Contains(x.SupplyItemId) && locationIds.Contains(x.InventoryLocationId))
             .ToListAsync(cancellationToken);
         var stockByKey = stocks.ToDictionary(x => (x.SupplyItemId, x.InventoryLocationId), x => x);
 
-        foreach (var ((supplyItemId, locationId), requested) in toReturn)
+        foreach (var (supplyItemId, locationId, quantity, unitCost) in lines)
         {
-            if (!consumedByKey.TryGetValue((supplyItemId, locationId), out var consumed))
-                continue;
-
-            var quantity = Math.Min(requested, consumed.Quantity);
-            if (quantity <= 0)
-                continue;
-
             if (!stockByKey.TryGetValue((supplyItemId, locationId), out var stock))
             {
                 stock = new InventoryStock(order.TenantId, supplyItemId, locationId);
@@ -578,21 +595,18 @@ public class OrderInventoryService : IOrderInventoryService
             }
 
             var quantityBefore = stock.OnHandQuantity;
-            stock.ApplyMovement(quantity, consumed.UnitCost, movementDate, allowNegative: true);
+            stock.ApplyMovement(quantity, unitCost, movementDate, allowNegative: true);
             var line = movement.AddLine(
                 tenantId: order.TenantId,
                 supplyItemId: supplyItemId,
                 inventoryLocationId: locationId,
                 quantity: quantity,
-                unitCost: consumed.UnitCost,
+                unitCost: unitCost,
                 lotNumber: null,
                 expirationDate: null,
                 notes: $"Devolución de la orden {order.OrderNumber}");
             line.SetBalances(quantityBefore, stock.OnHandQuantity);
         }
-
-        if (movement.Lines.Count == 0)
-            return;
 
         movement.RecalculateTotalAmount();
         _context.InventoryMovements.Add(movement);
@@ -733,6 +747,27 @@ public class OrderInventoryService : IOrderInventoryService
             order.Id,
             cancellation.Id,
             movement.MovementNumber);
+    }
+
+    /// <summary>
+    /// Right before taking the folio of the movement named by <paramref name="externalReference"/>: waits at the counter of
+    /// the inventory folios of <paramref name="movementDate"/>'s day, the lock the folio takes next, held to the end of the
+    /// request's transaction (Fase 31G), and tells whether that movement was posted meanwhile. Two requests moving the same
+    /// order at once (two «Confirmar», a piece completed twice) both find it missing at first: the second one waits here
+    /// until the first ends, finds it, and does not post it again, where the unique index of the reference would have
+    /// answered 500. Its order changed meanwhile, so its save meets the conflict and, where the command retries, it reruns
+    /// on what the first one left. The lock is taken where the folio took it before, so no request waits for it longer or
+    /// in another order.
+    /// </summary>
+    private async Task<bool> PostedMeanwhileAsync(
+        Guid tenantId,
+        string externalReference,
+        DateTimeOffset movementDate,
+        CancellationToken cancellationToken)
+    {
+        await _folios.HoldInventoryMovementNumbersAsync(tenantId, movementDate, cancellationToken);
+        return await _context.InventoryMovements
+            .AnyAsync(x => x.TenantId == tenantId && x.ExternalReference == externalReference, cancellationToken);
     }
 
     /// <summary>

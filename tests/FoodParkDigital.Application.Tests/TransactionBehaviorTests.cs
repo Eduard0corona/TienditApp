@@ -156,6 +156,115 @@ public class TransactionBehaviorTests
     }
 
     [Fact]
+    public async Task ConcurrencyConflict_ShouldRunARetryingCommandAgain_FromAnUndoneTransaction()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var attempts = new List<Guid>();
+
+        // Like a status change whose save meets the order changed by someone else: what it saved before the conflict
+        // (the folio of its movement, in production) is undone with the transaction, and the next attempt starts over.
+        var result = await host.InScopeAsync(services => Run(services, new RetryingSave(), async context =>
+        {
+            var tenant = NewTenant();
+            attempts.Add(tenant.Id);
+            Save(context, tenant);
+            await context.SaveChangesAsync();
+            if (attempts.Count == 1)
+                throw new DbUpdateConcurrencyException("Otro proceso cambió la fila.");
+            return Result.Success();
+        }));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, attempts.Count);
+        Assert.Equal(new[] { attempts[1] }, await host.QueryAsync(c => c.Tenants.Select(t => t.Id).ToListAsync()));
+        Assert.Equal(attempts[1], Assert.Single(host.Mediator.Published.OfType<TenantSaved>()).TenantId);
+    }
+
+    [Fact]
+    public async Task ConflictOnEveryAttempt_ShouldLeaveNothing_AndAnswerTheCommandsMessage()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var attempts = 0;
+
+        var result = await host.InScopeAsync(services => Run(services, new RetryingSave(), async context =>
+        {
+            attempts++;
+            Save(context, NewTenant());
+            await context.SaveChangesAsync();
+            throw new DbUpdateConcurrencyException("Otro proceso cambió la fila.");
+        }));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(RetryingSave.Message, result.Error);
+        Assert.Equal(TransactionBehavior<RetryingSave, Result>.MaxConcurrencyAttempts, attempts);
+        Assert.False(await host.QueryAsync(c => c.Tenants.AnyAsync()));
+        Assert.Empty(host.Mediator.Published);
+    }
+
+    [Fact]
+    public async Task ConflictOnEveryAttempt_WithoutAMessage_ShouldLetTheConflictThrough()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => host.InScopeAsync(services =>
+            Run(services, new RetryingSaveWithoutMessage(), async context =>
+            {
+                attempts++;
+                Save(context, NewTenant());
+                await context.SaveChangesAsync();
+                throw new DbUpdateConcurrencyException("Otro proceso cambió la fila.");
+            })));
+
+        Assert.Equal(TransactionBehavior<RetryingSaveWithoutMessage, Result>.MaxConcurrencyAttempts, attempts);
+        Assert.False(await host.QueryAsync(c => c.Tenants.AnyAsync()));
+        Assert.Empty(host.Mediator.Published);
+    }
+
+    [Fact]
+    public async Task ConcurrencyConflict_OfACommandThatDoesNotRetry_ShouldUndoItOnce()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var attempts = 0;
+
+        // Like voiding a sale: it answers 409, and the person sees the sale as someone else left it.
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => host.InScopeAsync(services =>
+            Run(services, new SaveTenant(), async context =>
+            {
+                attempts++;
+                Save(context, NewTenant());
+                await context.SaveChangesAsync();
+                throw new DbUpdateConcurrencyException("Otro proceso cambió la fila.");
+            })));
+
+        Assert.Equal(1, attempts);
+        Assert.False(await host.QueryAsync(c => c.Tenants.AnyAsync()));
+    }
+
+    [Fact]
+    public async Task ConcurrencyConflict_InsideItsCallersTransaction_ShouldNotBeRetriedThere()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var attempts = 0;
+
+        // Only the unit of work that opened the transaction can start it over.
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => host.InScopeAsync(services =>
+        {
+            var context = services.GetRequiredService<IApplicationDbContext>();
+            return context.ExecuteInResilientTransactionAsync(_ => Run(services, new RetryingSave(), async inner =>
+            {
+                attempts++;
+                Save(inner, NewTenant());
+                await inner.SaveChangesAsync();
+                throw new DbUpdateConcurrencyException("Otro proceso cambió la fila.");
+            }), CancellationToken.None);
+        }));
+
+        Assert.Equal(1, attempts);
+        Assert.False(await host.QueryAsync(c => c.Tenants.AnyAsync()));
+    }
+
+    [Fact]
     public async Task OnlyTransactionalCommandsAnsweredWithAResult_ShouldGetTheBehavior()
     {
         await using var host = await SqliteTestHost.CreateAsync();
@@ -189,10 +298,14 @@ public class TransactionBehaviorTests
     }
 
     private static Task<Result> Run(IServiceProvider services, Func<IApplicationDbContext, Task<Result>> handler)
+        => Run(services, new SaveTenant(), handler);
+
+    private static Task<Result> Run<TRequest>(IServiceProvider services, TRequest request, Func<IApplicationDbContext, Task<Result>> handler)
+        where TRequest : ITransactionalRequest
     {
         var context = services.GetRequiredService<IApplicationDbContext>();
-        return new TransactionBehavior<SaveTenant, Result>(context)
-            .Handle(new SaveTenant(), () => handler(context), CancellationToken.None);
+        return new TransactionBehavior<TRequest, Result>(context)
+            .Handle(request, () => handler(context), CancellationToken.None);
     }
 
     private static Tenant NewTenant()
@@ -208,6 +321,15 @@ public class TransactionBehaviorTests
     }
 
     private sealed record SaveTenant : IRequest<Result>, ITransactionalRequest;
+
+    private sealed record RetryingSave : IRequest<Result>, IRetryOnConcurrencyConflict
+    {
+        public const string Message = "Alguien más lo cambió; intenta de nuevo.";
+
+        string? IRetryOnConcurrencyConflict.ConcurrencyConflictMessage => Message;
+    }
+
+    private sealed record RetryingSaveWithoutMessage : IRequest<Result>, IRetryOnConcurrencyConflict;
 
     private sealed record ReadTenant : IRequest<Result>;
 

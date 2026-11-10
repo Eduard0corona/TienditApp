@@ -14,10 +14,12 @@ namespace FoodParkDigital.Application.Orders.Commands;
 /// <summary>
 /// Voids a paid sale in one step: refunds what is left of each payment with its own method, returns every
 /// unit not returned yet and cancels the order when its state allows it. A delivered or completed order
-/// cannot be cancelled: it stays in its state, fully refunded.
+/// cannot be cancelled: it stays in its state, fully refunded. One transaction (Fase 31G): every refund, the cancellation and
+/// the folios of the inventory are saved together or not at all. Not run again on a conflict, as before: it answers 409, and
+/// the person sees the sale as someone else left it before voiding it.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record VoidOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions
+public record VoidOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions, ITransactionalRequest
 {
     public Guid OrderId { get; init; }
     public string Reason { get; init; } = string.Empty;

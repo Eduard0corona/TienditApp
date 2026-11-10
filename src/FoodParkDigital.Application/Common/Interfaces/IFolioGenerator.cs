@@ -2,7 +2,8 @@ namespace FoodParkDigital.Application.Common.Interfaces;
 
 /// <summary>
 /// The next folio of a business. Two documents never get the same one, even from two cash registers at the same
-/// time; a request that fails after taking its folio may leave a gap.
+/// time. Inside the transaction of its request (every command that takes one runs in one, ArchitectureTests) a request
+/// that fails after taking its folio gives it back; outside one it would leave a gap.
 /// </summary>
 public interface IFolioGenerator
 {
