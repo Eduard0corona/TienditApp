@@ -35,4 +35,17 @@ public class Category : AuditableEntity, ITenantScoped
 
     public void Deactivate() => IsActive = false;
     public void Activate() => IsActive = true;
+
+    /// <summary>
+    /// What makes two names the same category of a business: without the spaces at its ends, with one space wherever
+    /// there were several (tabs and line breaks too) and without capitals. Accents count: «Café» and «Cafe» are two.
+    /// </summary>
+    public static string NameKey(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var words = name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(' ', words).ToLowerInvariant();
+    }
 }
