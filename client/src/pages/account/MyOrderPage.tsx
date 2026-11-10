@@ -6,6 +6,7 @@ import PageTitle from '../../components/common/PageTitle';
 import CancelOrderButton from '../../components/tracking/CancelOrderButton';
 import OrderItemsSummary from '../../components/tracking/OrderItemsSummary';
 import OrderTimeline, { OrderStepChip } from '../../components/tracking/OrderTimeline';
+import { useMyOrdersLive } from '../../hooks/useMyOrdersLive';
 import { useOrderAgain } from '../../hooks/useOrderAgain';
 import { OrderTrackingStep } from '../../types';
 import { formatDateTime } from '../../utils/dates';
@@ -22,6 +23,8 @@ export default function MyOrderPage() {
   const orderAgain = useOrderAgain();
   const queryClient = useQueryClient();
   const queryKey = ['me', 'orders', 'detail', id];
+  // A change of the order arrives at once (Fase 31A); the polling below stays behind it.
+  useMyOrdersLive();
   const orderQuery = useQuery({
     queryKey,
     queryFn: ({ signal }) => accountApi.getOrder(id, signal),

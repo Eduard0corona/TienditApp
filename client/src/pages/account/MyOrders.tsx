@@ -7,6 +7,7 @@ import PageTitle from '../../components/common/PageTitle';
 import ReviewButton from '../../components/reviews/ReviewButton';
 import ReviewDialog, { type ReviewedBusiness } from '../../components/reviews/ReviewDialog';
 import { OrderStepChip } from '../../components/tracking/OrderTimeline';
+import { useMyOrdersLive } from '../../hooks/useMyOrdersLive';
 import { useMyReviews } from '../../hooks/useMyReviews';
 import { useOrderAgain } from '../../hooks/useOrderAgain';
 import { MyOrdersScope, OrderStatus, OrderTrackingStep } from '../../types';
@@ -101,6 +102,8 @@ export default function MyOrders() {
   const orderAgain = useOrderAgain();
   const myReviews = useMyReviews();
   const queryClient = useQueryClient();
+  // A change of an order arrives at once (Fase 31A); the polling below stays behind it.
+  useMyOrdersLive();
   const inProgressQuery = useQuery({
     queryKey: ['me', 'orders', 'in-progress'],
     queryFn: ({ signal }) => accountApi.getOrders(MyOrdersScope.InProgress, 1, IN_PROGRESS_PAGE_SIZE, signal),

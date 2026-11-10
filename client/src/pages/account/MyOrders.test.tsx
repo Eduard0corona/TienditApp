@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../../api/typedClient';
+import { useMyOrdersLive } from '../../hooks/useMyOrdersLive';
 import { MyOrdersScope, OrderStatus, OrderTrackingStep, OrderType } from '../../types';
 import { readCart, saveCart } from '../../utils/savedCart';
 import MyOrders from './MyOrders';
@@ -13,6 +14,8 @@ vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { tit
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: () => toast }));
+// The live channel has its own tests (useMyOrdersLive): here, that the screen listens to it.
+vi.mock('../../hooks/useMyOrdersLive', () => ({ useMyOrdersLive: vi.fn() }));
 
 const request = vi.mocked(apiRequest);
 
@@ -195,6 +198,15 @@ describe('MyOrders', () => {
 
     expect(await screen.findByText('Todavía no tienes pedidos')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'En curso' })).not.toBeInTheDocument();
+  });
+
+  it('hears at once that an order of the account changed (Fase 31A)', async () => {
+    request.mockImplementation(((_method: string, path: string) => Promise.resolve(path === MY_REVIEWS ? [] : pageOf([]))) as never);
+
+    renderOrders();
+
+    await screen.findByText('Todavía no tienes pedidos');
+    expect(useMyOrdersLive).toHaveBeenCalled();
   });
 
   it('rates the business of an order received, and says «Tu reseña» where the account already rated it', async () => {

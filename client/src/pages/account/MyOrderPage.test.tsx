@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../../api/typedClient';
+import { useMyOrdersLive } from '../../hooks/useMyOrdersLive';
 import { OrderStatus, OrderTrackingStep, OrderTrackingStepState, OrderType } from '../../types';
 import { readCart } from '../../utils/savedCart';
 import MyOrderPage from './MyOrderPage';
@@ -16,6 +17,8 @@ const dialogs = vi.hoisted(() => ({ confirm: vi.fn() }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => dialogs }));
 vi.mock('../../hooks/useToast', () => ({ useToast: () => toast }));
+// The live channel has its own tests (useMyOrdersLive): here, that the screen listens to it.
+vi.mock('../../hooks/useMyOrdersLive', () => ({ useMyOrdersLive: vi.fn() }));
 
 const request = vi.mocked(apiRequest);
 
@@ -98,6 +101,15 @@ describe('MyOrderPage', () => {
     expect(screen.getByRole('list', { name: 'Seguimiento del pedido' })).toBeInTheDocument();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('hears at once that the order changed (Fase 31A)', async () => {
+    request.mockResolvedValue(detail() as never);
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'Mis pedidos › Pedido T-1042' })).toBeInTheDocument();
+    expect(useMyOrdersLive).toHaveBeenCalled();
   });
 
   it('does not ask again for an order that is over', async () => {

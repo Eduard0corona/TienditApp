@@ -186,7 +186,7 @@ Una persona puede ser dueña de un negocio y empleada en otro, con una sola cuen
 
 - `SUPER_ADMIN` tiene todos los permisos en cualquier negocio (no los módulos). `UpdateOwnerWhatsAppConfigCommand` (WhatsApp personal de la cuenta, sin negocio) todavía compara el rol de la cuenta en el handler.
 - La autorización por recurso (por ejemplo, cerrar solo la caja propia) sigue en los handlers, con la membresía de `CurrentAccessContext`.
-- Una conexión SignalR ya abierta sigue hasta que vence su token aunque su sesión termine (los access tokens y las conexiones nuevas se rechazan al instante).
+- Una conexión SignalR ya abierta se cierra en el siguiente barrido (`HubAccessSweeper`, cada 30 segundos) cuando su sesión termina o pierde el acceso que su hub pide; los access tokens y las conexiones nuevas se rechazan al instante. El hub de la cuenta del cliente solo revisa la sesión ([ADR 0083](../adr/0083-my-orders-live.md)).
 - El login todavía distingue cuentas sin confirmar o bloqueadas (el bloqueo por intentos ya existe desde la Fase 4E).
 - La lista del equipo (`GET /employees`) es de dueños y admins: la agenda la usa para elegir quién atiende y el personal con `ManageAppointments` no la ve.
 - La matriz se prueba por caso de uso (`UseCaseRulesTests`, `AuthorizationBehaviorTests`) y la Fase 5 la comprobó contra la API con SQL Server (cocina, mesero y dueño); esa prueba de API no corre en CI.

@@ -56,7 +56,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - Un cliente anterior, sin llave del pedido, todavía puede registrar dos veces el mismo pedido.
   - La 24B suma 125 B a la primera visita (de 177,136 a 177,261 B, contra `master` en `d7e54f5`) y sube el presupuesto a 177,400 B.
 - Seguimiento (Fase 24C, [ADR 0023](../adr/0023-order-tracking.md)):
-  - El cliente se entera de un cambio con hasta 20 segundos de retraso: las pantallas vuelven a preguntar, no hay SignalR para clientes ni avisos en el navegador.
+  - El seguimiento con el enlace se entera de un cambio con hasta 20 segundos de retraso: vuelve a preguntar. Desde la Fase 31A «Mis pedidos» y el detalle de la cuenta se enteran al momento por su hub ([ADR 0083](../adr/0083-my-orders-live.md)). Faltan el enlace en vivo (pide mandarlo por el canal y limitar los intentos) y los avisos en el navegador.
   - El enlace de seguimiento es el secreto: quien lo tenga ve el pedido durante 30 días, y no se puede revocar ni volver a emitir. Se guarda tal cual; guardarlo como hash quitaría además la nota de las mayúsculas.
   - El enlace no llega por WhatsApp: un invitado que cierra el recibo sin abrirlo, copiarlo ni guardarlo lo pierde.
   - `rollback.sql` no se detiene si hay enlaces emitidos: los quita y dejan de abrir (está en su encabezado).
@@ -663,6 +663,7 @@ Pendientes detectados en la Fase 2:
 - `OutgoingMessages` no tiene retención y las campañas no respetan horario de envío.
 - Pantallas aún sin TanStack Query ni tipos generados; conviven tipos manuales (`src/types`) y generados.
 - La actualización de pantallas por SignalR sigue siendo best-effort.
+- `/hubs` no limita las conexiones por cuenta ni su frecuencia. Desde la Fase 31A el hub de la cuenta (`/hubs/my-orders`, [ADR 0083](../adr/0083-my-orders-live.md)) recibe cuentas de cliente que se registran solas: es un riesgo de recursos, no de aislamiento (cada conexión solo oye los pedidos de su cuenta).
 
 ## Resuelto el 2026-10-04 (Fase 3: crecer)
 

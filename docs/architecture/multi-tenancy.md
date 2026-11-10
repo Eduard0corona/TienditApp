@@ -7,7 +7,7 @@ Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo 
 - `TenantSaveChangesInterceptor` completa un `TenantId` vacío en entidades nuevas, rechaza un `TenantId` ajeno (salvo el de un tenant creado en la misma unidad de trabajo, como en el alta de negocio) y rechaza cambiar el `TenantId` de una entidad existente (`TenantMismatchException`, 403).
 - Las exclusiones del middleware se comparan por prefijo y las rutas de "mi tenant" son del negocio: un miembro desactivado ya no puede usarlas con un token vigente.
 - `TenantOrdersController` rechaza un tenant de ruta distinto del tenant validado.
-- Los hubs validan al conectar membresía activa y permiso (`OrderHub`: gestionar órdenes, tablero o ver reportes; `ChatHub`: WhatsApp), con dueños y admins leídos de la membresía, y se cierran cuando expira el token, cuando termina su sesión o cuando pierden ese acceso (Fase 9: `HubAccessSweeper` revisa las conexiones abiertas periódicamente).
+- Los hubs del equipo validan al conectar membresía activa y permiso; el de la cuenta del cliente, solo la sesión ([ADR 0083](../adr/0083-my-orders-live.md)) (`OrderHub`: gestionar órdenes, tablero o ver reportes; `ChatHub`: WhatsApp), con dueños y admins leídos de la membresía, y se cierran cuando expira el token, cuando termina su sesión o cuando pierden ese acceso (Fase 9: `HubAccessSweeper` revisa las conexiones abiertas periódicamente).
 - El override `X-Tenant-Id` de `SUPER_ADMIN` queda registrado como evento de auditoría en el log (usuario, tenant, tenant del token, método y ruta) y, desde la Fase 10, en la actividad (`AuditLogs`) del negocio en el que actúa, antes de ejecutar la petición (`SupportAccessAudit`, acción `SupportAccess`, la ruta sin la query). Si no se puede registrar responde 503 y no se ejecuta; un negocio que no existe responde 404.
 
 - Negocio suspendido (Fase 3): `TenantAccessSnapshot.TenantSuspended` (negocio `Suspended` o `Inactive`) hace que el middleware responda 403 `tenant-suspended` a todo excepto leer el perfil y el plan; los hubs no lo unen. Ver [planes y facturación](../domain/billing-and-platform.md).
@@ -73,7 +73,7 @@ Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo 
   - `CrossTenantInvoicingSqlServerTests` comprueba sobre la API real que un negocio solo manda sus CFDI y que el enlace de un mensaje abre solo su CFDI.
 - Archivos (Fase 9): la carpeta de cada archivo sale de su dueño: `products/{negocio}` y `logos/{negocio}`, y para los avatares `avatars/users/{cuenta}` (la persona es la misma en todos sus negocios). Subir y borrar validan esa carpeta; un avatar anterior se borra de la carpeta del negocio donde se subió, tomada de las membresías de la cuenta (`AvatarFiles`).
 
-Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen de `TenantSettings`. SignalR agrupa conexiones por el claim de tenant. Muchas claves e índices incluyen `TenantId`.
+Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen de `TenantSettings`. SignalR agrupa conexiones por el claim de tenant; el hub de la cuenta del cliente (`MyOrdersHub`, [ADR 0083](../adr/0083-my-orders-live.md)) las agrupa por la cuenta y solo les manda el id de sus propios pedidos. Muchas claves e índices incluyen `TenantId`.
 
 ## Reglas obligatorias
 
@@ -85,7 +85,7 @@ Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen 
 - `IgnoreQueryFilters()` desactiva los filtros de toda la consulta (joins, `Include`, navegaciones y subconsultas), no solo del `DbSet` donde se invoca; cada entidad tenant-scoped que participe necesita su predicado explícito.
 - Toda operación cross-tenant es administrativa, explícita, autorizada y auditada.
 - Las pruebas cubren leer, modificar, eliminar y descargar desde un tenant distinto, además de IDs adivinados.
-- Archivos, blobs, cachés, jobs, SignalR y notificaciones mantienen namespace/partición por tenant.
+- Archivos, blobs, cachés, jobs, SignalR y notificaciones mantienen namespace/partición por tenant. La excepción es el hub de la cuenta del cliente, partido por la cuenta y sin datos de un negocio ([ADR 0083](../adr/0083-my-orders-live.md)).
 - `SUPER_ADMIN` no implica bypass silencioso: requiere selección explícita, autorización, auditoría y límites.
 
 ## Riesgos comprobados

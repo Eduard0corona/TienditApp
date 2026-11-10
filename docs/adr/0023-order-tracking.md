@@ -56,7 +56,7 @@ La Fase 24C, «Seguimiento», del informe «TienditApp para clientes», resuelve
    - El detalle, el seguimiento y la sección En curso se piden otra vez cada 20 segundos (`TRACKING_REFRESH_MS`), mientras el pedido está en curso (`InProgress`).
    - Un 404 (el enlace venció o el pedido ya no es de la cuenta) deja de preguntar: la página dice el mensaje y conserva lo último que vio. Sin conexión sigue preguntando.
    - Cuando un pedido sale de En curso, Anteriores se vuelve a pedir.
-   - No hay SignalR para el cliente: los hubs son del equipo de cada negocio.
+   - No hay SignalR para el cliente: los hubs son del equipo de cada negocio. Desde la Fase 31A, «Mis pedidos» y el detalle de la cuenta se enteran al momento por el hub de la cuenta ([ADR 0083](0083-my-orders-live.md)); el enlace de seguimiento sigue preguntando.
 
 ## Consecuencias
 
