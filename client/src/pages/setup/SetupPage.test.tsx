@@ -343,6 +343,36 @@ describe('SetupPage', () => {
     expect(api.getSetup).toHaveBeenCalledTimes(1);
   });
 
+  it('does not move the page the person went to when the modules are saved after they left', async () => {
+    const user = userEvent.setup();
+    let modulesSaved: (value: unknown) => void = () => undefined;
+    api.updateMyTenant.mockReturnValue(new Promise((resolve) => { modulesSaved = resolve; }) as never);
+    renderSetup();
+    await user.click(await screen.findByRole('checkbox', { name: /^Pantalla de cocina/ }));
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    await user.click(screen.getByRole('link', { name: 'Salir' }));
+    const scrolled = vi.mocked(window.scrollTo).mock.calls.length;
+    await act(async () => modulesSaved({ data: {} }));
+    await waitFor(() => expect(api.getSetup).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('En /fuera')).toBeInTheDocument();
+    expect(window.scrollTo).toHaveBeenCalledTimes(scrolled);
+  });
+
+  it('does not move the page the person went to when the IVA is saved after they left', async () => {
+    const user = userEvent.setup();
+    let policySaved: (value: unknown) => void = () => undefined;
+    api.updateSalesPolicy.mockReturnValue(new Promise((resolve) => { policySaved = resolve; }) as never);
+    const { refreshTenant } = renderSetup();
+    await user.click(await screen.findByRole('button', { name: 'Continuar' }));
+    await user.click(await screen.findByRole('button', { name: 'Continuar' }));
+    await user.click(screen.getByRole('link', { name: 'Salir' }));
+    const scrolled = vi.mocked(window.scrollTo).mock.calls.length;
+    await act(async () => policySaved({ data: {} }));
+    await waitFor(() => expect(refreshTenant).toHaveBeenCalled());
+    expect(screen.getByText('En /fuera')).toBeInTheDocument();
+    expect(window.scrollTo).toHaveBeenCalledTimes(scrolled);
+  });
+
   it('says nothing and moves nothing when a template is refused after the person left', async () => {
     const user = userEvent.setup();
     let refuse: (reason: unknown) => void = () => undefined;

@@ -2963,9 +2963,9 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Con pruebas sonda y mutaciones encontró, como hallazgo mayor, que el arreglo de «Cancelar» dejaba guardar el nombre dos veces: cancelar mientras guardaba devolvía el formulario a su estado inicial con el envío todavía en camino.
     - Como menores encontró casi todo lo demás de la lista de arriba, y pruebas que prometían más de lo que comprobaban: la región de avisos comparada por subcadena, el rol sin revisar, el apellido, los textos de los errores y «Vender».
     - Todo quedó corregido, salvo dos que ya existían y quedan fuera: `saveModules` manda el negocio tal como está en el contexto, y los anuncios con un lector de pantalla real no se comprobaron.
-    - La revisión de la PR encontró dos menores más en Primeros pasos, corregidos con pruebas que fallan sin el arreglo: el error de volver a leer el arranque lo borraba el cambio de paso que venía después, y una plantilla rechazada después de salir desplazaba la pantalla.
+    - La revisión de la PR encontró tres menores más en Primeros pasos, corregidos con pruebas que fallan sin el arreglo: el error de volver a leer el arranque lo borraba el cambio de paso que venía después; una plantilla rechazada después de salir desplazaba la pantalla, y lo mismo hacían guardar los módulos o el IVA (ahora el cambio de paso no hace nada si la persona ya se fue).
   - **Cliente:**
-    - 233 archivos y 1,929 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - 233 archivos y 1,931 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
     - Primera visita: 180,400 B de 180,400 B. El código de la primera visita no cambia: la diferencia de 17 B con master sale de los nombres con hash de los chunks que cambiaron, que el chunk de entrada referencia y que comprimen distinto.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.

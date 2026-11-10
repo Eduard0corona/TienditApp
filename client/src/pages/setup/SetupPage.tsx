@@ -88,7 +88,9 @@ export default function SetupPage() {
     void loadSetup();
   }, [loadSetup]);
 
+  // A step that answers once the person left (saving the modules or the IVA) does not move the page they went to.
   const goTo = (next: number) => {
+    if (!mounted.current) return;
     setError('');
     setStep(next);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -155,7 +157,6 @@ export default function SetupPage() {
       toast.success(`Listo: ${data.productsCreated} productos de ejemplo de ${data.templateName}. Edita los precios cuando quieras.`);
       if (!mounted.current) return;
       const readAgain = await loadSetup();
-      if (!mounted.current) return;
       goTo(3);
       if (readAgain) setError(readAgain);
     } catch (err: unknown) {
