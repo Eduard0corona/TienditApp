@@ -419,7 +419,9 @@ jobs:
   # SQL Server 2022 in Chromium. Nothing is mocked: a business signs up, makes its first sale and takes an online order.
   e2e:
     name: End to end (Playwright, API and SQL Server)
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: since it became 26.04, Playwright 1.56.1 (package-lock.json) cannot install Chromium on it.
+    # Move it forward with @playwright/test.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:
