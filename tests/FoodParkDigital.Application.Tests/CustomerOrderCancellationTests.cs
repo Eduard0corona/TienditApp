@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -106,7 +107,8 @@ public class CustomerOrderCancellationTests
         var token = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
         race.Arm(fixture);
 
-        // The customer's save meets the row the business changed: it reads the order again, and the domain says why not.
+        // The customer's save meets the row the business changed: the transaction is undone and run again, it reads the
+        // order again, and the domain says why not.
         var refused = await Assert.ThrowsAsync<DomainException>(() => CancelByLinkAsync(fixture, token, new RecordingInventory()));
 
         Assert.Equal(Order.CustomerCancelAcceptedMessage, refused.Message);
@@ -383,8 +385,11 @@ public class CustomerOrderCancellationTests
     {
         try
         {
-            return await new CancelPublicOrderCommandHandler(fixture.Context, fixture.TenantService, inventory, fixture.Clock)
-                .Handle(new CancelPublicOrderCommand(token), CancellationToken.None);
+            // Through the transaction of the pipeline, which runs it again when the business changed the order meanwhile.
+            var command = new CancelPublicOrderCommand(token);
+            var handler = new CancelPublicOrderCommandHandler(fixture.Context, fixture.TenantService, inventory, fixture.Clock);
+            return await new TransactionBehavior<CancelPublicOrderCommand, Result<PublicOrderTrackingDto>>(fixture.Context)
+                .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
         }
         finally
         {
@@ -396,8 +401,10 @@ public class CustomerOrderCancellationTests
     {
         try
         {
-            return await new CancelMyOrderCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, inventory, fixture.Clock)
-                .Handle(new CancelMyOrderCommand(id), CancellationToken.None);
+            var command = new CancelMyOrderCommand(id);
+            var handler = new CancelMyOrderCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, inventory, fixture.Clock);
+            return await new TransactionBehavior<CancelMyOrderCommand, Result<MyOrderDetailDto>>(fixture.Context)
+                .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
         }
         finally
         {

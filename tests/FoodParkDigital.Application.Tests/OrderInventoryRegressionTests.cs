@@ -1,4 +1,6 @@
+using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Inventory.Commands;
 using FoodParkDigital.Application.Inventory;
@@ -22,6 +24,7 @@ using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.Application.Tests.Support;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -126,8 +129,8 @@ public class OrderInventoryRegressionTests
         var setup = await SeedServiceOrderAsync(context, tenant.TenantId, pieces: 2, stock: 10m);
         var pieces = setup.Order.ServicePieces.ToList();
 
-        // While this request completes the second piece, another employee completes the first one and
-        // saves first: this save hits the order's row version and must be retried with fresh data.
+        // While this request completes the second piece, another employee completes the first one and saves first: this
+        // save hits the order's row version, and the transaction of the pipeline runs it again with fresh data (Fase 31G).
         context.BeforeNextSave = async () =>
         {
             await using var other = new TestDbContext(options, tenant);
@@ -141,12 +144,15 @@ public class OrderInventoryRegressionTests
             throw new DbUpdateConcurrencyException("Simulated concurrent update of the order row.");
         };
 
-        var result = await NewPieceHandler(context).Handle(new UpdateServiceOrderPieceStatusCommand
+        var command = new UpdateServiceOrderPieceStatusCommand
         {
             OrderId = setup.Order.Id,
             PieceId = pieces[1].Id,
             NewStatus = ServiceOrderPieceStatus.Completed
-        }, CancellationToken.None);
+        };
+        var handler = NewPieceHandler(context);
+        var result = await new TransactionBehavior<UpdateServiceOrderPieceStatusCommand, Result>(context)
+            .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
         await using var verify = new TestDbContext(options, tenant);
@@ -154,6 +160,12 @@ public class OrderInventoryRegressionTests
         Assert.All(stored.ServicePieces, piece => Assert.Equal(ServiceOrderPieceStatus.Completed, piece.Status));
         Assert.Equal(OrderStatus.Completed, stored.Status);
         Assert.Equal(8m, (await verify.InventoryStocks.SingleAsync()).OnHandQuantity);
+        // One movement per piece. That the attempt which met the other save gives its folio back is proven in SQL Server
+        // (OrderStockFolioSqlServerTests): this provider has no transaction to undo.
+        var numbers = await verify.InventoryMovements.Select(m => m.MovementNumber).OrderBy(n => n).ToListAsync();
+        Assert.Equal(2, numbers.Count);
+        Assert.EndsWith("-0001", numbers[0]);
+        Assert.EndsWith("-0002", numbers[1]);
     }
 
     [Fact]
@@ -183,6 +195,46 @@ public class OrderInventoryRegressionTests
         Assert.Equal(8m, (await context.InventoryStocks.AsNoTracking().SingleAsync(x => x.SupplyItemId == polishSupply.Id)).OnHandQuantity);
         // The service recipe is consumed per completed piece, not when the order is confirmed.
         Assert.Equal(10m, (await context.InventoryStocks.AsNoTracking().SingleAsync(x => x.SupplyItemId == setup.Supply.Id)).OnHandQuantity);
+    }
+
+    [Fact]
+    public async Task ReturningUnitsWhoseRecipeChanged_ShouldTakeNoFolio()
+    {
+        var (context, tenant, _) = CreateContext();
+        await using var _ = context;
+        var beans = new SupplyItem(tenant.TenantId, "Café en grano", UnitType.Unit);
+        var milk = new SupplyItem(tenant.TenantId, "Leche", UnitType.Unit);
+        var location = new InventoryLocation(tenant.TenantId, "Almacen", "MAIN", isDefault: true);
+        context.AddRange(beans, milk, location);
+        var stock = new InventoryStock(tenant.TenantId, beans.Id, location.Id);
+        stock.ApplyMovement(10m, 4m, Now);
+        context.InventoryStocks.Add(stock);
+        var latteId = Guid.NewGuid();
+        var oldRecipe = new ProductSupplyRequirement(tenant.TenantId, latteId, beans.Id, 1m);
+        context.ProductSupplyRequirements.Add(oldRecipe);
+        var order = NewOrder(tenant.TenantId, BusinessType.Retail, OrderType.Retail, "ORD-000030");
+        order.AddItem(latteId, "Latte", 1, 50m);
+        var latte = order.Items.Single(i => i.ProductId == latteId);
+        order.RegisterPayment(50m, OrderPaymentMethod.Card, Now, null, null, null, null);
+        order.TransitionTo(OrderStatus.Confirmed, OrderStateMachineFactory.Create(order.BusinessType, order.OrderType), "pos");
+        context.Orders.Add(order);
+        await context.SaveChangesAsync();
+        await NewInventoryService(context).ApplyConsumptionForOrderAsync(order, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        // The latte is made with milk now: the supplies it took with the sale are not the ones its recipe names.
+        oldRecipe.SetActive(false);
+        context.ProductSupplyRequirements.Add(new ProductSupplyRequirement(tenant.TenantId, latteId, milk.Id, 1m));
+        await context.SaveChangesAsync();
+        var refund = order.RegisterRefund(50m, OrderPaymentMethod.Card, "Se enfrió", Now, "cajero", null, null, true, [(latte.Id, 1m)]);
+        await NewInventoryService(context).ReturnItemsToInventoryAsync(order, refund, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        // Nothing comes back, and no folio is spent on it (Fase 31G): the next movement takes the one after the sale's.
+        var movement = Assert.Single(await context.InventoryMovements.AsNoTracking().ToListAsync());
+        Assert.EndsWith("-0001", movement.MovementNumber);
+        var counters = await context.FolioSequences.AsNoTracking().ToListAsync();
+        Assert.Equal(1, Assert.Single(counters, f => f.Scope.StartsWith("INV", StringComparison.Ordinal)).LastNumber);
     }
 
     [Fact]
@@ -519,6 +571,8 @@ public class OrderInventoryRegressionTests
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .UseMemoryCache(Models)
+            // The commands that run in a transaction (TransactionBehavior) run here without one.
+            .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         return (new TestDbContext(options, tenant), tenant, options);
     }

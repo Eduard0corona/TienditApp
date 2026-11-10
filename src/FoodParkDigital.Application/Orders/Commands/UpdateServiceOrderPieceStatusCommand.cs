@@ -14,12 +14,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
+/// <summary>
+/// Moves a piece of a service order, and the order with it when its pieces say so. One transaction with what it takes from
+/// the inventory, its folios included (Fase 31G).
+/// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record UpdateServiceOrderPieceStatusCommand : IRequest<Result>
+public record UpdateServiceOrderPieceStatusCommand : IRequest<Result>, IRetryOnConcurrencyConflict
 {
     public Guid OrderId { get; init; }
     public Guid PieceId { get; init; }
     public ServiceOrderPieceStatus NewStatus { get; init; }
+
+    string? IRetryOnConcurrencyConflict.ConcurrencyConflictMessage => ServiceBoardPieceSaves.SavedMeanwhileMessage;
 }
 
 public class UpdateServiceOrderPieceStatusCommandValidator : AbstractValidator<UpdateServiceOrderPieceStatusCommand>
@@ -53,43 +59,31 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
 
     public async Task<Result> Handle(UpdateServiceOrderPieceStatusCommand request, CancellationToken cancellationToken)
     {
-        // Two employees can change pieces of the same order at the same time. Every change also updates
-        // the order row, so the second save hits the order's row version and is retried with fresh data.
-        for (var attempt = 1; attempt <= ServiceBoardPieceSaves.MaxAttempts; attempt++)
-        {
-            var order = await _context.Orders
-                .Include(o => o.ServicePieces)
-                .Include(o => o.StatusHistory)
-                .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
-                ?? throw new EntityNotFoundException("Order", request.OrderId);
+        // Two employees can change pieces of the same order at the same time. Every change also updates the order row, so
+        // the second save hits the order's row version: TransactionBehavior undoes it, its folios included, and runs it
+        // again with fresh data.
+        var order = await _context.Orders
+            .Include(o => o.ServicePieces)
+            .Include(o => o.StatusHistory)
+            .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
+            ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-            if (order.Status == OrderStatus.Cancelled)
-                return Result.Failure("La orden esta cancelada; sus piezas ya no se pueden modificar.");
+        if (order.Status == OrderStatus.Cancelled)
+            return Result.Failure("La orden esta cancelada; sus piezas ya no se pueden modificar.");
 
-            var piece = order.ServicePieces.FirstOrDefault(x => x.Id == request.PieceId);
-            if (piece is null)
-                return Result.Failure("La pieza indicada no existe dentro de la orden.");
+        var piece = order.ServicePieces.FirstOrDefault(x => x.Id == request.PieceId);
+        if (piece is null)
+            return Result.Failure("La pieza indicada no existe dentro de la orden.");
 
-            if (piece.Status == request.NewStatus)
-                return Result.Success();
+        if (piece.Status == request.NewStatus)
+            return Result.Success();
 
-            var applied = await ApplyChangeAsync(order, piece, request, cancellationToken);
-            if (applied.IsFailure)
-                return applied;
+        var applied = await ApplyChangeAsync(order, piece, request, cancellationToken);
+        if (applied.IsFailure)
+            return applied;
 
-            try
-            {
-                await _context.SaveChangesAsync(cancellationToken);
-                return Result.Success();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (_context is DbContext dbContext)
-                    dbContext.ChangeTracker.Clear();
-            }
-        }
-
-        return Result.Failure(ServiceBoardPieceSaves.SavedMeanwhileMessage);
+        await _context.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     private async Task<Result> ApplyChangeAsync(
