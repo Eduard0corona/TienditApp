@@ -5,7 +5,7 @@
 Existen cuatro proyectos xUnit y las pruebas del cliente:
 
 - `FoodParkDigital.Domain.Tests`: máquinas de estado, cancelación/pagos de órdenes, caja, producto, configuración de WhatsApp, catálogo de permisos, valores persistidos de los enums de inventario, el refresh token (solo su hash, el mismo que calcula la migración de la Fase 9, y el motivo de revocación: `RefreshTokenTests`) y el rol por defecto sin privilegios (`UserRoleTests`, Fase 9).
-- `FoodParkDigital.Application.Tests`: casos de órdenes/clientes, capabilities, tenant access, la regla de cada trabajo (`UseCaseRulesTests` y `AuthorizationBehaviorTests`, Fase 5), inventario, compras/caja, reportes, uploads, WhatsApp, empleados, aislamiento de archivos por tenant, archivos privados (fotos de servicio solo del negocio y descarga solo por su negocio y en su área: `PrivateOrderFilesTests`, Fase 8), sesiones revocables (rotación, reuso que termina la sesión, carrera perdida por un momento, cierre de sesión, contraseña nueva, security stamp, cuenta inactiva y un token sin hash que ya no renueva: `UserSessionTests`, Fase 8), el login que no enumera cuentas ni revela el bloqueo (`LoginCommandTests`, Fase 9), la recuperación por SMS con un solo mensaje para cuenta inexistente, código incorrecto o cuenta bloqueada y los códigos enviados después de la petición (`AccountRecoveryTests` y `ResendPhoneConfirmationCommandTests`, Fase 10; desde la Fase 11, la petición guarda la misma solicitud en el outbox exista o no la cuenta, y el handler no envía una solicitud tardía y devuelve el minuto si el proveedor falla), avatares en la carpeta de la cuenta y fotos anteriores borradas solo después de guardar la nueva (`TenantFileIsolationTests` y `UploadProductImageCommandTests`, Fase 9), los topes por negocio de categorías (también al instalar una plantilla), almacenes (también el de una sucursal nueva) y agentes de IA, que no cuentan los de otro negocio, y la cocina con los pedidos más recientes (`PerBusinessLimitsTests`, Fase 12), un nombre por categoría en cada negocio, sin importar mayúsculas ni espacios y contando las archivadas, también cuando dos guardados se cruzan (`CategoryNameTests`, Fase 30W), las rondas de una cuenta de mesa con el servicio de inventario real (descuento al mandarse sin repetir al cerrar, rechazo o aviso según la política, cuenta abierta antes del cambio, cancelación y devolución: `TabRoundStockTests`, Fase 14), el periodo de Inicio (`GetDashboardMetricsQueryTests`), configuración de arranque y EF mediante SQLite/InMemory y dobles. `SqliteTestDatabase` cubre constraints relacionales (índices únicos) que InMemory ignora; no reemplaza a SQL Server. `Support/SqliteTestHost` arma SQLite en memoria con FKs activas, una estrategia de ejecución con reintentos, Identity real con las opciones de producción e inyección de fallos (commit transitorio, comando fallido, escritura concurrente) para flujos transaccionales; no sustituye pruebas contra SQL Server. Ambos emulan el `rowversion` de `WhatsAppConversation` (valor aleatorio al insertar y trigger al actualizar), así que guardar una copia desactualizada falla como en SQL Server.
+- `FoodParkDigital.Application.Tests`: casos de órdenes/clientes, capabilities, tenant access, la regla de cada trabajo (`UseCaseRulesTests` y `AuthorizationBehaviorTests`, Fase 5), inventario, compras/caja, reportes, uploads, WhatsApp, empleados, aislamiento de archivos por tenant, archivos privados (fotos de servicio solo del negocio y descarga solo por su negocio y en su área: `PrivateOrderFilesTests`, Fase 8), sesiones revocables (rotación, reuso que termina la sesión, carrera perdida por un momento, cierre de sesión, contraseña nueva, security stamp, cuenta inactiva y un token sin hash que ya no renueva: `UserSessionTests`, Fase 8), el login que no enumera cuentas ni revela el bloqueo (`LoginCommandTests`, Fase 9), la recuperación por SMS con un solo mensaje para cuenta inexistente, código incorrecto o cuenta bloqueada y los códigos enviados después de la petición (`AccountRecoveryTests` y `ResendPhoneConfirmationCommandTests`, Fase 10; desde la Fase 11, la petición guarda la misma solicitud en el outbox exista o no la cuenta, y el handler no envía una solicitud tardía y devuelve el minuto si el proveedor falla), avatares en la carpeta de la cuenta y fotos anteriores borradas solo después de guardar la nueva (`TenantFileIsolationTests` y `UploadProductImageCommandTests`, Fase 9), los topes por negocio de categorías (también al instalar una plantilla), almacenes (también el de una sucursal nueva) y agentes de IA, que no cuentan los de otro negocio, y la cocina con los pedidos más recientes (`PerBusinessLimitsTests`, Fase 12), un nombre por categoría en cada negocio, sin importar mayúsculas ni espacios y contando las archivadas, también cuando dos guardados se cruzan (`CategoryNameTests`, Fase 31B), las rondas de una cuenta de mesa con el servicio de inventario real (descuento al mandarse sin repetir al cerrar, rechazo o aviso según la política, cuenta abierta antes del cambio, cancelación y devolución: `TabRoundStockTests`, Fase 14), el periodo de Inicio (`GetDashboardMetricsQueryTests`), configuración de arranque y EF mediante SQLite/InMemory y dobles. `SqliteTestDatabase` cubre constraints relacionales (índices únicos) que InMemory ignora; no reemplaza a SQL Server. `Support/SqliteTestHost` arma SQLite en memoria con FKs activas, una estrategia de ejecución con reintentos, Identity real con las opciones de producción e inyección de fallos (commit transitorio, comando fallido, escritura concurrente) para flujos transaccionales; no sustituye pruebas contra SQL Server. Ambos emulan el `rowversion` de `WhatsAppConversation` (valor aleatorio al insertar y trigger al actualizar), así que guardar una copia desactualizada falla como en SQL Server.
 - `FoodParkDigital.Infrastructure.Tests`: servicios de Infrastructure con dobles (directorio temporal, HTTP, SMTP en loopback, logger, EF InMemory y `SqlException` construidas por reflexión con mensajes reales de SQL Server); cubre el confinamiento por tenant del almacenamiento local y de la resolución de blobs de Azure, el almacenamiento privado local (fuera de `wwwroot`, que rechaza una raíz configurada dentro de él y mueve una sola vez los archivos subidos cuando eran públicos), y que SMS, correo, WhatsApp y la resolución del cliente de un pedido no registren códigos OTP, cuerpos, respuestas de proveedores ni PII fuera de Development. `OutboxTests` prueba desde la Fase 11 que un evento agregado sin entidad (`IOutbox`) se guarda sin negocio, despierta al despachador y llega a su handler. `QuerySplittingTests` (Fase 12) comprueba que el contexto registrado lee cada colección en su propia sentencia. `DatabaseErrorLoggingTests` usa el registro de `AddInfrastructureServices` con un interceptor que responde en lugar de SQL Server para comprobar que EF Core no registra los mensajes de guardados y consultas fallidos fuera de Development.
 - `FoodParkDigital.WebApi.Tests`: middleware de tenant (membresía, suspensión y rutas del negocio por defecto), acceso a hubs, controller de órdenes por tenant, verificación de firma del webhook de WhatsApp y su controller, el bloqueo de `/uploads/orders` (`PrivateUploadsGuardMiddlewareTests`, Fase 8), el barrido que cierra conexiones de los hubs (`HubAccessSweeperTests`, Fase 9) y `GlobalExceptionHandlerMiddleware` (errores de base de datos registrados sin mensajes fuera de Development, `traceId` en `ProblemDetails` y, desde la Fase 10, los rechazos esperados como advertencia sin la traza), sin pipeline HTTP completo. `TenantResolutionMiddlewareTests` también prueba, desde la Fase 10, que el acceso de soporte de `SUPER_ADMIN` se registra antes de ejecutarse, que no se ejecuta si no se puede registrar (503) o si el negocio no existe (404), y que no se registra en su propio negocio ni en rutas de la cuenta. Comparte dobles de `Infrastructure.Tests/Support` enlazando sus archivos. `ClientEnumContractTests` lee los enums generados del contrato (desde la Fase 7; un módulo por enum en `client/src/api/generated/enums/` desde la 30C) y todos los archivos de `client/src/types` (desde la 30J, un archivo por contexto), y compara cada enum del dominio con su constante en el cliente, porque la API los intercambia como números; `EnumNamesSchemaFilterTests` comprueba que el contrato nombra cada valor. `ArchitectureTests` (Fase 4F) verifica dependencias entre capas, handlers en Application, controllers sin DbContext y sin roles (Fase 5), el filtro de negocio de cada entidad (desde la Fase 8, toda entidad con `TenantId`), que los comandos que toman folio corran en una transacción y, desde la Fase 11, que toda acción reciba el `CancellationToken` y toda llamada al mediador lo pase; `RequestCancellationTests` prueba que una lectura recibe la cancelación de la petición y un cambio ninguna, también al enlazar los parámetros de un controller real y en la API registrada; `GlobalExceptionHandlerMiddlewareTests`, que una petición abandonada por su cliente termina con 499 como Information y un timeout de un proveedor sigue siendo un 500; `ApiProblemContractTests`, que todo error sea `ProblemDetails` con `code`. Desde la Fase 8, `CrossTenantHttpSqlServerTests` sí corre el pipeline HTTP completo (`Microsoft.AspNetCore.Mvc.Testing`) contra SQL Server: dos negocios registrados por la API y el dueño de uno intentando leer, cambiar y borrar por id lo del otro (catálogo, clientes, proveedores, órdenes con su estado y pagos, archivos privados y, desde la Fase 9, inventario, compras, caja y citas) o entrar con su encabezado, su ruta o el cambio de negocio. `CrossTenantRealtimeSqlServerTests` (Fase 9) conecta a los hubs por WebSockets (`Microsoft.AspNetCore.SignalR.Client`) y manda entregas firmadas al webhook de WhatsApp: los eventos llegan solo al negocio dueño, una conexión se cierra al terminar su sesión y cada entrega llega solo al negocio de su número. `CrossTenantManagementSqlServerTests` (Fase 10) extiende la matriz a mesas y cuentas abiertas (entre dos negocios de comida), sucursales, equipo, campañas (plantillas, campañas, bajas y audiencias) y reportes; y `CrossTenantHttpSqlServerTests` inicia sesión como un admin de plataforma real y comprueba que lo que hace en otro negocio queda en la actividad de ese negocio y no en la de los demás. `CrossTenantOperationsSqlServerTests` (Fase 11) cubre Inicio (otro negocio vende, se atrasa con un servicio, se queda corto de un insumo y tiene un chat sin leer, y las métricas y "Requiere atención" de B no se mueven), la cocina entre dos negocios de comida, el tablero de servicios y los agentes de IA; cada caso repite la acción con lo suyo para que el rechazo sea por el negocio. Desde la Fase 12, `CrossTenantHttpSqlServerTests` también intenta reembolsar y anular una orden del otro y armar recetas con sus productos, insumos o almacenes, y lee la base con el filtro del negocio (`TwoBusinessesApi.QueryAsync`) para comprobar que el rechazo no dejó filas; `CrossTenantManagementSqlServerTests` manda una promoción rápida que llega solo a los compradores del negocio sin tocar la plantilla del otro. Desde la Fase 13, la suite comprueba que las rutas de la cuenta (`/me`) solo muestran los negocios, el acceso y las compras propios, y que la lista de todos los negocios y crear uno responden 403 a un dueño; `CrossTenantSuiteCoverageTests` lee las URLs de la suite y falla si un controller con datos del negocio no aparece en ellas (cada URL cuenta para el controller con la ruta más larga que la cubre; los que quedan fuera dicen por qué). Desde la Fase 14 cuenta cada URL por la ruta de cada acción, porque varios controllers comparten `/api/v1/auth` y `/api/v1/auth/my-tenant`; con eso la suite prueba también la configuración del negocio (`TenantSetupController`), que antes contaba solo por el prefijo. `AccountEndpointsTests` (Fase 14) fija las rutas de la cuenta (las 33 que eran de `AuthController` y, desde la 24E, las dos de la portada del menú), con su método, quién puede llamarlas y su límite de peticiones. `TabRoundStockSqlServerTests` (Fase 14) manda rondas de una cuenta de mesa por la API: el rechazo por falta de existencias (422) no deja nada ni consume folio, el aviso viaja en la respuesta, el cierre no descuenta dos veces y la cancelación devuelve todo. Las clases comparten la API y la base (`TwoBusinessesApi`, una colección de xUnit). Las de las Fases 10 a 13 se validaron con mutaciones: quitar el filtro del negocio en un handler de cada área las hace fallar; al cancelar una campaña, mover un pedido de cocina, cambiar el estado de una pieza o reembolsar lo frena además `TenantSaveChangesInterceptor` (sus filas nuevas llevan el negocio ajeno), y sin las dos capas la suite lo detecta.
 - Cliente (Fase 5): Vitest con jsdom y Testing Library (`npm test`, archivos `*.test.ts(x)` junto al código): la matriz de acceso (`access.ts`), dinero y cantidades, la estimación de totales con IVA que replica a la API, los mensajes de error por `code`, la tarjeta de existencias del producto con la API simulada las fotos privadas, que se piden con la sesión y se muestran desde la memoria del navegador (`PrivatePhoto`, `privateFiles`, Fase 8), y qué token sirve para conectar los hubs (`tokenClaims`, Fase 8).
@@ -2967,7 +2967,276 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Cliente:**
     - 233 archivos y 1,931 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
     - Primera visita: 180,400 B de 180,400 B. El código de la primera visita no cambia: la diferencia de 17 B con master sale de los nombres con hash de los chunks que cambiaron, que el chunk de entrada referencia y que comprimen distinto.
-- Fase 30W, un nombre por categoría en cada negocio ([ADR 0083](../adr/0083-unique-category-name-per-business.md)):
+- Fase 30W, pruebas de las pestañas de Inventario (punto 10; sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Pruebas nuevas:** `InventoryManagementTabs.test.tsx` (26) monta la pantalla con la API simulada y cubre:
+    - **Recetas:**
+      - los productos y servicios se leen al abrir la pestaña, una vez y sin repetir el que es producto y servicio; mientras llegan no se guarda ni se recarga;
+      - la receta con su cantidad efectiva, y los cambios sin guardar siguen al volver de otra pestaña;
+      - guardar: lo que se manda, que nada cambie mientras, que la respuesta reemplace las líneas y que las alertas y el historial se lean detrás;
+      - la revisión de cada línea y el rechazo del servidor;
+      - la receta de otro ítem que llega tarde, antes o después de la actual, también cuando falla;
+      - elegir «Seleccionar...» mientras se lee;
+      - la receta y los productos que no se pudieron leer;
+      - la línea con un insumo o una ubicación que se desactivaron, también con más de 500 insumos activos.
+    - **Ubicaciones:** sucursal, contacto, ciudad y estado; la búsqueda; la de por defecto; activar y desactivar.
+    - **Insumos:** activar o desactivar sin mandarlo dos veces y releer con la búsqueda a la vista, y los insumos para elegir que no se pudieron leer.
+    - **Historial por insumo:** la página tardía.
+    - **Alertas:** las cuentas del servidor, las filas, «Actualizar», sin leer y sin alertas.
+    - **Transferencias y Conteos:**
+      - la lista y sus filtros en el servidor;
+      - abrir una y volver con los filtros;
+      - no leídas, «Reintentar», ninguna y ninguna que coincida.
+  - **Qué arreglan:**
+    - **Recetas:**
+      - Si la receta no se podía leer, el editor quedaba vacío y «Guardar receta» lo mandaba: el servidor quita las líneas que no vienen, así que la receta se borraba. Ahora no se guarda hasta leerla.
+      - La receta de un ítem que llegaba tarde reemplazaba la del elegido después, y guardar la mandaba con el ítem nuevo.
+      - Se podía editar mientras se guardaba, y la respuesta borraba lo cambiado. «Recargar» y «Agregar línea» no esperaban la lectura.
+      - Una línea cuyo insumo o ubicación se desactivó decía «Seleccionar...» o «Ubicación por defecto», aunque guardaba el otro. Ahora dice cuál es.
+      - Los productos se leían con la pantalla, en cualquier pestaña, y si fallaban no se decía.
+      - Guardar esperaba a las alertas y al historial.
+    - **Ubicaciones:**
+      - Mostraba «-, Yucatán» cuando había estado sin ciudad.
+      - La búsqueda no encontraba por estado ni por sucursal.
+      - Ofrecía desactivar la de por defecto, que el servidor rechaza.
+    - **Activar o desactivar** un insumo o una ubicación se podía mandar dos veces.
+    - **Insumos para elegir:** si no se podían leer, los diálogos quedaban sin insumos y no se decía; ahora lo dice y conserva los que ya tenía.
+    - **Historial y listas de Inventario** (`useServerList`): una página pedida antes de cambiar un filtro reemplazaba la nueva, y lo que se volvía a leer después de desactivar un insumo usaba los filtros de cuando se pulsó, no los que están a la vista.
+    - **Alertas:** si no se podían leer, mostraban ceros, como si no hubiera nada que reabastecer.
+    - **Transferencias y Conteos:** si no se podían leer, decían «no hay»; ahora lo dicen y ofrecen «Reintentar».
+    - El error de la pantalla no se anunciaba (`role="alert"`).
+  - **Mutaciones:** de 69, fallan las pruebas en las 69: 54 sobre los arreglos y 15 sobre lo que agregó la revisión. Cinco de las primeras sobrevivían al principio:
+    - las pruebas de las respuestas tardías resolvían la vieja antes que la nueva, cuando la tabla todavía muestra la carga;
+    - «Agregar línea» deshabilitado mientras carga no se comprobaba;
+    - la búsqueda por los nombres guardados no comprobaba que la línea buscada quedara.
+  - **Revisión independiente:**
+    - Con pruebas sonda y mutaciones encontró, como hallazgo mayor, las dos pruebas de respuestas tardías que no probaban la carrera, y con ella la receta de otro ítem guardada en el elegido. Ya las habían señalado las mutaciones.
+    - Como menores encontró:
+      - el nombre guardado de un insumo que seguía en la línea después de cambiarlo;
+      - «inactivo» para un insumo activo cuando hay más de 500;
+      - la falta de un estado de carga de los productos;
+      - una prueba del rechazo del servidor al guardar una línea inactiva;
+      - la prueba débil de la búsqueda;
+      - la documentación.
+    - Todo quedó corregido, con pruebas que fallan sin el arreglo.
+    - Quedan fuera:
+      - con un error y algo escrito en la búsqueda, Transferencias y Conteos dicen «No se encontraron resultados.» (lo decide `DataTable`; el aviso sí sale);
+      - `loadLocations`, `loadSupplyOptions` y `loadAlerts` no tienen la guardia de la última lectura (activar o desactivar es idempotente);
+      - el nombre guardado de un insumo usa su código sin el SKU, que la receta no trae.
+    - La revisión de la PR encontró un menor más: `reload` leía los filtros del render en que se creó, así que lo que se volvía a leer al terminar de desactivar un insumo usaba la búsqueda de antes y, por ser la última lectura, pisaba la nueva. Ahora lee los filtros a la vista; la prueba falla sin el arreglo.
+  - **Cliente:**
+    - 234 archivos y 1,957 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las pruebas de Inventario pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - Primera visita: 180,397 B de 180,400 B. Su código es el mismo que en `master` (180,379 B): comparé los cuatro archivos normalizando los hashes, y los 18 B salen de los nombres con hash de los chunks de Inventario, que el de entrada referencia.
+  - **Escenas:** de las 89 de Inventario, Transferencias y Conteos, cambian 2 contra `master` (`c335b9a`): la pestaña Ubicaciones, donde «Desactivar» de la ubicación por defecto sale deshabilitado (y la ciudad y el estado son un solo texto, que se dibuja unos píxeles distinto), y «editar ubicación», que tiene esa pestaña detrás.
+- Fase 30X, pruebas de Mesas y Auditoría (punto 10; sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Pruebas nuevas:**
+    - `TablesPage.test.tsx` (15) monta Mesas con la API simulada, el panel de la cuenta real y el hub de pedidos simulado. Cubre:
+      - las mesas por área, ocupadas y libres, las cuentas sin mesa y lo que dice cada tarjeta (también en su nombre);
+      - abrir una cuenta en Vender desde una mesa libre o a nombre de alguien;
+      - la cuenta de una mesa ocupada, con las mesas libres a las que se puede pasar;
+      - releer con cada aviso de pedidos o de cocina, al reconectar y cada medio minuto, y dejar de hacerlo al salir;
+      - cuánto lleva abierta cada cuenta, con el reloj y con cada lectura;
+      - la carga, el error con «Reintentar» y la lista vacía según quién la ve.
+    - `AuditLogs.test.tsx` (7) cubre:
+      - la actividad con la fecha y la hora del negocio;
+      - la entidad y la acción pedidas al dejar de escribir, completas;
+      - los días, la búsqueda y «Limpiar filtros»;
+      - el contador de filtros y las páginas de 20;
+      - solo la última lectura;
+      - el error con «Reintentar», y que no se queden filas de otra página o filtro.
+    - `DataTable.test.tsx` (+1): una lista que no se pudo leer lo dice, también con algo buscado.
+    - `TabPanel.test.tsx` (+2): el error de un cobro sale una vez, junto al cobro, y se anuncia; también el de una cuenta que no se pudo leer.
+  - **Qué arreglan:**
+    - **Mesas:**
+      - Si las mesas no se podían leer, invitaba a «Agregar mesas» como si no hubiera, y el error no se anunciaba ni se podía reintentar.
+      - A quien no administra el catálogo le pedía agregar mesas que no puede agregar.
+      - Las tarjetas de las cuentas solo decían en su nombre lo que falta cobrar; ahora dicen también el total, el tiempo, las rondas y dónde están, como se ve.
+      - La cuenta abierta en el panel no se releía con los avisos de pedidos, solo cada 15 segundos.
+      - El tiempo de una cuenta solo avanzaba con el reloj; ahora también con cada lectura.
+      - La carga de las mesas no se anunciaba.
+      - El error de un cobro salía dos veces y sin anunciarse.
+    - **Auditoría:**
+      - La entidad y la acción, que el servidor compara completas, mandaban una petición por tecla. Una respuesta de lo escrito a medias que llegaba al final dejaba «No hay actividad» con el nombre completo escrito. Ahora se piden al dejar de escribir, el campo dice «Nombre exacto», y solo se muestra la última lectura.
+      - Si una lectura fallaba, quedaban las filas de la página o el filtro anterior; ahora se vacía y dice que no se pudo leer, aunque haya algo buscado.
+      - El error no decía lo que contestó la API, no se anunciaba y no se podía reintentar.
+      - «Por página» decía 10 mientras se pedían 20.
+      - Sin filtros decía «con estos filtros».
+      - Espacios en un filtro contaban en «Filtros (n)».
+    - **Transferencias y Conteos:** con algo buscado, una lista que no se pudo leer decía «No se encontraron resultados.» (lo que la 30W dejó fuera). `DataTable` acepta `failedMessage`, que gana a la búsqueda.
+  - **Mutaciones:** de 59, fallan las pruebas en las 59. Cinco sobrevivían al principio y señalaron pruebas débiles:
+    - el saldo y el total de la cuenta de barra eran iguales;
+    - el cambio a horas a los 60 minutos;
+    - el reloj de medio minuto;
+    - escribir y borrar antes de la pausa conservando la página;
+    - el aviso de una acción de la cuenta, que se buscaba por su texto.
+  - **Revisión independiente:**
+    - Con pruebas sonda y mutaciones encontró, como hallazgo mayor, las filas de la lectura anterior que quedaban en Auditoría bajo un filtro o una página que falló.
+    - Como menores encontró:
+      - «No se encontraron resultados.» con un error y algo buscado;
+      - la falta de «Reintentar»;
+      - los nombres de las tarjetas, que perdían el tiempo y las rondas;
+      - la cuenta abierta, que no se releía con los avisos;
+      - el texto para quien no administra el catálogo;
+      - «Por página»;
+      - el error doble del cobro;
+      - pruebas que prometían más: «Limpiar filtros», la cuenta de barra sin su nombre en `tableNumber` (como la abre Vender), la limpieza al salir, el sondeo, «Configurar mesas».
+    - Todo quedó corregido con pruebas que fallan sin el arreglo.
+    - Quedan fuera:
+      - el cobro desde la cuenta de una mesa sigue sin prueba de pantalla (el panel de cobro tiene las suyas);
+      - en el servidor, pasar una cuenta de mesa o cobrarla en parte no avisa por el hub, así que otro dispositivo lo ve con el sondeo de medio minuto;
+      - «Nombre exacto» pide nombres internos en inglés (`OrderInvoiceRequested`), y elegirlos de una lista queda para otro cambio;
+      - la primera conexión al hub también relee las mesas, como en las demás pantallas.
+  - **Pruebas que fallan con el código anterior:** 21 de las 49 de las suites tocadas. Algunas fallan solo porque buscan las tarjetas de Mesas por su nombre nuevo; las demás fijan lo que ya funcionaba.
+  - **Cliente:**
+    - 236 archivos y 1,982 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - Primera visita: 180,381 B de 180,400 B. Su código es el mismo que en `master` (180,395 B): comparé los cuatro archivos normalizando los hashes.
+  - **Escenas:** de las 33 de Mesas, la cuenta abierta, Auditoría, Transferencias y Conteos, cambian contra `master` (`ac2cc93`) las 3 de Auditoría: «Entidad» y «Acción» dicen «Nombre exacto», y «Por página» dice 20, lo que ya pedía («1–20 de 32»).
+- Fase 30Y, pruebas de Campañas (punto 10; sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Pruebas nuevas:** `CampaignsPage.test.tsx` (35) monta Campañas con la API simulada (el cliente tipado para las campañas y sus mensajes, `messagingApi` para lo demás). Cubre:
+    - las pestañas según el negocio (los recordatorios de citas solo con citas) y la que pide `?tab=`;
+    - **Campañas:**
+      - a quién llega y cómo va cada una, cancelar solo la que no ha terminado y después de preguntar;
+      - las páginas;
+      - el error con «Reintentar», sin «Todavía no has enviado campañas», y las filas que se quedan si releer falla;
+      - las plantillas de una campaña nueva: su error, y que se piden una vez;
+      - sin plantillas lleva a Plantillas;
+      - la vista previa (cuántos, excluidos, el tope, sin plantilla de Meta, ejemplos), que se olvida al cambiar el público, también si llega después;
+      - lo que se manda al enviar y la confirmación con lo que se previó;
+      - mientras se envía no se cierra ni dice «Calculando…»;
+      - el error del servidor dentro del formulario;
+      - los mensajes de una campaña y su error con «Reintentar».
+    - **Plantillas:**
+      - la lista con su uso, su plantilla de Meta o «Solo 24 h» e «Inactiva»;
+      - el error con «Reintentar»;
+      - crear una con las variables donde está el cursor y su orden en Meta;
+      - editar sin cambiar el uso, sin cerrarse mientras guarda y con el error del servidor;
+      - solo la última lectura.
+    - **Recordatorios de citas:**
+      - el texto que se envía según la plantilla y el aviso de WhatsApp;
+      - guardar sin cambiar nada mientras tanto;
+      - las horas fuera del rango;
+      - una plantilla elegida que se desactivó;
+      - los últimos recordatorios y avisos;
+      - el error con «Reintentar».
+    - **Recordatorios del fiado:** los avisos y los recordatorios con su resultado, y el error con «Reintentar».
+    - **Bajas:**
+      - la lista y la búsqueda, sin coincidencias;
+      - solo la última respuesta;
+      - el error sin «Cargando…» para siempre, y que no se queden filas de otra búsqueda;
+      - registrar una baja con su botón y no con Enter en la búsqueda;
+      - reactivar después de preguntar, con la página anterior si la última se queda vacía;
+      - releer con la búsqueda a la vista después de registrar o reactivar.
+  - **Qué arreglan:**
+    - **En todas las pestañas:** una lista que no se pudo leer decía que no había nada («Todavía no has enviado campañas», «Todavía no hay plantillas…») o se quedaba en «Cargando…» (Bajas, los mensajes de una campaña). Ahora lo dice, con lo que contestó la API y «Reintentar». Los errores se anuncian y la carga también.
+    - **Bajas:**
+      - Una respuesta tardía de lo escrito antes pisaba la búsqueda nueva.
+      - Si una lectura fallaba, se quedaban las filas de otra búsqueda.
+      - Sin coincidencias decía «Nadie ha pedido dejar de recibir mensajes.».
+      - Reactivar al último de la última página dejaba esa página vacía diciendo que nadie había pedido la baja.
+      - Enter en la búsqueda registraba la baja del teléfono escrito.
+      - El error de registrar una baja salía en el aviso de la lista.
+      - Después de registrar o reactivar se releía con la búsqueda y la página del clic, que pisaban las nuevas.
+    - **Plantillas:** la lista de abrir la pestaña, si llegaba tarde, pisaba la que se lee después de guardar.
+    - **Recordatorios de citas:**
+      - Unas horas vacías, en cero o fuera de rango se guardaban en silencio como las de antes, o las rechazaba el servidor. Ahora dice el rango junto al campo.
+      - Una plantilla elegida que se desactivó dejaba el selector en blanco, y guardar cualquier cambio fallaba con «Elige una plantilla de recordatorio activa.». Ahora sale «Texto predeterminado», que es lo que se envía, con un aviso.
+      - Se podía cambiar el formulario mientras guardaba.
+    - **Campañas:**
+      - Un segundo clic en «Nueva campaña» mientras llegaban las plantillas las pedía otra vez.
+      - Un error de las plantillas se quedaba aunque la siguiente vez sí llegaran.
+      - Mientras se enviaba una campaña sin vista previa, el botón de la vista previa decía «Calculando…».
+      - Una vista previa que llegaba después de cambiar el público se mostraba para el nuevo, y su cifra iba a la confirmación del envío (venía de antes).
+    - **Recordatorios del fiado:** el error no se podía reintentar.
+  - **Mutaciones:** de 51, fallan las pruebas en 50. La que queda es equivalente: con las horas ya revisadas, volver a las de antes (`|| settings.appointmentReminderHoursBefore`) nunca se usa. Sobrevivían al principio:
+    - el regreso de página de Bajas, que mostraba un instante «Nadie ha pedido…»;
+    - los errores tardíos de Bajas y de Plantillas;
+    - la carga anunciada de los recordatorios del fiado;
+    - la recarga después de reactivar.
+
+    Señalaron pruebas débiles y quedaron cubiertas. Otra señaló una revisión de más, que se quitó: unas horas vacías ya quedan bajo el mínimo.
+  - **Revisión independiente:** sin bloqueantes ni mayores.
+    - Como menores encontró:
+      - la recarga de Bajas después de registrar o reactivar, que pedía la búsqueda y la página del clic;
+      - la vista previa tardía, que se mostraba para otro público (de antes de esta fase).
+    - Como detalles:
+      - pruebas que prometían más: la plantilla desactivada se guardaba después de tocar el selector, y los errores tardíos no se probaban;
+      - el aviso de Plantillas, que seguía mientras se reintentaba;
+      - el error de las horas, sin ligar al campo.
+    - Todo quedó corregido con pruebas que fallan sin el arreglo.
+    - Quedan fuera:
+      - si falla la lectura de otra página de Bajas, desaparece el paginador (quedan «Reintentar» y la búsqueda);
+      - Enter en el teléfono registra la baja en el navegador, pero user-event solo busca el botón dentro del `<form>`; la prueba fija que el teléfono y el botón comparten formulario y la búsqueda no.
+  - **Pruebas que fallan con el código anterior:** 25 de las 35. Algunas solo porque buscan el error o la carga por su papel (`alert`, `status`); las demás fijan lo que ya funcionaba.
+  - **Cliente:**
+    - 237 archivos y 2,017 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las pruebas de Campañas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - Primera visita: 180,398 B de 180,400 B. Su código es el mismo que en `master` (180,381 B): comparé los cuatro archivos normalizando los hashes, y los 17 B salen de los nombres con hash de los chunks, que el de entrada referencia.
+  - **Escenas:**
+    - 4 nuevas: Bajas y Recordatorios de citas, en escritorio y teléfono, que no tenían.
+    - Para que cumplan el contrato, sus datos simulados usan uuid (las bajas, la plantilla de la cita y las citas de los mensajes) y la configuración trae `creditDueSoonPlaceholders`.
+    - De las 94 escenas de Clientes y mensajes, Recordatorios del fiado, el aviso antes de vencer y Cotizaciones, ninguna cambia contra `master` (`bd96f31`), tampoco las 4 nuevas: el formulario de Bajas y el `fieldset` de los recordatorios se ven igual.
+- Fase 30Z, pruebas de la consola de Plataforma y de las pantallas de la cuenta (punto 10; sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Pruebas nuevas:**
+    - `PlatformConsole.test.tsx` (13) monta la consola con la API simulada (la cobranza y las solicitudes falsas tienen sus pruebas). Cubre:
+      - el resumen y cada negocio con su plan, su estado y cuándo vence;
+      - la cobranza con el negocio como lo trae la lista;
+      - la búsqueda al dejar de escribir;
+      - los filtros desde la primera página;
+      - las filas del filtro anterior en `aria-busy`;
+      - la paginación que no pasa del final, y la página que se queda vacía;
+      - los dos textos de lista vacía, solo con lo leído;
+      - la carga anunciada, y los errores con «Reintentar», con y sin lo ya leído.
+    - `AccountRecovery.test.tsx` (18) cubre aceptar una invitación, confirmar el teléfono, recuperar la contraseña por correo o por SMS y restablecerla con el enlace:
+      - las reglas de la contraseña antes de mandar;
+      - lo que contesta el servidor;
+      - los enlaces incompletos;
+      - las esperas para pedir otro código;
+      - cambiar el número;
+      - que nada cambie de canal o de formulario mientras algo va en camino.
+  - **Qué arreglan:**
+    - **Consola de Plataforma:**
+      - La búsqueda mandaba una petición por tecla.
+      - Los errores no se anunciaban ni se podían reintentar.
+      - Decía «No hay negocios con esos filtros.» sin filtros.
+      - Dos clics en «Siguiente» se pasaban del final: «Página 3 de 2» y «no hay negocios».
+      - Si la cobranza sacaba del filtro al último negocio de una página, decía que no había y escondía la paginación.
+      - El texto vacío se adelantaba a la lectura del filtro nuevo.
+      - La búsqueda no tenía el límite de 100 caracteres de la API.
+      - La carga no tenía nombre.
+    - **Confirmar el teléfono:**
+      - La validación del navegador (`pattern`) tapaba los mensajes del código.
+      - Abría el inicio de sesión aunque la persona ya se hubiera ido.
+      - Durante un reenvío se podía abrir «Cambiarlo», que se quedaba un minuto esperando.
+      - Se podía cancelar el cambio de número mientras se mandaba.
+    - **Recuperar la contraseña:**
+      - Dos clics pedían dos códigos.
+      - Se podía cambiar de canal mientras se mandaba, y la respuesta hablaba del otro.
+      - Un reenvío fallido dejaba el aviso anterior.
+    - **Restablecerla:** «Guardando…».
+  - **Mutaciones:** de 31, fallan las pruebas en las 31. Tres sobrevivían al principio:
+    - la paginación, cuya prueba de doble clic no era determinista y ahora espera una lectura pendiente;
+    - el límite de la búsqueda;
+    - una revisión de la página vacía que sobraba (React vuelve a dibujar antes de mostrarla) y se quitó.
+  - **Revisión independiente:**
+    - Encontró como mayor la paginación que se pasaba del final o se quedaba en una página vacía sin forma de volver (venía de antes; el texto nuevo lo hacía más visible).
+    - Como menores encontró:
+      - el texto vacío adelantado;
+      - el cambio de canal durante un envío;
+      - «Cambiarlo» durante un reenvío.
+    - Como detalles encontró:
+      - el «Enviando…» del cambio de número;
+      - títulos de pruebas que prometían más;
+      - un mensaje de servidor que revelaría si la cuenta existe;
+      - el límite de la búsqueda.
+    - Todo quedó corregido con pruebas que fallan sin el arreglo.
+    - Quedan fuera:
+      - el token de una invitación viaja en la consulta de `GET /auth/invitation` y, como el de restablecer, se queda en la barra de direcciones (el `Referrer-Policy` evita que salga en el Referer);
+      - los formularios de la cuenta no ligan sus errores a los campos con `aria-invalid` ni `aria-describedby`;
+      - `ResetPassword` no usa `AuthCard`, como las demás.
+  - **Pruebas que fallan con el código anterior:** 17 de las 31.
+  - **Cliente:**
+    - 239 archivos y 2,048 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las pruebas de Plataforma y de la cuenta pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - Primera visita: 180,386 B de 180,400 B. Su código es el mismo que en `master` (180,398 B): comparé los cuatro archivos normalizando los hashes.
+  - **Escenas:** de las 185 de la consola, la caja, la configuración y las pantallas públicas y de la cuenta, ninguna cambia contra `master` (`5e405f5`).
+- Fase 31B, un nombre por categoría en cada negocio ([ADR 0084](../adr/0084-unique-category-name-per-business.md)):
   - **Qué cambia:** crear o editar una categoría con un nombre que el negocio ya tiene, sin importar mayúsculas ni espacios y contando las archivadas, responde 400 con el nombre de la que lo tiene. Los acentos cuentan. Editar solo revisa un nombre nuevo. El índice único `IX_Categories_TenantId_Name` respalda la regla cuando dos guardados se cruzan; su migración se detiene (50057) mientras un negocio tenga dos iguales.
   - **Domain:** `CategoryNameKeyTests` (11, nuevo):
     - mayúsculas, espacios en las orillas, espacios repetidos, tabuladores, saltos de línea y espacio duro dan la misma clave;
@@ -2991,7 +3260,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **WebApi:** `CrossTenantCategoryNamesSqlServerTests` (1, nuevo, SQL Server): por la API real, crear y editar con el nombre de otra categoría del negocio responde 400 con su nombre en `detail`, y otro negocio crea el mismo nombre.
   - **Mutaciones del servidor:** de 17, fallan las pruebas en las 17. Se probaron: crear o editar sin revisar, editar revisando también su propio nombre, quitar cada `catch` del índice (crear, editar, plantilla), no contar las archivadas, un solo mensaje para activas y archivadas, una clave con mayúsculas, solo con las orillas, solo con espacios o sin acentos, el diccionario del catálogo de ejemplo que lanza o que prefiere la archivada, el modelo sin el índice y la migración sin su guarda (SQL Server: 1505 en lugar de 50057). La primera corrida dejó viva una: no excluir a la propia categoría al buscar el nombre. Solo importa cuando el índice rechaza una repetida de antes renombrada como su gemela, y la prueba de esa gemela la cubre ahora.
   - **Scripts:** `apply.sql` y `rollback.sql` son, debajo de su cabecera, lo que genera el CI (se comparó con el mismo procedimiento del job). Se ensayaron con el `sqlcmd` clásico en SQL Server 2022 (Docker); el detalle está en el README de `data-repair/20261110_RepeatedCategoryNames`. El job `Migrations` también se repitió localmente: desde `PRODUCTION_BASELINE`, aplicar, aplicar otra vez con la caché de planes vacía sin cambios, revertir dos veces, aplicar de nuevo y crear una base nueva.
-  - **Servidor:** con .NET 10.0.403, `dotnet build` y `dotnet test FoodParkDigital.sln` en verde: Domain 1,447, Application 2,233, Infrastructure 379 y WebApi 354 (las de SQL Server se omiten sin su variable). Con `TIENDITAPP_TEST_SQLSERVER` apuntando a SQL Server 2022 (Docker), las suites `SqlServerTests` también: Infrastructure 336 y WebApi 158. `has-pending-model-changes` no encuentra cambios. El cliente no cambia: el diálogo de Categorías ya muestra el `detail` del 400 (Fase 30P).
+  - **Servidor:** con .NET 10.0.403, `dotnet build` y `dotnet test FoodParkDigital.sln` en verde con `master` en la 30Z: Domain 1,451, Application 2,238, Infrastructure 379 y WebApi 354 (las de SQL Server se omiten sin su variable). Con `TIENDITAPP_TEST_SQLSERVER` apuntando a SQL Server 2022 (Docker), las suites `SqlServerTests` completas pasaron antes de traer la 30W a la 30Z (Infrastructure 336 y WebApi 158), y las de categorías otra vez después. `has-pending-model-changes` no encuentra cambios. El cliente no cambia: el diálogo de Categorías ya muestra el `detail` del 400 (Fase 30P).
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
@@ -3023,6 +3292,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Cambian 11 de una tarjeta (plataformas de reparto, citas en línea, quién atiende, cómo te ven, la portada y las visitas a domicilio) solo de rasterizado. Cada tarjeta mide lo mismo en las dos compilaciones, pero empieza en otra fracción de píxel. Puestas en la fracción de `master`, Citas en línea y Quién atiende quedan con 182 y 1,133 píxeles distintos, todos en las esquinas redondeadas, donde se ve lo que hay detrás.
     - Las dos de la tarjeta de citas y de quién atiende abren «Más opciones» antes de capturar, porque el café es de alimentos; su línea base es la escena de `master`.
     - `settle` carga una imagen perezosa que se dibuja muy abajo de la pantalla. El logo de «Cómo te ven» quedó más abajo, el navegador no lo cargaba y 13 escenas agotaban la espera. Las de Mi negocio pasaron dos corridas seguidas contra el mismo build.
+
+- El servidor no libera una pieza cerrada del Taller, después de la 30M:
+  - Desde la 30M el Taller ya no ofrece «Liberar» en una pieza completada o cancelada, pero el servidor sí la liberaba (`PUT /service-board/pieces/{id}/release`) y borraba quién la trabajó, su nombre y desde cuándo. Ahora la rechaza con «No se puede liberar una pieza completada o cancelada.», como ya rechazaba tomarla: el agregado (`ServiceOrderPiece.ReleaseAssignment` lanza `DomainException`) y el caso de uso (`ReleaseServiceOrderPieceAssignmentCommand` responde `Result.Failure` antes de llegar al dominio, también a un administrador). Sin migración; el contrato no cambia (la ruta ya respondía 400 con su motivo).
+  - **Domain:** `ServiceOrderPieceAssignmentTests` (2 pruebas, 4 casos, nuevo): una pieza aceptada o en progreso queda sin nadie; una completada o cancelada se rechaza y conserva a quién, su nombre y desde cuándo.
+  - **Application:** `ReleaseServiceOrderPieceAssignmentCommandTests` (2 pruebas, 5 casos, nuevo): quien la tiene libera una pieza en progreso, queda guardado y el tablero se entera; una completada o cancelada se rechaza con ese mensaje, a quien la tiene y al dueño, sin cambiar lo guardado ni avisar al tablero.
+  - Las 6 de piezas cerradas fallan sin el arreglo; con el dominio corregido y sin la validación del caso de uso, las 4 de Application fallan porque la excepción del dominio sale en lugar del error de la respuesta.
+  - **Servidor:** 1,440 pruebas de dominio y 2,219 de aplicación en verde; Infrastructure (379) y WebApi (354) en verde, sin las de SQL Server y Blob Storage, que se omiten sin su conexión.
 
 `ClientDeliveryTests` (Fase 20) arranca la API real sin base sobre una carpeta como la que deja el publish (`UseWebRoot`, sin el manifiesto de static web assets para que Development no le sume `client/dist`): la copia Brotli o gzip según `Accept-Encoding` (con `q=0` y `*`), HEAD igual que GET, `immutable` en `/assets` solo para lo que se envía (un 412 o 416 sin caché ni codificación), `no-cache` en `/`, en las rutas de la app y en `/index.html`, 404 para un archivo viejo o cualquier copia pedida por su nombre (también `/index.html.gz`), el contrato de la API sin comprimir y las subidas con sus encabezados. `PrivateUploadsGuardMiddlewareTests` bloquea también `/uploads//orders`, `//uploads/orders` y las barras invertidas. En el cliente, `useNewVersion.test.tsx` prueba cada momento en que se pregunta por una versión nueva (pestaña visible, foco, conexión, cada 10 minutos, nunca con la pestaña oculta ni justo al cargar) y `NewVersionNotice.test.tsx`, que sin conexión no ofrece recargar; `BranchesList.test.tsx`, el aviso de que el menú muestra la dirección de la sucursal principal.
 

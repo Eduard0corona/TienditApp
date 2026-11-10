@@ -1,12 +1,12 @@
 ﻿-- =====================================================================================
 -- TienditApp (FoodParkDigital): migraciones para producción (SQL Server / Azure SQL).
 -- Generado el 2026-11-10 con `dotnet ef migrations script 0 20261110022936_AddUniqueCategoryNamePerTenant --idempotent`
--- (EF Core 10.0.12) desde la rama claude/elegant-faraday-h8nmkr (Fase 30W).
+-- (EF Core 10.0.12) desde la rama claude/elegant-faraday-h8nmkr (Fase 31B).
 -- Debajo del bloque SET, el contenido es el que genera EF, sin cambios.
 --
 -- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory]. En una base que
 -- ya tiene 20261108150147_AddOrderCancellationEmailsAndAnswerReminder (lo que exige master hoy,
--- con la Fase 30V) solo ejecuta 20261110022936_AddUniqueCategoryNamePerTenant:
+-- con la Fase 30Z) solo ejecuta 20261110022936_AddUniqueCategoryNamePerTenant:
 --   - [IX_Categories_TenantId_Name]: índice único nuevo sobre [Categories] ([TenantId], [Name]): un
 --     nombre por categoría en cada negocio, archivadas incluidas, con la intercalación de la columna
 --     (la de siempre no distingue mayúsculas ni espacios al final; sí acentos).
@@ -18,7 +18,7 @@
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
 -- vacía): revisa antes el verify.sql de database/production/20261108150147_AddOrderCancellationEmailsAndAnswerReminder.
 --
--- Compatible con la versión desplegada (master con la Fase 30V): no conoce el índice y sigue
+-- Compatible con la versión desplegada (master con la Fase 30Z): no conoce el índice y sigue
 -- creando y editando categorías; solo una con el nombre de otra de su negocio falla ahora (500 en
 -- esa versión; la nueva responde 400 con el nombre de la que lo tiene). /health/schema sigue sano.
 -- Volver a ella (redespliegue, o swap si el slot de staging está activo) funciona sin rollback.sql.

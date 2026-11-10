@@ -126,6 +126,9 @@ public class ReleaseServiceOrderPieceAssignmentCommandHandler : IRequestHandler<
         if (!piece.IsTrackable || piece.Order.OrderType != OrderType.Service)
             return Result.Failure("La pieza no pertenece al flujo de tablero de servicios.");
 
+        if (piece.Status is ServiceOrderPieceStatus.Completed or ServiceOrderPieceStatus.Cancelled)
+            return Result.Failure("No se puede liberar una pieza completada o cancelada.");
+
         if (piece.AssignedToUserId is null)
             return Result.Success();
 

@@ -32,13 +32,19 @@ export default function TransfersTab({ locations, filter, onFilterChange: setFil
   return (
     <>
       {transfers.isError && (
-        <div className="alert alert-danger" role="alert">{getApiErrorMessage(transfers.error, 'Error al cargar las transferencias.')}</div>
+        <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+          <span className="me-auto">{getApiErrorMessage(transfers.error, 'Error al cargar las transferencias.')}</span>
+          <button type="button" className="btn btn-sm btn-light" disabled={transfers.isFetching} onClick={() => void transfers.refetch()}>
+            Reintentar
+          </button>
+        </div>
       )}
       <DataTable
         data={transfers.data?.items ?? []}
         columns={COLUMNS}
         keyExtractor={(item) => item.id}
         loading={transfers.isLoading}
+        failedMessage={transfers.isError ? 'No se pudieron leer las transferencias.' : undefined}
         emptyMessage={filtered
           ? 'Ninguna transferencia coincide con los filtros.'
           : 'Todavía no hay transferencias. Haz una para llevar artículos de una ubicación a otra.'}

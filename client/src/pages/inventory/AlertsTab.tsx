@@ -11,8 +11,16 @@ const COLUMNS = [
   { header: 'Estado', className: 'text-center' },
 ];
 
+const CARDS: Array<{ label: string; border: string; count: (alerts: InventoryAlertsDto) => number }> = [
+  { label: 'Agotado', border: 'border-danger', count: (alerts) => alerts.outOfStockCount },
+  { label: 'Bajo stock crítico', border: 'border-danger', count: (alerts) => alerts.criticalLowStockCount },
+  { label: 'Bajo stock', border: 'border-warning', count: (alerts) => alerts.lowStockCount },
+  { label: 'Ítems sin receta', border: 'border-info', count: (alerts) => alerts.missingRecipeProductCount },
+];
+
 interface AlertsTabProps {
-  alerts: InventoryAlertsDto;
+  /** Null until they are read: the counts show a dash, not a zero that would say there is nothing to restock. */
+  alerts: InventoryAlertsDto | null;
   loading: boolean;
 }
 
@@ -21,46 +29,24 @@ export default function AlertsTab({ alerts, loading }: AlertsTabProps) {
   return (
     <>
       <div className="row mb-3">
-        <div className="col-md-3 mb-2">
-          <div className="card border-danger h-100 mb-0">
-            <div className="card-body py-2">
-              <div className="text-muted small">Agotado</div>
-              <div className="h3 mb-0">{alerts.outOfStockCount}</div>
+        {CARDS.map((card) => (
+          <div key={card.label} className="col-md-3 mb-2">
+            <div className={`card ${card.border} h-100 mb-0`}>
+              <div className="card-body py-2">
+                <div className="text-muted small">{card.label}</div>
+                <div className="h3 mb-0">{alerts ? card.count(alerts) : '–'}</div>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="col-md-3 mb-2">
-          <div className="card border-danger h-100 mb-0">
-            <div className="card-body py-2">
-              <div className="text-muted small">Bajo stock crítico</div>
-              <div className="h3 mb-0">{alerts.criticalLowStockCount}</div>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-3 mb-2">
-          <div className="card border-warning h-100 mb-0">
-            <div className="card-body py-2">
-              <div className="text-muted small">Bajo stock</div>
-              <div className="h3 mb-0">{alerts.lowStockCount}</div>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-3 mb-2">
-          <div className="card border-info h-100 mb-0">
-            <div className="card-body py-2">
-              <div className="text-muted small">Ítems sin receta</div>
-              <div className="h3 mb-0">{alerts.missingRecipeProductCount}</div>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
       <DataTable
-        data={alerts.items}
+        data={alerts?.items ?? []}
         columns={COLUMNS}
         keyExtractor={(item) => `${item.supplyItemId}-${item.inventoryLocationId}`}
         loading={loading}
-        emptyMessage="No hay alertas de stock actualmente."
+        emptyMessage={alerts ? 'No hay alertas de stock actualmente.' : 'No se pudieron leer las alertas.'}
         searchFilter={(item, search) =>
           item.supplyItemName.toLowerCase().includes(search) ||
           item.inventoryLocationName.toLowerCase().includes(search)

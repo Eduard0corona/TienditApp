@@ -77,23 +77,32 @@ export default function TemplatesTab() {
   const titleId = useId();
   const toast = useToast();
   const [templates, setTemplates] = useState<MessageTemplateDto[]>([]);
+  /** Whether the list has been read: until then, an empty one is not «no templates». */
+  const [read, setRead] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const latestRead = useRef(0);
 
   const load = useCallback(async () => {
+    const reading = ++latestRead.current;
     setLoading(true);
+    // Reading again takes the notice away while it loads.
+    setError('');
     try {
       const { data } = await messagingApi.getTemplates();
+      // Only the last reading is shown: the one on opening can arrive after the one that follows a save.
+      if (reading !== latestRead.current) return;
       setTemplates(data);
+      setRead(true);
       setError('');
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudieron cargar las plantillas.'));
+      if (reading === latestRead.current) setError(getApiErrorMessage(err, 'No se pudieron cargar las plantillas.'));
     } finally {
-      setLoading(false);
+      if (reading === latestRead.current) setLoading(false);
     }
   }, []);
 
@@ -158,10 +167,17 @@ export default function TemplatesTab() {
           </button>
         </div>
 
-        {error && <div className="alert alert-danger">{error}</div>}
+        {error && (
+          <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+            <span className="me-auto">{error}</span>
+            <button type="button" className="btn btn-sm btn-light" onClick={() => void load()}>
+              Reintentar
+            </button>
+          </div>
+        )}
         {loading ? (
-          <p className="text-muted mb-0">Cargando…</p>
-        ) : templates.length === 0 ? (
+          <p className="text-muted mb-0" role="status">Cargando…</p>
+        ) : !read ? null : templates.length === 0 ? (
           <p className="text-muted mb-0">Todavía no hay plantillas. Crea una para tu primera campaña o tus recordatorios.</p>
         ) : (
           <div className="table-responsive">
@@ -300,7 +316,7 @@ export default function TemplatesTab() {
                   <label className="form-check-label" htmlFor="template-active">Activa (se puede elegir en campañas, recordatorios, Facturación y Cotizaciones)</label>
                 </div>
               )}
-              {formError && <div className="alert alert-danger mt-3 mb-0">{formError}</div>}
+              {formError && <div className="alert alert-danger mt-3 mb-0" role="alert">{formError}</div>}
             </Modal.Body>
             <Modal.Footer>
               <button type="button" className="btn btn-light" onClick={() => setDraft(null)} disabled={saving}>Cancelar</button>

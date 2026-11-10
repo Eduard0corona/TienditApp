@@ -73,6 +73,7 @@ export default function RemindersTab() {
   const [templateId, setTemplateId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [hoursError, setHoursError] = useState('');
   const [history, setHistory] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
   const [notices, setNotices] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
 
@@ -90,7 +91,9 @@ export default function RemindersTab() {
       setNotices(sentNotices);
       setEnabled(current.appointmentRemindersEnabled);
       setHours(String(current.appointmentReminderHoursBefore));
-      setTemplateId(current.appointmentReminderTemplateId ?? '');
+      // A template deactivated since is the default text, as the reminders send it.
+      const savedId = current.appointmentReminderTemplateId ?? '';
+      setTemplateId(list.some((template) => template.id === savedId) ? savedId : '');
       setError('');
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudieron cargar los recordatorios.'));
@@ -103,14 +106,18 @@ export default function RemindersTab() {
 
   const save = async () => {
     if (!settings || saving) return;
+    const hoursBefore = Number(hours);
+    const { minReminderHoursBefore: min, maxReminderHoursBefore: max } = settings;
+    // Out of range is said next to the hours, instead of saving those there were (empty is 0, under the least).
+    if (!Number.isInteger(hoursBefore) || hoursBefore < min || hoursBefore > max) {
+      setHoursError(`El recordatorio se envía de ${min} a ${max} horas antes de la cita.`);
+      return;
+    }
+    setHoursError('');
     setSaving(true);
     setError('');
     try {
-      const { data } = await messagingApi.updateReminders({
-        enabled,
-        hoursBefore: Number(hours) || settings.appointmentReminderHoursBefore,
-        templateId: templateId || undefined,
-      });
+      const { data } = await messagingApi.updateReminders({ enabled, hoursBefore, templateId: templateId || undefined });
       setSettings(data);
       toast.success(enabled ? 'Recordatorios activados.' : 'Recordatorios guardados.');
     } catch (err: unknown) {
@@ -120,9 +127,19 @@ export default function RemindersTab() {
     }
   };
 
-  if (!settings) return error ? <div className="alert alert-danger">{error}</div> : <p className="text-muted">Cargando…</p>;
+  if (!settings) {
+    return error ? (
+      <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+        <span className="me-auto">{error}</span>
+        {/* Reading again takes the notice away while it loads. */}
+        <button type="button" className="btn btn-sm btn-light" onClick={() => { setError(''); void load(); }}>Reintentar</button>
+      </div>
+    ) : <p className="text-muted" role="status">Cargando…</p>;
+  }
 
   const selected = templates.find((template) => template.id === templateId);
+  const savedId = settings.appointmentReminderTemplateId;
+  const savedDeactivated = !!savedId && !templates.some((template) => template.id === savedId);
   return (
     <>
       <div className="card">
@@ -134,27 +151,38 @@ export default function RemindersTab() {
               Conecta WhatsApp para enviar recordatorios. <Link to="/settings/whatsapp">Ir a WhatsApp</Link>
             </div>
           )}
-          <div className="form-check form-switch mb-3">
-            <input id="reminders-enabled" type="checkbox" role="switch" className="form-check-input" checked={enabled}
-              onChange={(event) => setEnabled(event.target.checked)} />
-            <label className="form-check-label" htmlFor="reminders-enabled">Enviar recordatorios</label>
-          </div>
-          <div className="row g-2 mb-3">
-            <div className="col-6 col-sm-3">
-              <label className="form-label" htmlFor="reminders-hours">Horas antes</label>
-              <input id="reminders-hours" type="number" className="form-control" min={settings.minReminderHoursBefore}
-                max={settings.maxReminderHoursBefore} value={hours} onChange={(event) => setHours(event.target.value)} />
+          {/* What is being saved stays as it was sent until the answer comes. */}
+          <fieldset disabled={saving}>
+            <div className="form-check form-switch mb-3">
+              <input id="reminders-enabled" type="checkbox" role="switch" className="form-check-input" checked={enabled}
+                onChange={(event) => setEnabled(event.target.checked)} />
+              <label className="form-check-label" htmlFor="reminders-enabled">Enviar recordatorios</label>
             </div>
-            <div className="col-sm-9">
-              <label className="form-label" htmlFor="reminders-template">Mensaje</label>
-              <select id="reminders-template" className="form-select" value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
-                <option value="">Texto predeterminado</option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>{template.name}</option>
-                ))}
-              </select>
+            <div className="row g-2 mb-3">
+              <div className="col-6 col-sm-3">
+                <label className="form-label" htmlFor="reminders-hours">Horas antes</label>
+                <input id="reminders-hours" type="number" className={`form-control ${hoursError ? 'is-invalid' : ''}`}
+                  min={settings.minReminderHoursBefore} max={settings.maxReminderHoursBefore} value={hours}
+                  aria-invalid={hoursError ? true : undefined} aria-describedby={hoursError ? 'reminders-hours-error' : undefined}
+                  onChange={(event) => { setHours(event.target.value); setHoursError(''); }} />
+                {hoursError && <div id="reminders-hours-error" className="invalid-feedback" role="alert">{hoursError}</div>}
+              </div>
+              <div className="col-sm-9">
+                <label className="form-label" htmlFor="reminders-template">Mensaje</label>
+                <select id="reminders-template" className="form-select" value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
+                  <option value="">Texto predeterminado</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>{template.name}</option>
+                  ))}
+                </select>
+                {savedDeactivated && templateId === '' && (
+                  <div className="form-text text-warning-emphasis">
+                    La plantilla elegida se desactivó: se envía el texto predeterminado hasta que elijas otra.
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </fieldset>
           <div className="border rounded p-2 bg-body-tertiary small mb-3">
             {selected?.body ?? settings.defaultReminderBody}
             {!selected?.providerTemplateName && (
@@ -163,7 +191,7 @@ export default function RemindersTab() {
               </div>
             )}
           </div>
-          {error && <div className="alert alert-danger">{error}</div>}
+          {error && <div className="alert alert-danger" role="alert">{error}</div>}
           <div className="d-flex justify-content-end">
             <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={saving}>
               {saving ? 'Guardando…' : 'Guardar'}

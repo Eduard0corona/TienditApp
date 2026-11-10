@@ -6,7 +6,7 @@
 SET NOCOUNT ON;
 
 -- 1. Antes: últimas migraciones aplicadas. Con master desplegado (la Fase 30B y las fases sin
---    migración que siguen, hasta la 30V), la más reciente es
+--    migración que siguen, hasta la 30Z), la más reciente es
 --    20261108150147_AddOrderCancellationEmailsAndAnswerReminder. Si es anterior, revisa primero el
 --    verify.sql de su carpeta: apply.sql también aplica las que falten. Después:
 --    20261110022936_AddUniqueCategoryNamePerTenant.

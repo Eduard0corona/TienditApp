@@ -23,6 +23,21 @@ function formatOpenFor(minutes: number): string {
   return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/** What a card of an open tab shows, said in its name: what is left to charge first, since it is what is asked for. */
+function describeTab(name: string, tab: OpenTabSummary, now: number, busy = '') {
+  return [
+    name,
+    busy,
+    `${formatMoney(tab.balance)} por cobrar de ${formatMoney(tab.total)}`,
+    `abierta hace ${formatOpenFor(minutesSince(tab.openedAt, now))}`,
+    plural(tab.rounds, 'ronda', 'rondas'),
+    tab.roundsReady > 0 ? plural(tab.roundsReady, 'lista', 'listas') : '',
+    tab.roundsInKitchen > 0 ? `${tab.roundsInKitchen} en cocina` : '',
+  ].filter(Boolean).join(', ');
+}
+
 /**
  * Mesas: every table with its open tab (total, time, rounds in the kitchen or ready to take). A free table
  * opens a tab in Vender; a busy one shows its bill to add a round, charge, move or close it.
@@ -36,7 +51,7 @@ export default function TablesPage() {
   const access = getAccess(user, capabilities);
   const [openTabId, setOpenTabId] = useState<string | null>(null);
   const [configuring, setConfiguring] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
+  const [clock, setClock] = useState(() => Date.now());
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onKitchenTicketsChanged, onConnected } = useOrderSignalR();
 
   const room = useQuery({
@@ -47,8 +62,12 @@ export default function TablesPage() {
   });
 
   useEffect(() => {
-    const refresh = () => void queryClient.invalidateQueries({ queryKey: ['tables'] });
-    const clock = window.setInterval(() => setNow(Date.now()), 30_000);
+    // A change of an order reads the tables again, and the tab open in its panel too (a round ready, a charge).
+    const refresh = () => {
+      void queryClient.invalidateQueries({ queryKey: ['tables'] });
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+    };
+    const ticking = window.setInterval(() => setClock(Date.now()), 30_000);
     const unsubscribers = [
       onOrderCreated(refresh),
       onOrderStatusChanged(refresh),
@@ -57,11 +76,13 @@ export default function TablesPage() {
       onConnected(refresh),
     ];
     return () => {
-      window.clearInterval(clock);
+      window.clearInterval(ticking);
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   }, [queryClient, onOrderCreated, onOrderStatusChanged, onOrderCancelled, onKitchenTicketsChanged, onConnected]);
 
+  // How long each tab has been open counts from the last tick of the clock or the last reading, whichever is later.
+  const now = Math.max(clock, room.dataUpdatedAt);
   const tables = useMemo(() => room.data?.tables ?? [], [room.data]);
   const byArea = useMemo(() => {
     const groups = new Map<string, DiningTable[]>();
@@ -113,16 +134,28 @@ export default function TablesPage() {
         </div>
       </div>
 
-      {room.isError && <div className="alert alert-danger">{getApiErrorMessage(room.error, 'No se pudieron cargar las mesas.')}</div>}
+      {room.isError && (
+        <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+          <span className="me-auto">{getApiErrorMessage(room.error, 'No se pudieron cargar las mesas.')}</span>
+          <button type="button" className="btn btn-sm btn-light" disabled={room.isFetching} onClick={() => void room.refetch()}>
+            Reintentar
+          </button>
+        </div>
+      )}
+      <p className="visually-hidden" role="status">{room.isPending ? 'Cargando las mesas…' : ''}</p>
       {room.isPending ? (
         <div className="tables-grid" aria-busy="true">
           {Array.from({ length: 6 }, (_, index) => <div key={index} className="table-card table-card-skeleton" />)}
         </div>
-      ) : tables.length === 0 ? (
+      ) : !room.data ? null : tables.length === 0 ? (
         <div className="card">
           <div className="card-body text-center py-5">
             <i className="ri-restaurant-line fs-1 text-muted" aria-hidden="true"></i>
-            <p className="mt-2 mb-3">Agrega tus mesas para abrir cuentas por mesa y mandar cada ronda a la cocina.</p>
+            <p className="mt-2 mb-3">
+              {access.catalog
+                ? 'Agrega tus mesas para abrir cuentas por mesa y mandar cada ronda a la cocina.'
+                : 'Todavía no hay mesas. Quien administra el catálogo puede agregarlas.'}
+            </p>
             {access.catalog && <button type="button" className="btn btn-primary" onClick={() => setConfiguring(true)}>Agregar mesas</button>}
           </div>
         </div>
@@ -142,8 +175,8 @@ export default function TablesPage() {
                       ? setOpenTabId(tab.orderId)
                       : navigate(`/sell?table=${table.id}&label=${encodeURIComponent(table.name)}`))}
                     aria-label={tab
-                      ? `${table.name}, ocupada, ${formatMoney(tab.balance)} por cobrar`
-                      : `${table.name}, libre, abrir cuenta`}
+                      ? describeTab(table.name, tab, now, 'ocupada')
+                      : [table.name, 'libre', table.seats ? `${table.seats} lugares` : '', 'abrir cuenta'].filter(Boolean).join(', ')}
                   >
                     <span className="table-card-name">{table.name}</span>
                     {tab ? (
@@ -168,7 +201,13 @@ export default function TablesPage() {
           <h2 className="h6 text-muted text-uppercase mb-2">Cuentas sin mesa</h2>
           <div className="tables-grid">
             {tabsWithoutTable.map((tab) => (
-              <button key={tab.orderId} type="button" className="table-card busy" onClick={() => setOpenTabId(tab.orderId)}>
+              <button
+                key={tab.orderId}
+                type="button"
+                className="table-card busy"
+                onClick={() => setOpenTabId(tab.orderId)}
+                aria-label={describeTab(tab.tableNumber || tab.customerName, tab, now)}
+              >
                 <span className="table-card-name">{tab.tableNumber || tab.customerName}</span>
                 <span className="table-card-total ta-money">{formatMoney(tab.total)}</span>
                 <span className="small text-muted">{formatOpenFor(minutesSince(tab.openedAt, now))}</span>

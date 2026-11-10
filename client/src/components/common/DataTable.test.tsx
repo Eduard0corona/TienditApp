@@ -145,6 +145,30 @@ describe('DataTable', () => {
     expect(screen.queryByRole('navigation', { name: 'Páginas' })).not.toBeInTheDocument();
   });
 
+  it('says a list could not be read instead of the empty message, also with something searched', async () => {
+    const user = userEvent.setup();
+    const table = (failedMessage?: string) => (
+      <DataTable
+        data={[] as Row[]}
+        columns={[{ header: 'Nombre' }]}
+        keyExtractor={(row) => row.id}
+        renderRow={(row) => <td>{row.name}</td>}
+        searchPlaceholder="Nombre del insumo"
+        emptyMessage="Todavía no hay insumos."
+        failedMessage={failedMessage}
+      />
+    );
+    const { rerender } = render(table('No se pudieron leer los insumos.'));
+    expect(screen.getByText('No se pudieron leer los insumos.')).toBeInTheDocument();
+
+    await user.type(screen.getByRole('searchbox', { name: 'Nombre del insumo' }), 'leche');
+    expect(screen.getByText('No se pudieron leer los insumos.')).toBeInTheDocument();
+    expect(screen.queryByText('No se encontraron resultados.')).not.toBeInTheDocument();
+
+    rerender(table());
+    expect(screen.getByText('No se encontraron resultados.')).toBeInTheDocument();
+  });
+
   it('searches the rows loaded and starts again from the first page', async () => {
     const user = userEvent.setup();
     renderTable(rows(30));
