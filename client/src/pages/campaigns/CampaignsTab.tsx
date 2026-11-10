@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { messagingApi } from '../../api/messagingApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -76,6 +76,8 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
   const [opening, setOpening] = useState(false);
   const [formError, setFormError] = useState('');
   const [detail, setDetail] = useState<CampaignDto | null>(null);
+  /** Each preview asked for, and each change of the audience: a late answer is for what was there before. */
+  const previewFor = useRef(0);
 
   const openNew = async () => {
     setOpening(true);
@@ -107,11 +109,12 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
     setBusy(true);
     setPreviewing(true);
     setFormError('');
+    const asked = ++previewFor.current;
     try {
       const { data: result } = await messagingApi.previewCampaign(audienceRequest(draft));
-      setPreview(result);
+      if (asked === previewFor.current) setPreview(result);
     } catch (err: unknown) {
-      setFormError(getApiErrorMessage(err, 'No se pudo calcular a quién llega.'));
+      if (asked === previewFor.current) setFormError(getApiErrorMessage(err, 'No se pudo calcular a quién llega.'));
     } finally {
       setBusy(false);
       setPreviewing(false);
@@ -169,8 +172,11 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
   const updateDraft = (changes: Partial<Draft>) => {
     if (!draft) return;
     setDraft({ ...draft, ...changes });
-    // The audience or the text changed: the preview no longer applies.
-    if ('templateId' in changes || 'audienceKind' in changes || 'minimumOrders' in changes || 'days' in changes) setPreview(null);
+    // The audience or the text changed: the preview no longer applies, nor one still being calculated.
+    if ('templateId' in changes || 'audienceKind' in changes || 'minimumOrders' in changes || 'days' in changes) {
+      setPreview(null);
+      previewFor.current += 1;
+    }
   };
 
   return (

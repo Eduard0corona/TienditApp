@@ -52,6 +52,12 @@ export default function OptOutsTab() {
     return () => window.clearTimeout(id);
   }, [load]);
 
+  // After registering or reactivating, what is read again is the search and page in view, not those of the click.
+  const loadInView = useRef(load);
+  useEffect(() => {
+    loadInView.current = load;
+  }, [load]);
+
   const add = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!phone.trim() || busy) return;
@@ -61,7 +67,7 @@ export default function OptOutsTab() {
       await messagingApi.setOptOut(phone.trim(), true);
       toast.success('Baja registrada: ya no recibirá campañas ni recordatorios.');
       setPhone('');
-      await load();
+      await loadInView.current();
     } catch (err: unknown) {
       setFormError(getApiErrorMessage(err, 'No se pudo registrar la baja.'));
     } finally {
@@ -79,7 +85,7 @@ export default function OptOutsTab() {
     try {
       await messagingApi.setOptOut(optOut.phone, false);
       toast.success('El cliente volverá a recibir mensajes.');
-      await load();
+      await loadInView.current();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo reactivar.'));
     }

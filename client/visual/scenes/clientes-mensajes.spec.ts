@@ -267,6 +267,23 @@ test.describe('Campañas', () => {
     await snapDialog(page, 'campanas-nueva-vista-previa-telefono');
   });
 
+  // Bajas and Recordatorios de citas, with their forms, at both sizes.
+  for (const look of [{ suffix: 'escritorio', viewport: SIZES.desktop }, { suffix: 'telefono', viewport: SIZES.phone }] as const) {
+    test(`bajas ${look.suffix}`, async ({ page }) => {
+      await page.setViewportSize(look.viewport);
+      await open(page, '/campaigns?tab=optOuts');
+      await expect(page.getByText('+525587761234')).toBeVisible();
+      await snap(page, `campanas-bajas-${look.suffix}`);
+    });
+
+    test(`recordatorios de citas ${look.suffix}`, async ({ page }) => {
+      await page.setViewportSize(look.viewport);
+      await open(page, '/campaigns?tab=reminders');
+      await expect(page.getByLabel('Horas antes')).toHaveValue('24');
+      await snap(page, `campanas-recordatorios-citas-${look.suffix}`);
+    });
+  }
+
   test.describe('Oscuro', () => {
     test.use({ colorMode: 'dark' });
 

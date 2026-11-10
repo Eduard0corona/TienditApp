@@ -3090,6 +3090,89 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - 236 archivos y 1,982 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
     - Primera visita: 180,381 B de 180,400 B. Su código es el mismo que en `master` (180,395 B): comparé los cuatro archivos normalizando los hashes.
   - **Escenas:** de las 33 de Mesas, la cuenta abierta, Auditoría, Transferencias y Conteos, cambian contra `master` (`ac2cc93`) las 3 de Auditoría: «Entidad» y «Acción» dicen «Nombre exacto», y «Por página» dice 20, lo que ya pedía («1–20 de 32»).
+- Fase 30Y, pruebas de Campañas (punto 10; sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Pruebas nuevas:** `CampaignsPage.test.tsx` (35) monta Campañas con la API simulada (el cliente tipado para las campañas y sus mensajes, `messagingApi` para lo demás). Cubre:
+    - las pestañas según el negocio (los recordatorios de citas solo con citas) y la que pide `?tab=`;
+    - **Campañas:**
+      - a quién llega y cómo va cada una, cancelar solo la que no ha terminado y después de preguntar;
+      - las páginas;
+      - el error con «Reintentar», sin «Todavía no has enviado campañas», y las filas que se quedan si releer falla;
+      - las plantillas de una campaña nueva: su error, y que se piden una vez;
+      - sin plantillas lleva a Plantillas;
+      - la vista previa (cuántos, excluidos, el tope, sin plantilla de Meta, ejemplos), que se olvida al cambiar el público, también si llega después;
+      - lo que se manda al enviar y la confirmación con lo que se previó;
+      - mientras se envía no se cierra ni dice «Calculando…»;
+      - el error del servidor dentro del formulario;
+      - los mensajes de una campaña y su error con «Reintentar».
+    - **Plantillas:**
+      - la lista con su uso, su plantilla de Meta o «Solo 24 h» e «Inactiva»;
+      - el error con «Reintentar»;
+      - crear una con las variables donde está el cursor y su orden en Meta;
+      - editar sin cambiar el uso, sin cerrarse mientras guarda y con el error del servidor;
+      - solo la última lectura.
+    - **Recordatorios de citas:**
+      - el texto que se envía según la plantilla y el aviso de WhatsApp;
+      - guardar sin cambiar nada mientras tanto;
+      - las horas fuera del rango;
+      - una plantilla elegida que se desactivó;
+      - los últimos recordatorios y avisos;
+      - el error con «Reintentar».
+    - **Recordatorios del fiado:** los avisos y los recordatorios con su resultado, y el error con «Reintentar».
+    - **Bajas:**
+      - la lista y la búsqueda, sin coincidencias;
+      - solo la última respuesta;
+      - el error sin «Cargando…» para siempre, y que no se queden filas de otra búsqueda;
+      - registrar una baja con su botón y no con Enter en la búsqueda;
+      - reactivar después de preguntar, con la página anterior si la última se queda vacía;
+      - releer con la búsqueda a la vista después de registrar o reactivar.
+  - **Qué arreglan:**
+    - **En todas las pestañas:** una lista que no se pudo leer decía que no había nada («Todavía no has enviado campañas», «Todavía no hay plantillas…») o se quedaba en «Cargando…» (Bajas, los mensajes de una campaña). Ahora lo dice, con lo que contestó la API y «Reintentar». Los errores se anuncian y la carga también.
+    - **Bajas:**
+      - Una respuesta tardía de lo escrito antes pisaba la búsqueda nueva.
+      - Si una lectura fallaba, se quedaban las filas de otra búsqueda.
+      - Sin coincidencias decía «Nadie ha pedido dejar de recibir mensajes.».
+      - Reactivar al último de la última página dejaba esa página vacía diciendo que nadie había pedido la baja.
+      - Enter en la búsqueda registraba la baja del teléfono escrito.
+      - El error de registrar una baja salía en el aviso de la lista.
+      - Después de registrar o reactivar se releía con la búsqueda y la página del clic, que pisaban las nuevas.
+    - **Plantillas:** la lista de abrir la pestaña, si llegaba tarde, pisaba la que se lee después de guardar.
+    - **Recordatorios de citas:**
+      - Unas horas vacías, en cero o fuera de rango se guardaban en silencio como las de antes, o las rechazaba el servidor. Ahora dice el rango junto al campo.
+      - Una plantilla elegida que se desactivó dejaba el selector en blanco, y guardar cualquier cambio fallaba con «Elige una plantilla de recordatorio activa.». Ahora sale «Texto predeterminado», que es lo que se envía, con un aviso.
+      - Se podía cambiar el formulario mientras guardaba.
+    - **Campañas:**
+      - Un segundo clic en «Nueva campaña» mientras llegaban las plantillas las pedía otra vez.
+      - Un error de las plantillas se quedaba aunque la siguiente vez sí llegaran.
+      - Mientras se enviaba una campaña sin vista previa, el botón de la vista previa decía «Calculando…».
+      - Una vista previa que llegaba después de cambiar el público se mostraba para el nuevo, y su cifra iba a la confirmación del envío (venía de antes).
+    - **Recordatorios del fiado:** el error no se podía reintentar.
+  - **Mutaciones:** de 51, fallan las pruebas en 50. La que queda es equivalente: con las horas ya revisadas, volver a las de antes (`|| settings.appointmentReminderHoursBefore`) nunca se usa. Sobrevivían al principio:
+    - el regreso de página de Bajas, que mostraba un instante «Nadie ha pedido…»;
+    - los errores tardíos de Bajas y de Plantillas;
+    - la carga anunciada de los recordatorios del fiado;
+    - la recarga después de reactivar.
+
+    Señalaron pruebas débiles y quedaron cubiertas. Otra señaló una revisión de más, que se quitó: unas horas vacías ya quedan bajo el mínimo.
+  - **Revisión independiente:** sin bloqueantes ni mayores.
+    - Como menores encontró:
+      - la recarga de Bajas después de registrar o reactivar, que pedía la búsqueda y la página del clic;
+      - la vista previa tardía, que se mostraba para otro público (de antes de esta fase).
+    - Como detalles:
+      - pruebas que prometían más: la plantilla desactivada se guardaba después de tocar el selector, y los errores tardíos no se probaban;
+      - el aviso de Plantillas, que seguía mientras se reintentaba;
+      - el error de las horas, sin ligar al campo.
+    - Todo quedó corregido con pruebas que fallan sin el arreglo.
+    - Quedan fuera:
+      - si falla la lectura de otra página de Bajas, desaparece el paginador (quedan «Reintentar» y la búsqueda);
+      - Enter en el teléfono registra la baja en el navegador, pero user-event solo busca el botón dentro del `<form>`; la prueba fija que el teléfono y el botón comparten formulario y la búsqueda no.
+  - **Pruebas que fallan con el código anterior:** 25 de las 35. Algunas solo porque buscan el error o la carga por su papel (`alert`, `status`); las demás fijan lo que ya funcionaba.
+  - **Cliente:**
+    - 237 archivos y 2,017 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las pruebas de Campañas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - Primera visita: 180,398 B de 180,400 B. Su código es el mismo que en `master` (180,381 B): comparé los cuatro archivos normalizando los hashes, y los 17 B salen de los nombres con hash de los chunks, que el de entrada referencia.
+  - **Escenas:**
+    - 4 nuevas: Bajas y Recordatorios de citas, en escritorio y teléfono, que no tenían.
+    - Para que cumplan el contrato, sus datos simulados usan uuid (las bajas, la plantilla de la cita y las citas de los mensajes) y la configuración trae `creditDueSoonPlaceholders`.
+    - De las 94 escenas de Clientes y mensajes, Recordatorios del fiado, el aviso antes de vencer y Cotizaciones, ninguna cambia contra `master` (`bd96f31`), tampoco las 4 nuevas: el formulario de Bajas y el `fieldset` de los recordatorios se ven igual.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

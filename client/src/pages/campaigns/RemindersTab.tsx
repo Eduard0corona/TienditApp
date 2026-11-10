@@ -73,6 +73,7 @@ export default function RemindersTab() {
   const [templateId, setTemplateId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [hoursError, setHoursError] = useState('');
   const [history, setHistory] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
   const [notices, setNotices] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
 
@@ -107,11 +108,12 @@ export default function RemindersTab() {
     if (!settings || saving) return;
     const hoursBefore = Number(hours);
     const { minReminderHoursBefore: min, maxReminderHoursBefore: max } = settings;
-    // Empty or out of range is said, instead of saving the hours there were.
-    if (hours.trim() === '' || !Number.isInteger(hoursBefore) || hoursBefore < min || hoursBefore > max) {
-      setError(`El recordatorio se envía de ${min} a ${max} horas antes de la cita.`);
+    // Out of range is said next to the hours, instead of saving those there were (empty is 0, under the least).
+    if (!Number.isInteger(hoursBefore) || hoursBefore < min || hoursBefore > max) {
+      setHoursError(`El recordatorio se envía de ${min} a ${max} horas antes de la cita.`);
       return;
     }
+    setHoursError('');
     setSaving(true);
     setError('');
     try {
@@ -159,8 +161,11 @@ export default function RemindersTab() {
             <div className="row g-2 mb-3">
               <div className="col-6 col-sm-3">
                 <label className="form-label" htmlFor="reminders-hours">Horas antes</label>
-                <input id="reminders-hours" type="number" className="form-control" min={settings.minReminderHoursBefore}
-                  max={settings.maxReminderHoursBefore} value={hours} onChange={(event) => setHours(event.target.value)} />
+                <input id="reminders-hours" type="number" className={`form-control ${hoursError ? 'is-invalid' : ''}`}
+                  min={settings.minReminderHoursBefore} max={settings.maxReminderHoursBefore} value={hours}
+                  aria-invalid={hoursError ? true : undefined} aria-describedby={hoursError ? 'reminders-hours-error' : undefined}
+                  onChange={(event) => { setHours(event.target.value); setHoursError(''); }} />
+                {hoursError && <div id="reminders-hours-error" className="invalid-feedback" role="alert">{hoursError}</div>}
               </div>
               <div className="col-sm-9">
                 <label className="form-label" htmlFor="reminders-template">Mensaje</label>

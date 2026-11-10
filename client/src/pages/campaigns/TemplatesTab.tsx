@@ -90,6 +90,8 @@ export default function TemplatesTab() {
   const load = useCallback(async () => {
     const reading = ++latestRead.current;
     setLoading(true);
+    // Reading again takes the notice away while it loads.
+    setError('');
     try {
       const { data } = await messagingApi.getTemplates();
       // Only the last reading is shown: the one on opening can arrive after the one that follows a save.
@@ -168,7 +170,7 @@ export default function TemplatesTab() {
         {error && (
           <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
             <span className="me-auto">{error}</span>
-            <button type="button" className="btn btn-sm btn-light" disabled={loading} onClick={() => void load()}>
+            <button type="button" className="btn btn-sm btn-light" onClick={() => void load()}>
               Reintentar
             </button>
           </div>

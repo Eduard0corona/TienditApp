@@ -354,6 +354,37 @@ describe('CampaignsPage', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     });
 
+    it('does not show a preview that arrives after the audience changed', async () => {
+      const user = userEvent.setup();
+      const previewing = deferred();
+      api.getTemplates.mockResolvedValue({ data: [PROMO] } as never);
+      api.previewCampaign.mockReturnValueOnce(previewing.promise as never);
+      answer({
+        'get /api/v1/messaging/campaigns': () => apiPage([]),
+        'post /api/v1/messaging/campaigns': () => SENDING,
+      });
+      confirm.mockResolvedValue(true);
+      renderPage();
+      await screen.findByText('Todavía no has enviado campañas.');
+
+      await user.click(screen.getByRole('button', { name: 'Nueva campaña' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Nueva campaña' }));
+      await user.type(dialog.getByLabelText('Nombre'), 'A todos');
+      await user.click(dialog.getByRole('button', { name: '¿A cuántos llega?' }));
+      await user.click(dialog.getByLabelText('Todos los clientes con teléfono'));
+      await act(async () => previewing.resolve({
+        data: { recipientCount: 5, excludedCount: 0, truncated: false, maxRecipients: 1000, usesApprovedTemplate: true, samples: [] },
+      }));
+
+      // The 5 were for those who bought: everyone was not previewed.
+      expect(dialog.queryByText(/Llega a/)).not.toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: '¿A cuántos llega?' })).toBeEnabled();
+      await user.click(dialog.getByRole('button', { name: 'Enviar campaña' }));
+      expect(confirm).toHaveBeenCalledWith(expect.objectContaining({
+        message: 'Los clientes se eligen cuando empiece. Cada mensaje puede tener costo en WhatsApp.',
+      }));
+    });
+
     it('does not say it is calculating while it sends, keeps the form open and says what the server refused', async () => {
       const user = userEvent.setup();
       const sending = deferred();
@@ -449,7 +480,8 @@ describe('CampaignsPage', () => {
       expect(screen.queryByText('Cargando…')).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Reintentar' }));
-      expect(screen.getByRole('button', { name: 'Reintentar' })).toBeDisabled();
+      // Reading again takes the notice away while it loads.
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(screen.getByRole('status')).toHaveTextContent('Cargando…');
       await act(async () => retry.resolve({ data: [PROMO, OLD_REMINDER] }));
       const promo = (await screen.findByText('Promoción')).closest('tr') as HTMLElement;
@@ -540,6 +572,26 @@ describe('CampaignsPage', () => {
       await act(async () => opening.resolve({ data: [PROMO] }));
       expect(screen.getByText('Bienvenida')).toBeInTheDocument();
       expect(screen.queryByText('Cargando…')).not.toBeInTheDocument();
+    });
+
+    it('does not say the templates failed when the read of opening fails after the one that follows a save', async () => {
+      const user = userEvent.setup();
+      const opening = deferred();
+      const created = template({ id: 't9', name: 'Bienvenida' });
+      api.getTemplates.mockReturnValueOnce(opening.promise as never).mockResolvedValue({ data: [PROMO, created] } as never);
+      api.createTemplate.mockResolvedValue({ data: created } as never);
+      renderPage('/campaigns?tab=templates');
+
+      await user.click(screen.getByRole('button', { name: 'Nueva plantilla' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Nueva plantilla' }));
+      await user.type(dialog.getByLabelText('Nombre'), 'Bienvenida');
+      await user.type(dialog.getByLabelText('Mensaje'), 'Hola, bienvenido.');
+      await user.click(dialog.getByRole('button', { name: 'Guardar' }));
+      expect(await screen.findByText('Bienvenida')).toBeInTheDocument();
+
+      await act(async () => opening.reject(refused('Se perdió la conexión.')));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByText('Bienvenida')).toBeInTheDocument();
     });
 
     it('keeps loading while the list after a save is read, though the one of opening answers first', async () => {
@@ -650,8 +702,13 @@ describe('CampaignsPage', () => {
         expect(screen.getByRole('alert')).toHaveTextContent('El recordatorio se envía de 1 a 72 horas antes de la cita.');
       }
       expect(api.updateReminders).not.toHaveBeenCalled();
+      // It is said next to the hours, and goes away when they change.
+      expect(hours).toHaveAttribute('aria-invalid', 'true');
+      expect(hours).toHaveAccessibleDescription('El recordatorio se envía de 1 a 72 horas antes de la cita.');
 
       await user.clear(hours);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(hours).not.toHaveAttribute('aria-invalid');
       await user.type(hours, '72');
       await user.click(screen.getByRole('button', { name: 'Guardar' }));
       await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Recordatorios guardados.'));
@@ -669,15 +726,24 @@ describe('CampaignsPage', () => {
         .toBeInTheDocument();
       expect(screen.getByLabelText('Mensaje')).toHaveValue('');
       expect(screen.getByText(SETTINGS.defaultReminderBody)).toBeInTheDocument();
-      // Choosing another one says it no more.
-      await user.selectOptions(screen.getByLabelText('Mensaje'), 'Cita mañana');
-      expect(screen.queryByText(/La plantilla elegida se desactivó/)).not.toBeInTheDocument();
-      await user.selectOptions(screen.getByLabelText('Mensaje'), 'Texto predeterminado');
 
+      // Saving without touching anything keeps what is being sent; the server would refuse the deactivated one.
       await user.click(screen.getByRole('button', { name: 'Guardar' }));
       await waitFor(() => expect(toast.success).toHaveBeenCalled());
       expect(api.updateReminders).toHaveBeenCalledWith({ enabled: false, hoursBefore: 24, templateId: undefined });
       expect(screen.queryByText(/La plantilla elegida se desactivó/)).not.toBeInTheDocument();
+    });
+
+    it('stops saying the template was deactivated while another one is chosen', async () => {
+      const user = userEvent.setup();
+      api.getSettings.mockResolvedValue({ data: { ...SETTINGS, appointmentReminderTemplateId: 'gone' } } as never);
+      renderPage('/campaigns?tab=reminders');
+      await screen.findByText(/La plantilla elegida se desactivó/);
+
+      await user.selectOptions(screen.getByLabelText('Mensaje'), 'Cita mañana');
+      expect(screen.queryByText(/La plantilla elegida se desactivó/)).not.toBeInTheDocument();
+      await user.selectOptions(screen.getByLabelText('Mensaje'), 'Texto predeterminado');
+      expect(screen.getByText(/La plantilla elegida se desactivó/)).toBeInTheDocument();
     });
 
     it('says the reminders could not be read and reads them again', async () => {
@@ -725,13 +791,18 @@ describe('CampaignsPage', () => {
 
     it('says they could not be read and reads them again', async () => {
       const user = userEvent.setup();
+      const retry = deferred();
       api.getMessages
         .mockRejectedValueOnce(refused('No se pudieron leer los mensajes.'))
+        .mockResolvedValueOnce(page([]))
+        .mockReturnValueOnce(retry.promise as never)
         .mockResolvedValue(page([]));
       renderPage('/campaigns?tab=creditReminders');
 
       expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron leer los mensajes.');
       await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Cargando…');
+      await act(async () => retry.resolve(page([])));
       expect(await screen.findByText('Todavía no se ha enviado ningún recordatorio del fiado.')).toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
@@ -787,6 +858,25 @@ describe('CampaignsPage', () => {
       expect(screen.getByText('9988776655')).toBeInTheDocument();
     });
 
+    it('does not let a late failure of what was typed before replace the latest list', async () => {
+      const user = userEvent.setup();
+      const slow = deferred();
+      api.getOptOuts.mockImplementation(((params: { search?: string }) => (
+        params.search === '5' ? slow.promise : Promise.resolve(page(params.search === '55' ? [ANA] : [ANA, LUIS]))
+      )) as never);
+      renderPage('/campaigns?tab=optOuts');
+      await screen.findByText('9988776655');
+
+      await user.type(screen.getByLabelText('Buscar'), '5');
+      await pause();
+      await user.type(screen.getByLabelText('Buscar'), '5');
+      await waitFor(() => expect(screen.queryByText('9988776655')).not.toBeInTheDocument());
+
+      await act(async () => slow.reject(refused('Se perdió la conexión.')));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByText('9991112233')).toBeInTheDocument();
+    });
+
     it('says they could not be read instead of loading forever, and reads them again', async () => {
       const user = userEvent.setup();
       const retry = deferred();
@@ -829,7 +919,13 @@ describe('CampaignsPage', () => {
       renderPage('/campaigns?tab=optOuts');
       await screen.findByText('9991112233');
 
-      await user.type(screen.getByLabelText('Teléfono'), '55 1234 5678');
+      // The phone and its button make the form (so Enter in the phone sends it); the search is outside it.
+      const phone = screen.getByLabelText('Teléfono') as HTMLInputElement;
+      expect(phone.form).not.toBeNull();
+      expect((screen.getByRole('button', { name: 'Registrar baja' }) as HTMLButtonElement).form).toBe(phone.form);
+      expect((screen.getByLabelText('Buscar') as HTMLInputElement).form).toBeNull();
+
+      await user.type(phone, '55 1234 5678');
       await user.type(screen.getByLabelText('Buscar'), '55{Enter}');
       expect(api.setOptOut).not.toHaveBeenCalled();
       await user.clear(screen.getByLabelText('Buscar'));
@@ -851,14 +947,55 @@ describe('CampaignsPage', () => {
       expect(api.getOptOuts.mock.calls.length).toBeGreaterThan(reads);
     });
 
+    it('reads again with the search in view after registering a baja', async () => {
+      const user = userEvent.setup();
+      const registering = deferred();
+      api.getOptOuts.mockImplementation(((params: { search?: string }) => Promise.resolve(page(params.search ? [] : [ANA]))) as never);
+      api.setOptOut.mockReturnValue(registering.promise as never);
+      renderPage('/campaigns?tab=optOuts');
+      await screen.findByText('9991112233');
+
+      await user.type(screen.getByLabelText('Teléfono'), '5512345678');
+      await user.click(screen.getByRole('button', { name: 'Registrar baja' }));
+      // While it is registered, another search is typed and read.
+      await user.type(screen.getByLabelText('Buscar'), '000');
+      expect(await screen.findByText('Ningún teléfono coincide con la búsqueda.')).toBeInTheDocument();
+
+      await act(async () => registering.resolve({ data: undefined }));
+      await waitFor(() => expect(toast.success).toHaveBeenCalled());
+      expect(lastSearch()).toEqual({ search: '000', pageNumber: 1, pageSize: 20 });
+      expect(screen.getByText('Ningún teléfono coincide con la búsqueda.')).toBeInTheDocument();
+      expect(screen.queryByText('9991112233')).not.toBeInTheDocument();
+    });
+
+    it('reads again with the search in view after reactivating a customer', async () => {
+      const user = userEvent.setup();
+      const reactivating = deferred();
+      api.getOptOuts.mockImplementation(((params: { search?: string }) => Promise.resolve(page(params.search ? [] : [ANA, LUIS]))) as never);
+      api.setOptOut.mockReturnValue(reactivating.promise as never);
+      confirm.mockResolvedValue(true);
+      renderPage('/campaigns?tab=optOuts');
+
+      const luis = (await screen.findByText('9988776655')).closest('tr') as HTMLElement;
+      await user.click(within(luis).getByRole('button', { name: 'Reactivar' }));
+      await waitFor(() => expect(api.setOptOut).toHaveBeenCalledWith('9988776655', false));
+      await user.type(screen.getByLabelText('Buscar'), '000');
+      expect(await screen.findByText('Ningún teléfono coincide con la búsqueda.')).toBeInTheDocument();
+
+      await act(async () => reactivating.resolve({ data: undefined }));
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith('El cliente volverá a recibir mensajes.'));
+      expect(lastSearch()).toEqual({ search: '000', pageNumber: 1, pageSize: 20 });
+      expect(screen.getByText('Ningún teléfono coincide con la búsqueda.')).toBeInTheDocument();
+    });
+
     it('reactivates a customer only after asking, and goes to the page before when the last one leaves its page', async () => {
       const user = userEvent.setup();
       let luisOut = true;
-      api.getOptOuts.mockImplementation(((params: { pageNumber: number }) => Promise.resolve(
-        params.pageNumber === 2
-          ? page(luisOut ? [LUIS] : [], 2, luisOut ? 2 : 1)
-          : page([ANA], 1, luisOut ? 2 : 1),
-      )) as never);
+      const back = deferred();
+      api.getOptOuts.mockImplementation(((params: { pageNumber: number }) => {
+        if (params.pageNumber === 2) return Promise.resolve(page(luisOut ? [LUIS] : [], 2, luisOut ? 2 : 1));
+        return luisOut ? Promise.resolve(page([ANA], 1, 2)) : back.promise;
+      }) as never);
       api.setOptOut.mockImplementation((async () => {
         luisOut = false;
         return { data: undefined };
@@ -878,8 +1015,11 @@ describe('CampaignsPage', () => {
       await user.click(within(luis).getByRole('button', { name: 'Reactivar' }));
       await waitFor(() => expect(toast.success).toHaveBeenCalledWith('El cliente volverá a recibir mensajes.'));
       expect(api.setOptOut).toHaveBeenCalledWith('9988776655', false);
+      // The page before is read; meanwhile nothing says that nobody asked.
+      await waitFor(() => expect(lastSearch()).toEqual({ search: undefined, pageNumber: 1, pageSize: 20 }));
+      expect(screen.queryByText('Nadie ha pedido dejar de recibir mensajes.')).not.toBeInTheDocument();
+      await act(async () => back.resolve(page([ANA], 1, 1)));
       expect(await screen.findByText('9991112233')).toBeInTheDocument();
-      expect(lastSearch()).toEqual({ search: undefined, pageNumber: 1, pageSize: 20 });
       expect(screen.queryByText('Nadie ha pedido dejar de recibir mensajes.')).not.toBeInTheDocument();
     });
   });
