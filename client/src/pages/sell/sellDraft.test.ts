@@ -1,6 +1,18 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { OrderChannel, PlatformCollectedBy } from '../../types';
-import { describeSale, readSellDraft, writeSellDraft, type SellDraft } from './sellDraft';
+import type { ProductDto } from '../../types';
+import { CfdiTaxObject, OrderChannel, PlatformCollectedBy, UnitType } from '../../types';
+import {
+  describeSale,
+  initialDetails,
+  linesFromDraft,
+  readSellDraft,
+  refreshLines,
+  restoreDetails,
+  toDraft,
+  writeSellDraft,
+  type SellDraft,
+} from './sellDraft';
+import { MAX_QUANTITY_PER_LINE, NO_SALE_DETAILS, type ToCartLine } from './sellModel';
 
 const draft: SellDraft = {
   lines: [{ productId: 'taco', quantity: 2, notes: 'sin cebolla', optionIds: ['salsa-verde'] }],
@@ -145,5 +157,71 @@ describe('sellDraft', () => {
     expect(readSellDraft('t1')?.appointment?.id).toBe('a1');
     window.localStorage.setItem('tienditapp.sell.draft.v1.t1', JSON.stringify({ ...draft, appointment: { visitFee: 80 } }));
     expect(readSellDraft('t1')?.appointment).toBeUndefined();
+  });
+});
+
+describe('the sale brought back from the device', () => {
+  const taco = { id: 'taco', categoryId: 'c', name: 'Taco', sortOrder: 1, priceAmount: 25, priceCurrency: 'MXN', isTaxExempt: false,
+    hasDiscount: false, taxObject: CfdiTaxObject.Subject, isAvailable: true, isFeatured: false, tracksStock: false, isLowStock: false,
+    isTrackable: false, notifyCustomer: false, unit: UnitType.Unit,
+    optionGroups: [{ id: 'salsa', name: 'Salsa', minSelections: 1, maxSelections: 1, options: [
+      { id: 'salsa-verde', name: 'Verde', priceDelta: 0, isAvailable: true },
+    ] }] } as ProductDto;
+  const toCartLine: ToCartLine = (product, quantity, notes = '', optionIds = []) => ({
+    key: `${product.id}|${optionIds.join(',')}`, productId: product.id, optionIds, optionsLabel: '', name: product.name,
+    unitPrice: product.priceAmount, quantity, notes, showNotes: false, isService: false, ratePercent: 16, isExempt: false, fractional: false,
+  });
+
+  it('keeps the lines and details of the sale on screen', () => {
+    const cart = [toCartLine(taco, 2, 'sin cebolla', ['salsa-verde'])];
+    const details = { ...NO_SALE_DETAILS, customerName: 'Lupita' };
+    expect(toDraft(cart, details)).toEqual({
+      ...details,
+      lines: [{ productId: 'taco', quantity: 2, notes: 'sin cebolla', optionIds: ['salsa-verde'] }],
+    });
+  });
+
+  it('starts an order of a platform with its folio before the catalog is in, and anything else at the counter', () => {
+    expect(initialDetails(rappi)).toEqual({ ...NO_SALE_DETAILS, channel: OrderChannel.Rappi, externalOrderNumber: 'BC953', externalOrderId: '' });
+    const address = { postalCode: '06700', addressLine: 'Calle 5', references: '' };
+    expect(initialDetails({ ...draft, delivery: address })).toEqual({ ...NO_SALE_DETAILS, delivery: address });
+    expect(initialDetails(null)).toEqual(NO_SALE_DETAILS);
+  });
+
+  it('brings back the details, in sight when there is a customer, and the notes of a platform\'s order', () => {
+    expect(restoreDetails(draft, false)).toEqual({
+      details: { ...NO_SALE_DETAILS, customerName: 'Lupita' },
+      showDetails: true,
+    });
+    expect(restoreDetails({ ...draft, customerName: '' }, false).showDetails).toBe(false);
+    // The name for the bag of a platform's order is in sight with its folio: only notes open the details.
+    expect(restoreDetails(rappi, false)).toEqual({
+      details: { ...NO_SALE_DETAILS, customerName: 'Lupita', channel: OrderChannel.Rappi, externalOrderNumber: 'BC953' },
+      showDetails: false,
+    });
+    expect(restoreDetails({ ...rappi, orderNotes: 'Sin cubiertos' }, false).showDetails).toBe(true);
+  });
+
+  it('keeps at the counter an order of a platform the cashier took there before the catalog loaded', () => {
+    expect(restoreDetails(rappi, true)).toEqual({ details: { ...NO_SALE_DETAILS, customerName: 'Lupita' }, showDetails: true });
+  });
+
+  it('brings back the lines as the catalog has them now, dropping a product or options no longer sold', () => {
+    const catalog = new Map([['taco', taco]]);
+    expect(linesFromDraft(draft.lines, catalog, toCartLine)).toEqual([toCartLine(taco, 2, 'sin cebolla', ['salsa-verde'])]);
+    expect(linesFromDraft([{ productId: 'taco', quantity: 20_000, notes: '', optionIds: ['salsa-verde'] }], catalog, toCartLine)[0].quantity)
+      .toBe(MAX_QUANTITY_PER_LINE);
+    expect(linesFromDraft([{ productId: 'taco', quantity: 1, notes: '', optionIds: ['salsa-roja'] }], catalog, toCartLine)).toEqual([]);
+    expect(linesFromDraft([{ productId: 'gringa', quantity: 1, notes: '' }], catalog, toCartLine)).toEqual([]);
+  });
+
+  it('refreshes the ticket with the prices read again, keeping its open notes', () => {
+    const before = { ...toCartLine(taco, 2, 'sin cebolla', ['salsa-verde']), unitPrice: 20, showNotes: true };
+    const catalog = new Map([['taco', { ...taco, priceAmount: 28 }]]);
+    expect(refreshLines([before], catalog, toCartLine)).toEqual([{ ...before, unitPrice: 28 }]);
+    expect(refreshLines([before], new Map(), toCartLine)).toEqual([]);
+    // Options that changed since: the line drops instead of selling something else.
+    const otherSalsa = { ...taco, optionGroups: [{ ...taco.optionGroups![0], options: [{ id: 'salsa-roja', name: 'Roja', priceDelta: 0, isAvailable: true }] }] };
+    expect(refreshLines([before], new Map([['taco', otherSalsa]]), toCartLine)).toEqual([]);
   });
 });

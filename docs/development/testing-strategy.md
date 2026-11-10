@@ -3301,6 +3301,22 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Cliente: 240 archivos y 2,056 pruebas, lint, `tsc`, `visual:typecheck` y build en verde.
     - Primera visita: 180,387 B de 180,400 B (`master`: 180,390 B). `ordersApi` va en ella, y con un parámetro más subía a 180,401 B: `cancel` recibe ahora el cuerpo de la petición (`CancelOrderRequest`, como `dispatch`), que arma Pedidos en su propio chunk.
     - `client/openapi/openapi.json` y `schema.ts` regenerados desde la API en Development.
+- Fase 31C, Vender dividido en partes (sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Qué cambia:** `SellPage.tsx` baja de 1,096 a 780 líneas y sigue coordinando la venta. Lo que no depende de React vive en su archivo: lo que se valida antes de cobrar o registrar (`saleChecks.ts`), los totales, la orden que se manda y el fiado o el saldo del cobro (`saleRequest.ts`), el filtro del catálogo, lo que tecleó el lector, las opciones de inicio y la venta de una cita (`sellModel.ts`), el borrador que se trae de vuelta (`sellDraft.ts`), el envío que pregunta por un folio repetido (`sendSale.ts`) y la venta guardada sin conexión (`offlineSale.ts`). La caja, las plataformas, la entrega, la cuenta de una mesa y F9 van en sus hooks; los avisos, la barra del teléfono y el cobro, en sus componentes. No cambia lo que se ve ni lo que hace.
+  - **Cliente:** 247 archivos y 2,102 pruebas, lint, `tsc`, `visual:typecheck` y build en verde. `SellPage.test.tsx` (51 de antes, sin cambios) pasa igual.
+    - Nuevas: `saleChecks.test.ts` (7), `saleRequest.test.ts` (10), `sendSale.test.ts` (4), `offlineSale.test.ts` (2), `SellNotices.test.tsx` (3), `ChargeModal.test.tsx` (2), `useTabOrder.test.tsx` (3), y en `sellModel.test.ts` (+8) y `sellDraft.test.ts` (+6). Cubren cada mensaje y el orden en que se dicen, la orden de mostrador, de plataforma, de WhatsApp, de servicio, de una cita y a domicilio, que la venta sin conexión guarda su llave como id y no la manda dentro de la orden, y la cuenta de una mesa que no se lee dos veces ni avisa si la pantalla ya se fue.
+    - `SellPage.test.tsx` (+1): abrir la caja desde «Cobrar» abre el cobro, quita el aviso, deja el dispositivo en la sucursal de esa caja y vende ahí.
+  - **Mutaciones:** fallan las pruebas en las 10 que la revisión encontró sin atrapar (la caja que sigue cerrada o sin su sucursal, el cobro que no se abre después, el aviso sin conexión al revés, el guardia de la cuenta de una mesa, el cobro que se cierra mientras va, la llave de la venta sin conexión cambiada o dentro de la orden, el orden de los avisos de la entrega y las opciones cambiadas al recargar el catálogo).
+  - **Escenas:** contra `master` (`4279065`), las 321 de los 8 archivos que abren Vender (vender y pedidos, caja y configuración, el menú público, la agenda a domicilio, condonar, fiado, saldo a favor y foco) pasan sin diferencias, antes y después de los arreglos de la revisión.
+  - **Primera visita:** 180,362 B de 180,400 B. Nada fuera de `pages/sell` importa sus módulos.
+  - **Revisión independiente:** comparó cada bloque contra el original (condiciones, el orden de los `setState`, dependencias, referencias y cada texto, clase y atributo) y no encontró diferencias de comportamiento ni de DOM, salvo el texto de los `id` de los diálogos. Encontró:
+    - la llave de la venta sin conexión sin prueba;
+    - caminos movidos que ninguna prueba cubría;
+    - dos efectos que corrían antes que el catálogo;
+    - un `onError` que volvía a leer la cuenta si cambiaba;
+    - un nombre que escondía otro.
+
+    Todo quedó corregido, con pruebas que fallan sin el arreglo.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

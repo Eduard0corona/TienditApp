@@ -40,8 +40,9 @@ vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('../../hooks/useOnlineStatus', () => ({ useOnlineStatus: vi.fn() }));
 vi.mock('../../hooks/usePendingSales', () => ({ usePendingSales: () => ({ sales: [], failedCount: 0 }) }));
+const workingBranch = vi.hoisted(() => ({ setBranch: vi.fn() }));
 vi.mock('../../hooks/useWorkingBranch', () => ({
-  useWorkingBranch: () => ({ hasSeveral: false, branches: [], branch: undefined, setBranch: vi.fn() }),
+  useWorkingBranch: () => ({ hasSeveral: false, branches: [], branch: undefined, setBranch: workingBranch.setBranch }),
 }));
 vi.mock('../../offline/catalogCache', () => ({ loadCatalogSnapshot: vi.fn(), saveCatalogSnapshot: vi.fn() }));
 // jsdom has no IndexedDB: the queue of sales charged offline is replaced, the rest of the module is the real one.
@@ -52,7 +53,7 @@ vi.mock('../../offline/saleQueue', async (importOriginal) => ({
 vi.mock('../../api/productsApi', () => ({ productsApi: { getAll: vi.fn() } }));
 vi.mock('../../api/appointmentsApi', () => ({ appointmentsApi: { getById: vi.fn() } }));
 vi.mock('../../api/categoriesApi', () => ({ categoriesApi: { getAll: vi.fn() } }));
-vi.mock('../../api/cashApi', () => ({ cashApi: { getCurrentSession: vi.fn() } }));
+vi.mock('../../api/cashApi', () => ({ cashApi: { getCurrentSession: vi.fn(), openSession: vi.fn() } }));
 vi.mock('../../api/chatApi', () => ({ chatApi: { sendMessage: vi.fn() } }));
 vi.mock('../../api/ordersApi', () => ({
   ordersApi: { create: vi.fn(), addRound: vi.fn(), getById: vi.fn(), uploadPaymentEvidence: vi.fn() },
@@ -223,6 +224,33 @@ describe('SellPage', () => {
     vi.mocked(cashApi.getCurrentSession).mockResolvedValue({ data: { isMine: true } } as never);
     vi.mocked(useOnlineStatus).mockReturnValue(true);
     givePlatforms([]);
+  });
+
+  it('opens the drawer from Cobrar and then charges, the device working where that drawer is', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(cashApi.getCurrentSession).mockResolvedValue({ data: null } as never);
+    vi.mocked(cashApi.openSession).mockResolvedValue({ data: { id: 's1', isMine: true, branchId: 'norte', branchName: 'Norte' } } as never);
+    renderAt('/sell');
+    expect(await screen.findByText(/^Tu caja está cerrada/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: 'Cobrar $25.00 F9' }));
+    // Every charge enters a drawer: the cashier's opens first, and then the charge.
+    const drawer = await screen.findByRole('dialog', { name: 'Abrir mi caja' });
+    expect(screen.queryByRole('dialog', { name: 'Cobrar' })).not.toBeInTheDocument();
+    await userEvent.type(within(drawer).getByLabelText('Fondo inicial'), '500');
+    await userEvent.click(within(drawer).getByRole('button', { name: 'Abrir caja' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Cobrar' })).toBeInTheDocument();
+    expect(cashApi.openSession).toHaveBeenCalledWith(expect.objectContaining({ openingAmount: 500 }));
+    expect(screen.queryByText(/^Tu caja está cerrada/)).not.toBeInTheDocument();
+    expect(workingBranch.setBranch).toHaveBeenCalledWith('norte');
+    expect(toast.success).toHaveBeenCalledWith('Tu caja quedó abierta.');
+
+    // The sale is made at the branch of the cashier's own drawer.
+    vi.mocked(ordersApi.create).mockResolvedValue({ data: chargedTaco } as never);
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Cobrar' })).getByRole('button', { name: 'Cobrar $25.00' }));
+    await waitFor(() => expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({ branchId: 'norte' })));
   });
 
   it('adds what is tapped and saves the sale for later with the server checking the total', async () => {
