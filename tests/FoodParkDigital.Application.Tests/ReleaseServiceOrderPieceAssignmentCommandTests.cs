@@ -7,13 +7,16 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace FoodParkDigital.Application.Tests;
 
 /// <summary>
 /// «Liberar» on the service board (<c>PUT /service-board/pieces/{id}/release</c>): an open piece goes back to nobody;
 /// a completed or cancelled one keeps who worked it, for its assignee and for a manager alike. The board stops offering
-/// it on closed pieces (Fase 30M), but the server is the one that decides.
+/// it on closed pieces (Fase 30M), but the server is the one that decides. The release goes through the order, whose row
+/// version catches a change saved meanwhile (proven on SQL Server by <c>ServiceOrderPieceAssignmentSqlServerTests</c>):
+/// here, that the use case tries again and then says so.
 /// </summary>
 public class ReleaseServiceOrderPieceAssignmentCommandTests
 {
@@ -38,6 +41,8 @@ public class ReleaseServiceOrderPieceAssignmentCommandTests
         Assert.Null(stored.AssignedToUserId);
         Assert.Null(stored.AssignedToName);
         Assert.Null(stored.AssignedAt);
+        // The order row was written with the piece: that write is what checks its row version.
+        Assert.NotEqual(AssignedAt, (await context.Orders.AsNoTracking().SingleAsync()).UpdatedAt);
         var update = Assert.Single(board.PieceUpdates);
         Assert.Equal(pieceId, update.PieceId);
         Assert.Null(update.AssignedToUserId);
@@ -73,6 +78,31 @@ public class ReleaseServiceOrderPieceAssignmentCommandTests
         Assert.Empty(board.PieceUpdates);
     }
 
+    [Fact]
+    public async Task Release_ShouldStopAfterThreeTries_WhenTheOrderChangesEveryTime_KeepingTheAssignment()
+    {
+        var tenant = new TestCurrentTenantService();
+        var worker = new TestCurrentUserService(nameof(TenantUserRole.Staff));
+        var database = Guid.NewGuid().ToString();
+        Guid pieceId;
+        await using (var seed = NewContext(tenant, database))
+            pieceId = await SeedAssignedPieceAsync(seed, tenant, worker.Id, ServiceOrderPieceStatus.InProgress);
+        var meanwhile = new AlwaysSavedMeanwhile();
+        await using var context = NewContext(tenant, database, meanwhile);
+        var board = new RecordingBoard();
+
+        var result = await NewHandler(context, worker, tenant, board)
+            .Handle(new ReleaseServiceOrderPieceAssignmentCommand { PieceId = pieceId }, CancellationToken.None);
+
+        Assert.Equal(ServiceBoardPieceSaves.SavedMeanwhileMessage, result.Error);
+        Assert.Equal(3, meanwhile.Attempts);
+        var stored = await context.ServiceOrderPieces.AsNoTracking().SingleAsync(p => p.Id == pieceId);
+        Assert.Equal(worker.Id, stored.AssignedToUserId);
+        Assert.Equal("Técnico", stored.AssignedToName);
+        Assert.Equal(AssignedAt, stored.AssignedAt);
+        Assert.Empty(board.PieceUpdates);
+    }
+
     private static ReleaseServiceOrderPieceAssignmentCommandHandler NewHandler(
         ApplicationDbContext context,
         ICurrentUserService user,
@@ -81,9 +111,13 @@ public class ReleaseServiceOrderPieceAssignmentCommandTests
         => new(context, user, TestAccess.For(user, tenant), board);
 
     private static TestApplicationDbContext NewContext(ICurrentTenantService tenant)
+        => NewContext(tenant, Guid.NewGuid().ToString());
+
+    private static TestApplicationDbContext NewContext(ICurrentTenantService tenant, string database, params IInterceptor[] interceptors)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(database)
+            .AddInterceptors(interceptors)
             .Options;
 
         return new TestApplicationDbContext(options, tenant, new NullMediator());
@@ -112,7 +146,7 @@ public class ReleaseServiceOrderPieceAssignmentCommandTests
         order.AddServicePiece("Par Nike", null, null, null, null, null, null, "Lavado premium", null);
 
         var piece = order.ServicePieces.Single();
-        piece.AssignTo(workerId, "Técnico", AssignedAt);
+        order.AssignServicePiece(piece, workerId, "Técnico", AssignedAt);
 
         ServiceOrderPieceStatus[] path = status switch
         {
@@ -128,6 +162,19 @@ public class ReleaseServiceOrderPieceAssignmentCommandTests
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
         return piece.Id;
+    }
+
+    /// <summary>Another change of the order saved before each save of this context: its row version never matches.</summary>
+    private sealed class AlwaysSavedMeanwhile : SaveChangesInterceptor
+    {
+        public int Attempts { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            Attempts++;
+            throw new DbUpdateConcurrencyException("La orden cambió.");
+        }
     }
 
     private sealed class TestCurrentTenantService : ICurrentTenantService

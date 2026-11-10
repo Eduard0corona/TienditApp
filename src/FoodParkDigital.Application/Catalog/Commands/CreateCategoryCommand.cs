@@ -44,6 +44,9 @@ public class CreateCategoryCommandHandler : IRequestHandler<CreateCategoryComman
 
     public async Task<Result<CategoryDto>> Handle(CreateCategoryCommand request, CancellationToken cancellationToken)
     {
+        if (await CategoryNames.FindTakenAsync(_context, request.Name, null, cancellationToken) is { } taken)
+            return Result.Failure<CategoryDto>(taken);
+
         if (await _context.Categories.CountAsync(cancellationToken) >= Category.MaxCategoriesPerTenant)
             return Result.Failure<CategoryDto>(CategoryLimits.Reached);
 
@@ -54,7 +57,19 @@ public class CreateCategoryCommandHandler : IRequestHandler<CreateCategoryComman
             request.SortOrder);
 
         _context.Categories.Add(category);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Another save took the name at the same moment (the unique index): this one is undone, and the person is
+            // told which category has it.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
+            if (await CategoryNames.FindTakenAsync(_context, request.Name, null, cancellationToken) is { } meanwhile)
+                return Result.Failure<CategoryDto>(meanwhile);
+            throw;
+        }
 
         return Result.Success(category.ToDto());
     }

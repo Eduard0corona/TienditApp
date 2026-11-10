@@ -76,15 +76,19 @@ public class InstallStarterCatalogCommandHandler
                 "Tu catálogo ya tiene productos. Agrega los que falten desde Catálogo.");
         }
 
-        // Categories with the same name are reused (the business may have created them already).
-        var categoriesByName = await _context.Categories
-            .ToDictionaryAsync(category => category.Name.Trim().ToLowerInvariant(), cancellationToken);
+        // Categories with the same name are reused (the business may have created them already). Two that were repeated
+        // before names were unique, an active one first, do not stop it.
+        var categoriesByName = (await _context.Categories.ToListAsync(cancellationToken))
+            .GroupBy(category => Category.NameKey(category.Name))
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(category => category.IsActive).ThenBy(category => category.CreatedAt).First());
 
         Product? homeVisit = null;
         var categoriesCreated = 0;
         foreach (var categoryDefinition in template.Categories.OrderBy(category => category.SortOrder))
         {
-            var key = categoryDefinition.Name.Trim().ToLowerInvariant();
+            var key = Category.NameKey(categoryDefinition.Name);
             if (!categoriesByName.TryGetValue(key, out var category))
             {
                 category = new Category(tenantId, categoryDefinition.Name, null, categoryDefinition.SortOrder);

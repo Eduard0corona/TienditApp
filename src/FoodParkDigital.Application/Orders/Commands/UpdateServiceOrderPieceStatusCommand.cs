@@ -55,9 +55,7 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
     {
         // Two employees can change pieces of the same order at the same time. Every change also updates
         // the order row, so the second save hits the order's row version and is retried with fresh data.
-        const int maxAttempts = 3;
-
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        for (var attempt = 1; attempt <= ServiceBoardPieceSaves.MaxAttempts; attempt++)
         {
             var order = await _context.Orders
                 .Include(o => o.ServicePieces)
@@ -91,8 +89,7 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
             }
         }
 
-        return Result.Failure(
-            "La orden fue actualizada por otro proceso. Refresca el tablero e intenta nuevamente.");
+        return Result.Failure(ServiceBoardPieceSaves.SavedMeanwhileMessage);
     }
 
     private async Task<Result> ApplyChangeAsync(
@@ -119,7 +116,7 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
 
         var now = DateTimeOffset.UtcNow;
         if (!piece.AssignedToUserId.HasValue && hasCurrentUser)
-            piece.AssignTo(currentUserId, _currentUserService.UserName, now);
+            order.AssignServicePiece(piece, currentUserId, _currentUserService.UserName, now);
 
         var previousStatus = piece.Status;
 

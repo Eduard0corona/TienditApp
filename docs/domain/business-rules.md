@@ -857,11 +857,21 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.
 
+## Nombre de las categorías (Fase 31E)
+
+Un nombre es de una sola categoría en cada negocio ([ADR 0086](../adr/0086-unique-category-name-per-business.md)).
+
+- **Cuándo dos nombres son el mismo** (`Category.NameKey`): sin importar mayúsculas, espacios en las orillas ni espacios repetidos (también tabuladores, saltos de línea y espacio duro). Los acentos cuentan: «Café» y «Cafe» son dos. Cuentan también las archivadas. Otro negocio puede tener el mismo nombre.
+- **Crear o editar** con un nombre tomado se rechaza (400) con el de la categoría que lo tiene: «Ya tienes una categoría llamada «Bebidas». Ponle otro nombre.», o con una archivada, «Ya tienes una categoría archivada llamada «Temporada». Restáurala o ponle otro nombre.».
+- **Editar solo revisa un nombre nuevo:** cambiarle mayúsculas o espacios a su propio nombre, o la descripción u orden de una repetida de antes de la regla, funciona.
+- **Las plantillas** omiten los nombres que el negocio tiene, con la misma comparación. **El catálogo de ejemplo** los reutiliza: entre dos repetidas de antes, la activa.
+- **El índice único `(TenantId, Name)`** respalda la regla cuando dos guardados se cruzan, con la intercalación de la base (sin mayúsculas, espacios al final ni el ancho de las letras, y con «ß» como «ss»). Lo que solo ella tiene por igual también se rechaza con el nombre de la categoría que lo tiene, y la plantilla lo omite. El nombre se guarda tal como se escribió.
+
 ## Servicio y citas
 
 - Una pieza inicia `Accepted`; pasa a `InProgress`, luego `Completed`, o puede cancelarse desde los dos primeros estados.
 - Una pieza completada/cancelada no puede asignarse ni liberarse: quién la trabajó queda en su historial. El agregado y el caso de uso lo rechazan, también para un administrador.
-- El caso de uso sincroniza estado de la orden desde las piezas trackeables. Los cambios de pieza pasan por `Order.ChangeServicePieceStatus` para que el rowversion de la orden detecte cambios simultáneos.
+- El caso de uso sincroniza estado de la orden desde las piezas trackeables. La pieza no tiene rowversion propio: cambiar su estado, asignarla («Tomar servicio») y liberarla pasan por la orden (`Order.ChangeServicePieceStatus`, `Order.AssignServicePiece` y `Order.ReleaseServicePiece`), que valida que la pieza sea suya y marca su fila para que el rowversion de la orden detecte cambios simultáneos. Ante el choque, el caso de uso vuelve a leer y decide con lo guardado (hasta 3 intentos; después responde «La orden fue actualizada por otro proceso. Refresca el tablero e intenta nuevamente.»): una liberación leída antes de que otra petición completara la pieza ya no borra quién la trabajó, no se toma una pieza que se cerró o que otro tomó mientras tanto, y quien la tenía no libera una pieza que un administrador dio a otro.
 - Completar una pieza consume su receta en el mismo guardado; si falta stock y el negocio bloquea (por defecto), la pieza no se completa y el mensaje nombra el insumo; con "vender y avisar" se completa y el insumo queda en negativo.
 - Las citas tienen su propio enum y método de cambio de estado; deben mantener reglas en el agregado. «Por confirmar» (una cita agendada en línea, Fase 24D) solo sale aceptada, rechazada o cancelada por su cliente.
 - Una cita puede ligarse a un servicio del catálogo y a una persona activa del equipo del mismo negocio (sus nombres se toman de ahí); una misma persona no tiene dos citas que se traslapen. Una cita cerrada (completada, cancelada o no presentada) ya no se edita ni se reprograma; reprogramar avisa al cliente por WhatsApp. La agenda abre con las citas de hoy, la más próxima primero; el historial se lee de la más reciente hacia atrás.
