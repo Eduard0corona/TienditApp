@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -190,7 +191,10 @@ public class QuoteConversionSqlServerTests
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant($"Plomería {slug}", slug, BusinessType.Service, $"{slug}@demo.com");
         var settings = new TenantSettings(tenant.Id, TenantCapability.Service | TenantCapability.Appointments);
-        var service = Guid.NewGuid();
+        // The service of the visit, of its catalog: the appointment points to a product that exists (Fase 31H).
+        var category = new Category(tenant.Id, "Servicios", null);
+        var product = new Product(tenant.Id, category.Id, "Visita y diagnóstico", null, 406m, "MXN");
+        var service = product.Id;
         var visit = new Appointment(tenant.Id, "Valeria", "5522107765", "Visita y diagnóstico", Now.AddDays(-1), Now.AddDays(-1).AddHours(1),
             serviceProductId: service);
         var visitSale = new Order(tenant.Id, null, null, true, "ORD-000001", BusinessType.Service, OrderType.Service, "Valeria",
@@ -204,7 +208,7 @@ public class QuoteConversionSqlServerTests
         quote.Send(today, new string('v', 43), null, Now);
         quote.Accept(today, QuoteReplyChannel.WhatsApp, null, Now);
         await using var seed = database.CreateContext(tenant.Id);
-        seed.AddRange(tenant, settings, visit, visitSale, quote);
+        seed.AddRange(tenant, settings, category, product, visit, visitSale, quote);
         await seed.SaveChangesAsync();
         return (tenant.Id, quote.Id, visitSale.Id);
     }

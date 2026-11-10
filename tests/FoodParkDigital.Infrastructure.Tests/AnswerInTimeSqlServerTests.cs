@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Appointments.Queries;
 using FoodParkDigital.Application.Attention;
@@ -5,6 +6,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Tests.Support;
@@ -202,7 +204,7 @@ public class AnswerInTimeSqlServerTests
         DbContext context, Guid tenantId, DateTimeOffset arrivedAt, DateTimeOffset startAt, bool fromTeam = false, Guid? id = null)
     {
         var request = Appointment.RequestOnline(
-            tenantId, "Valeria", "+525522107765", Guid.NewGuid(), "Corte", startAt, startAt.AddHours(1), null, null, Guid.NewGuid(),
+            tenantId, "Valeria", "+525522107765", Services[tenantId], "Corte", startAt, startAt.AddHours(1), null, null, Guid.NewGuid(),
             (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43], fromTeam: fromTeam);
         // This context has no audit interceptor: stamp when it arrived, as production does.
         request.CreatedAt = arrivedAt;
@@ -220,10 +222,17 @@ public class AnswerInTimeSqlServerTests
         await using var context = database.CreateContext(tenant.Id);
         var settings = new TenantSettings(tenant.Id, TenantCapability.Service | TenantCapability.Appointments);
         settings.UpdateOnlineBooking(true, 1);
-        context.AddRange(tenant, settings);
+        // The service its requests book: an appointment points to a product that exists (Fase 31H).
+        var category = new Category(tenant.Id, "Servicios", null);
+        var service = new Product(tenant.Id, category.Id, "Corte", null, 250m, "MXN");
+        context.AddRange(tenant, settings, category, service);
         await context.SaveChangesAsync();
+        Services[tenant.Id] = service.Id;
         return tenant.Id;
     }
+
+    /// <summary>The service of each salon, by its business.</summary>
+    private static readonly ConcurrentDictionary<Guid, Guid> Services = new();
 
     private sealed class Clock : IDateTimeProvider
     {

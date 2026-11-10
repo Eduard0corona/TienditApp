@@ -13,7 +13,9 @@ using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Infrastructure.Tests;
@@ -111,10 +113,11 @@ public class PublicDirectorySqlServerTests
         var moved = await SalonAsync("k-movida");
         await using (var seed = database.CreateContext(moved))
         {
+            var service = await ServiceOfAsync(seed, moved);
             for (var n = 0; n < 3; n++)
             {
                 var asked = Later.AddDays(-2);
-                var request = Request(moved, asked);
+                var request = Request(moved, service, asked);
                 request.CreatedAt = asked.AddHours(-2);
                 request.Update("Valeria", "+525522107765", "Corte", Later.AddDays(1), Later.AddDays(1).AddHours(1), null, null);
                 request.Accept(asked.AddHours(1));
@@ -148,11 +151,12 @@ public class PublicDirectorySqlServerTests
         async Task SeedKeyedAsync(Guid tenantId, bool keyed, params (int ArrivedDaysAgo, TimeSpan? Wait, string? Phone, bool FromTeam)[] requests)
         {
             await using var seed = database.CreateContext(tenantId);
+            var service = await ServiceOfAsync(seed, tenantId);
             foreach (var (arrivedDaysAgo, wait, phone, fromTeam) in requests)
             {
                 var arrivedAt = Later.AddDays(-arrivedDaysAgo);
                 // Answered after its wait, or let pass: its time began a day after it arrived.
-                var request = Request(tenantId, arrivedAt.AddDays(wait is null ? 1 : 2), phone, fromTeam);
+                var request = Request(tenantId, service, arrivedAt.AddDays(wait is null ? 1 : 2), phone, fromTeam);
                 request.CreatedAt = arrivedAt;
                 // Saved by the version before Fase 29M while it was published: without the key of its phone.
                 if (!keyed)
@@ -206,11 +210,12 @@ public class PublicDirectorySqlServerTests
         SqlServerTestDatabase database, Guid tenantId, int arrivedDaysAgo, TimeSpan? startsAfter, params TimeSpan?[] waits)
     {
         await using var context = database.CreateContext(tenantId);
+        var service = await ServiceOfAsync(context, tenantId);
         var arrivedAt = Later.AddDays(-arrivedDaysAgo);
         foreach (var wait in waits)
         {
             var start = startsAfter is { } after ? arrivedAt + after : wait is null ? Later.AddHours(-1) : Later.AddDays(2);
-            var request = Request(tenantId, start);
+            var request = Request(tenantId, service, start);
             request.CreatedAt = arrivedAt;
             if (wait is { } waited)
                 request.Accept(arrivedAt + waited);
@@ -226,9 +231,10 @@ public class PublicDirectorySqlServerTests
     private static async Task SeedUnansweredAsync(SqlServerTestDatabase database, Guid tenantId, params TimeSpan?[] waitedSoFar)
     {
         await using var context = database.CreateContext(tenantId);
+        var service = await ServiceOfAsync(context, tenantId);
         foreach (var waited in waitedSoFar)
         {
-            var request = Request(tenantId, Later.AddDays(2));
+            var request = Request(tenantId, service, Later.AddDays(2));
             if (waited is { } still)
             {
                 request.CreatedAt = Later - still;
@@ -248,13 +254,17 @@ public class PublicDirectorySqlServerTests
     /// A request online for <paramref name="start"/>, from a customer of its own unless <paramref name="phone"/> says whose
     /// (Explorar counts one per customer, Fase 29M).
     /// </summary>
-    private static Appointment Request(Guid tenantId, DateTimeOffset start, string? phone = null, bool fromTeam = false)
+    private static Appointment Request(Guid tenantId, Guid serviceId, DateTimeOffset start, string? phone = null, bool fromTeam = false)
         => Appointment.RequestOnline(
-            tenantId, "Valeria", phone ?? $"+5255{Interlocked.Increment(ref _customers):D8}", Guid.NewGuid(), "Corte", start,
+            tenantId, "Valeria", phone ?? $"+5255{Interlocked.Increment(ref _customers):D8}", serviceId, "Corte", start,
             start.AddHours(1), null, null, Guid.NewGuid(), (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43],
             fromTeam: fromTeam);
 
     private static int _customers;
+
+    /// <summary>The service of the business its requests book: an appointment points to a product that exists (Fase 31H).</summary>
+    private static Task<Guid> ServiceOfAsync(ApplicationDbContext context, Guid tenantId)
+        => context.Products.Where(p => p.TenantId == tenantId).OrderBy(p => p.Name).Select(p => p.Id).FirstAsync();
 
     /// <summary>A business that books online or receives visits, with its weekly hours, its zone and its services.</summary>
     private static async Task<Guid> SeedServicesAsync(
