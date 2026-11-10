@@ -59,12 +59,16 @@ export function useServerList<TItem, TFilters extends object>({
   const [data, setData] = useState<PaginatedList<TItem>>(EMPTY_PAGE);
   const [loading, setLoading] = useState(enabled);
 
-  // The latest callbacks, without loading the list again each time the screen renders.
+  // The latest callbacks, without loading the list again each time the screen renders, and the filters, search and page
+  // in sight: a reload asked for by something that started before they changed (turning a supply off) reads the ones in
+  // sight, not the ones of when it started.
   const fetchRef = useRef(fetch);
   const onErrorRef = useRef(onError);
+  const queryRef = useRef<ServerListQuery<TFilters>>({ filters, search, pageNumber: page, pageSize });
   useEffect(() => {
     fetchRef.current = fetch;
     onErrorRef.current = onError;
+    queryRef.current = { filters, search, pageNumber: page, pageSize };
   });
 
   // The last page asked for: one of filters changed since that arrives later does not replace it.
@@ -74,18 +78,19 @@ export function useServerList<TItem, TFilters extends object>({
     const read = ++latestRead.current;
     setLoading(true);
     try {
-      const next = await fetchRef.current({ filters, search, pageNumber: page, pageSize });
+      const next = await fetchRef.current(queryRef.current);
       if (read === latestRead.current) setData(next);
     } catch (err: unknown) {
       if (read === latestRead.current) onErrorRef.current(getApiErrorMessage(err, errorMessage));
     } finally {
       if (read === latestRead.current) setLoading(false);
     }
-  }, [errorMessage, filters, page, pageSize, search]);
+  }, [errorMessage]);
 
+  // Each change of the filters, search or page reads the list again.
   useEffect(() => {
-    if (enabled) reload();
-  }, [enabled, reload]);
+    if (enabled) void reload();
+  }, [enabled, reload, filters, page, pageSize, search]);
 
   const changeFilters = useCallback((patch: Partial<TFilters>) => {
     setFilters((current) => ({ ...current, ...patch }));

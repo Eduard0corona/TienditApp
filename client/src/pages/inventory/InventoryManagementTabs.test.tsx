@@ -632,6 +632,32 @@ describe('InventoryManagement tabs', () => {
   });
 
   describe('Insumos', () => {
+    it('reads the supplies again with the search and filters in sight after turning one off', async () => {
+      const user = userEvent.setup();
+      const answer = deferred();
+      vi.mocked(inventoryApi.setSupplyActive).mockReturnValueOnce(answer.promise as never);
+      vi.mocked(inventoryApi.getSupplies).mockImplementation(((params: { pageSize: number; search?: string }) =>
+        Promise.resolve(page(params.pageSize === 500 || !params.search ? [milk, sugar] : [milk]))) as never);
+      const listQueries = () => vi.mocked(inventoryApi.getSupplies).mock.calls
+        .map(([params]) => params as { pageSize: number; search?: string })
+        .filter((params) => params.pageSize !== 500);
+      renderInventory();
+
+      await user.click(await screen.findByRole('button', { name: 'Desactivar Leche entera' }));
+      // While the change is on its way, the search changes and the list is read with it.
+      await user.type(screen.getByLabelText('Buscar…'), 'leche');
+      await waitFor(() => expect(listQueries().at(-1)).toEqual(expect.objectContaining({ search: 'leche', pageNumber: 1 })));
+      expect(await screen.findByText('Leche entera')).toBeInTheDocument();
+      expect(screen.queryByText('Azúcar')).not.toBeInTheDocument();
+      const reads = listQueries().length;
+
+      await act(async () => answer.resolve({ data: {} }));
+      await waitFor(() => expect(listQueries()).toHaveLength(reads + 1));
+      expect(listQueries().at(-1)).toEqual(expect.objectContaining({ search: 'leche', pageNumber: 1 }));
+      await screen.findByText('Estado del insumo actualizado.');
+      expect(screen.queryByText('Azúcar')).not.toBeInTheDocument();
+    });
+
     it('does not send the change of a supply twice, and keeps the supplies to choose when they cannot be read again', async () => {
       const user = userEvent.setup();
       const answer = deferred();
