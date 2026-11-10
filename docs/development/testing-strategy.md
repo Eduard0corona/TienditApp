@@ -2967,6 +2967,66 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Cliente:**
     - 233 archivos y 1,931 pruebas, lint, `tsc` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
     - Primera visita: 180,400 B de 180,400 B. El código de la primera visita no cambia: la diferencia de 17 B con master sale de los nombres con hash de los chunks que cambiaron, que el chunk de entrada referencia y que comprimen distinto.
+- Fase 30W, pruebas de las pestañas de Inventario (punto 10; sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Pruebas nuevas:** `InventoryManagementTabs.test.tsx` (26) monta la pantalla con la API simulada y cubre:
+    - **Recetas:**
+      - los productos y servicios se leen al abrir la pestaña, una vez y sin repetir el que es producto y servicio; mientras llegan no se guarda ni se recarga;
+      - la receta con su cantidad efectiva, y los cambios sin guardar siguen al volver de otra pestaña;
+      - guardar: lo que se manda, que nada cambie mientras, que la respuesta reemplace las líneas y que las alertas y el historial se lean detrás;
+      - la revisión de cada línea y el rechazo del servidor;
+      - la receta de otro ítem que llega tarde, antes o después de la actual, también cuando falla;
+      - elegir «Seleccionar...» mientras se lee;
+      - la receta y los productos que no se pudieron leer;
+      - la línea con un insumo o una ubicación que se desactivaron, también con más de 500 insumos activos.
+    - **Ubicaciones:** sucursal, contacto, ciudad y estado; la búsqueda; la de por defecto; activar y desactivar.
+    - **Insumos:** activar o desactivar sin mandarlo dos veces y releer con la búsqueda a la vista, y los insumos para elegir que no se pudieron leer.
+    - **Historial por insumo:** la página tardía.
+    - **Alertas:** las cuentas del servidor, las filas, «Actualizar», sin leer y sin alertas.
+    - **Transferencias y Conteos:**
+      - la lista y sus filtros en el servidor;
+      - abrir una y volver con los filtros;
+      - no leídas, «Reintentar», ninguna y ninguna que coincida.
+  - **Qué arreglan:**
+    - **Recetas:**
+      - Si la receta no se podía leer, el editor quedaba vacío y «Guardar receta» lo mandaba: el servidor quita las líneas que no vienen, así que la receta se borraba. Ahora no se guarda hasta leerla.
+      - La receta de un ítem que llegaba tarde reemplazaba la del elegido después, y guardar la mandaba con el ítem nuevo.
+      - Se podía editar mientras se guardaba, y la respuesta borraba lo cambiado. «Recargar» y «Agregar línea» no esperaban la lectura.
+      - Una línea cuyo insumo o ubicación se desactivó decía «Seleccionar...» o «Ubicación por defecto», aunque guardaba el otro. Ahora dice cuál es.
+      - Los productos se leían con la pantalla, en cualquier pestaña, y si fallaban no se decía.
+      - Guardar esperaba a las alertas y al historial.
+    - **Ubicaciones:**
+      - Mostraba «-, Yucatán» cuando había estado sin ciudad.
+      - La búsqueda no encontraba por estado ni por sucursal.
+      - Ofrecía desactivar la de por defecto, que el servidor rechaza.
+    - **Activar o desactivar** un insumo o una ubicación se podía mandar dos veces.
+    - **Insumos para elegir:** si no se podían leer, los diálogos quedaban sin insumos y no se decía; ahora lo dice y conserva los que ya tenía.
+    - **Historial y listas de Inventario** (`useServerList`): una página pedida antes de cambiar un filtro reemplazaba la nueva, y lo que se volvía a leer después de desactivar un insumo usaba los filtros de cuando se pulsó, no los que están a la vista.
+    - **Alertas:** si no se podían leer, mostraban ceros, como si no hubiera nada que reabastecer.
+    - **Transferencias y Conteos:** si no se podían leer, decían «no hay»; ahora lo dicen y ofrecen «Reintentar».
+    - El error de la pantalla no se anunciaba (`role="alert"`).
+  - **Mutaciones:** de 69, fallan las pruebas en las 69: 54 sobre los arreglos y 15 sobre lo que agregó la revisión. Cinco de las primeras sobrevivían al principio:
+    - las pruebas de las respuestas tardías resolvían la vieja antes que la nueva, cuando la tabla todavía muestra la carga;
+    - «Agregar línea» deshabilitado mientras carga no se comprobaba;
+    - la búsqueda por los nombres guardados no comprobaba que la línea buscada quedara.
+  - **Revisión independiente:**
+    - Con pruebas sonda y mutaciones encontró, como hallazgo mayor, las dos pruebas de respuestas tardías que no probaban la carrera, y con ella la receta de otro ítem guardada en el elegido. Ya las habían señalado las mutaciones.
+    - Como menores encontró:
+      - el nombre guardado de un insumo que seguía en la línea después de cambiarlo;
+      - «inactivo» para un insumo activo cuando hay más de 500;
+      - la falta de un estado de carga de los productos;
+      - una prueba del rechazo del servidor al guardar una línea inactiva;
+      - la prueba débil de la búsqueda;
+      - la documentación.
+    - Todo quedó corregido, con pruebas que fallan sin el arreglo.
+    - Quedan fuera:
+      - con un error y algo escrito en la búsqueda, Transferencias y Conteos dicen «No se encontraron resultados.» (lo decide `DataTable`; el aviso sí sale);
+      - `loadLocations`, `loadSupplyOptions` y `loadAlerts` no tienen la guardia de la última lectura (activar o desactivar es idempotente);
+      - el nombre guardado de un insumo usa su código sin el SKU, que la receta no trae.
+    - La revisión de la PR encontró un menor más: `reload` leía los filtros del render en que se creó, así que lo que se volvía a leer al terminar de desactivar un insumo usaba la búsqueda de antes y, por ser la última lectura, pisaba la nueva. Ahora lee los filtros a la vista; la prueba falla sin el arreglo.
+  - **Cliente:**
+    - 234 archivos y 1,957 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las pruebas de Inventario pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - Primera visita: 180,397 B de 180,400 B. Su código es el mismo que en `master` (180,379 B): comparé los cuatro archivos normalizando los hashes, y los 18 B salen de los nombres con hash de los chunks de Inventario, que el de entrada referencia.
+  - **Escenas:** de las 89 de Inventario, Transferencias y Conteos, cambian 2 contra `master` (`c335b9a`): la pestaña Ubicaciones, donde «Desactivar» de la ubicación por defecto sale deshabilitado (y la ciudad y el estado son un solo texto, que se dibuja unos píxeles distinto), y «editar ubicación», que tiene esa pestaña detrás.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
