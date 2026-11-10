@@ -14,6 +14,8 @@ export default function CreditRemindersTab() {
   const [history, setHistory] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
   const [notices, setNotices] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
   const [error, setError] = useState('');
+  /** Each «Reintentar» reads them again. */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -33,10 +35,20 @@ export default function CreditRemindersTab() {
     return () => {
       current = false;
     };
-  }, []);
+  }, [attempt]);
 
-  if (error) return <div className="alert alert-danger" role="alert">{error}</div>;
-  if (!history || !notices) return <p className="text-muted">Cargando…</p>;
+  if (error) {
+    return (
+      <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+        <span className="me-auto">{error}</span>
+        {/* Reading again takes the notice away while it loads. */}
+        <button type="button" className="btn btn-sm btn-light" onClick={() => { setError(''); setAttempt((value) => value + 1); }}>
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+  if (!history || !notices) return <p className="text-muted" role="status">Cargando…</p>;
   const turnedOnIn = (
     <>
       Se encienden y se cambian en <Link to="/customers/receivables">Clientes › Por cobrar</Link>.
