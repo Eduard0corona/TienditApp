@@ -91,8 +91,7 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
             }
         }
 
-        return Result.Failure(
-            "La orden fue actualizada por otro proceso. Refresca el tablero e intenta nuevamente.");
+        return Result.Failure(ServiceBoardPieceSaves.SavedMeanwhileMessage);
     }
 
     private async Task<Result> ApplyChangeAsync(
@@ -119,7 +118,7 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
 
         var now = DateTimeOffset.UtcNow;
         if (!piece.AssignedToUserId.HasValue && hasCurrentUser)
-            piece.AssignTo(currentUserId, _currentUserService.UserName, now);
+            order.AssignServicePiece(piece, currentUserId, _currentUserService.UserName, now);
 
         var previousStatus = piece.Status;
 

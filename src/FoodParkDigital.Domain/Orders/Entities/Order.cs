@@ -480,11 +480,41 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public void ChangeServicePieceStatus(ServiceOrderPiece piece, ServiceOrderPieceStatus newStatus, DateTimeOffset changedAt)
     {
-        if (!_servicePieces.Contains(piece))
-            throw new DomainException("La pieza indicada no existe dentro de la orden.");
+        EnsureServicePieceOfThisOrder(piece);
 
         piece.UpdateStatus(newStatus);
         UpdatedAt = changedAt;
+    }
+
+    /// <summary>
+    /// Assigns a piece through the aggregate root, like <see cref="ChangeServicePieceStatus"/>: the order row is marked as
+    /// changed so the save checks its row version. Taking a piece while someone else completes, cancels, takes or
+    /// releases it then conflicts (and the loser decides again with fresh data) instead of writing over what they saved.
+    /// </summary>
+    public void AssignServicePiece(ServiceOrderPiece piece, Guid userId, string? userName, DateTimeOffset assignedAt)
+    {
+        EnsureServicePieceOfThisOrder(piece);
+
+        piece.AssignTo(userId, userName, assignedAt);
+        UpdatedAt = assignedAt;
+    }
+
+    /// <summary>
+    /// Releases a piece through the aggregate root, for the same reason as <see cref="AssignServicePiece"/>: a release
+    /// based on a piece that someone completed meanwhile must not erase who worked it.
+    /// </summary>
+    public void ReleaseServicePiece(ServiceOrderPiece piece, DateTimeOffset releasedAt)
+    {
+        EnsureServicePieceOfThisOrder(piece);
+
+        piece.ReleaseAssignment();
+        UpdatedAt = releasedAt;
+    }
+
+    private void EnsureServicePieceOfThisOrder(ServiceOrderPiece piece)
+    {
+        if (!_servicePieces.Contains(piece))
+            throw new DomainException("La pieza indicada no existe dentro de la orden.");
     }
 
     public const string PhotosOnlyForServicesMessage = "Solo una orden de servicio lleva fotos.";
