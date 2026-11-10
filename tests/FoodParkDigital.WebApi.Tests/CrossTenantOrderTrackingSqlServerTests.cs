@@ -203,9 +203,9 @@ public sealed class CrossTenantOrderTrackingSqlServerTests
         Assert.Equal(HttpStatusCode.NoContent, (await business.Client.PutAsJsonAsync($"/api/v1/orders/{anasId}/status", new { newStatus = 2 })).StatusCode);
         await WaitUntilAsync(() => heardByAna.Count > anaHeardAccepted);
 
-        Assert.NotEmpty(heardByAna);
-        Assert.All(heardByAna, heard => Assert.Equal(anasId, OrderOf(heard)));
-        Assert.All(heardByBeto, heard => Assert.Equal(betosId, OrderOf(heard)));
+        // Ana hears hers placed, accepted and being prepared; Beto, his placed and accepted. Nothing of the other ones.
+        Assert.Equal([anasId, anasId, anasId], heardByAna.Select(OrderOf));
+        Assert.Equal([betosId, betosId], heardByBeto.Select(OrderOf));
         // Only the id travels: nothing of the business or the order.
         Assert.All(heardByAna.Concat(heardByBeto), heard => Assert.Equal(["orderId"], heard.EnumerateObject().Select(p => p.Name)));
 
@@ -247,6 +247,7 @@ public sealed class CrossTenantOrderTrackingSqlServerTests
         var deadline = DateTime.UtcNow.AddSeconds(15);
         while (!condition() && DateTime.UtcNow < deadline)
             await Task.Delay(50);
+        Assert.True(condition(), "What was awaited never arrived.");
         // What else arrives with them would come right behind: a moment more before saying nothing else came.
         await Task.Delay(300);
     }
