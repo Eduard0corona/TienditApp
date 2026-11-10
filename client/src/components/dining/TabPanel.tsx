@@ -148,8 +148,9 @@ export default function TabPanel({ orderId, freeTables, businessName, logoUrl, o
       </Modal.Header>
       <Modal.Body>
         {tab.isPending && <p className="text-muted">Cargando la cuenta…</p>}
-        {tab.isError && <div className="alert alert-danger">{getApiErrorMessage(tab.error, 'No se pudo cargar la cuenta.')}</div>}
-        {error && <div className="alert alert-danger">{error}</div>}
+        {tab.isError && <div className="alert alert-danger" role="alert">{getApiErrorMessage(tab.error, 'No se pudo cargar la cuenta.')}</div>}
+        {/* While charging, the charge panel says it next to what was sent. */}
+        {error && mode !== 'charge' && <div className="alert alert-danger" role="alert">{error}</div>}
 
         {order && mode === 'detail' && (
           <>

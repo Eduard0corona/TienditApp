@@ -3027,6 +3027,69 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - 234 archivos y 1,957 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las pruebas de Inventario pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
     - Primera visita: 180,397 B de 180,400 B. Su código es el mismo que en `master` (180,379 B): comparé los cuatro archivos normalizando los hashes, y los 18 B salen de los nombres con hash de los chunks de Inventario, que el de entrada referencia.
   - **Escenas:** de las 89 de Inventario, Transferencias y Conteos, cambian 2 contra `master` (`c335b9a`): la pestaña Ubicaciones, donde «Desactivar» de la ubicación por defecto sale deshabilitado (y la ciudad y el estado son un solo texto, que se dibuja unos píxeles distinto), y «editar ubicación», que tiene esa pestaña detrás.
+- Fase 30X, pruebas de Mesas y Auditoría (punto 10; sin ADR; [arquitectura del cliente](../architecture/frontend-architecture.md)):
+  - **Pruebas nuevas:**
+    - `TablesPage.test.tsx` (15) monta Mesas con la API simulada, el panel de la cuenta real y el hub de pedidos simulado. Cubre:
+      - las mesas por área, ocupadas y libres, las cuentas sin mesa y lo que dice cada tarjeta (también en su nombre);
+      - abrir una cuenta en Vender desde una mesa libre o a nombre de alguien;
+      - la cuenta de una mesa ocupada, con las mesas libres a las que se puede pasar;
+      - releer con cada aviso de pedidos o de cocina, al reconectar y cada medio minuto, y dejar de hacerlo al salir;
+      - cuánto lleva abierta cada cuenta, con el reloj y con cada lectura;
+      - la carga, el error con «Reintentar» y la lista vacía según quién la ve.
+    - `AuditLogs.test.tsx` (7) cubre:
+      - la actividad con la fecha y la hora del negocio;
+      - la entidad y la acción pedidas al dejar de escribir, completas;
+      - los días, la búsqueda y «Limpiar filtros»;
+      - el contador de filtros y las páginas de 20;
+      - solo la última lectura;
+      - el error con «Reintentar», y que no se queden filas de otra página o filtro.
+    - `DataTable.test.tsx` (+1): una lista que no se pudo leer lo dice, también con algo buscado.
+    - `TabPanel.test.tsx` (+2): el error de un cobro sale una vez, junto al cobro, y se anuncia; también el de una cuenta que no se pudo leer.
+  - **Qué arreglan:**
+    - **Mesas:**
+      - Si las mesas no se podían leer, invitaba a «Agregar mesas» como si no hubiera, y el error no se anunciaba ni se podía reintentar.
+      - A quien no administra el catálogo le pedía agregar mesas que no puede agregar.
+      - Las tarjetas de las cuentas solo decían en su nombre lo que falta cobrar; ahora dicen también el total, el tiempo, las rondas y dónde están, como se ve.
+      - La cuenta abierta en el panel no se releía con los avisos de pedidos, solo cada 15 segundos.
+      - El tiempo de una cuenta solo avanzaba con el reloj; ahora también con cada lectura.
+      - La carga de las mesas no se anunciaba.
+      - El error de un cobro salía dos veces y sin anunciarse.
+    - **Auditoría:**
+      - La entidad y la acción, que el servidor compara completas, mandaban una petición por tecla. Una respuesta de lo escrito a medias que llegaba al final dejaba «No hay actividad» con el nombre completo escrito. Ahora se piden al dejar de escribir, el campo dice «Nombre exacto», y solo se muestra la última lectura.
+      - Si una lectura fallaba, quedaban las filas de la página o el filtro anterior; ahora se vacía y dice que no se pudo leer, aunque haya algo buscado.
+      - El error no decía lo que contestó la API, no se anunciaba y no se podía reintentar.
+      - «Por página» decía 10 mientras se pedían 20.
+      - Sin filtros decía «con estos filtros».
+      - Espacios en un filtro contaban en «Filtros (n)».
+    - **Transferencias y Conteos:** con algo buscado, una lista que no se pudo leer decía «No se encontraron resultados.» (lo que la 30W dejó fuera). `DataTable` acepta `failedMessage`, que gana a la búsqueda.
+  - **Mutaciones:** de 59, fallan las pruebas en las 59. Cinco sobrevivían al principio y señalaron pruebas débiles:
+    - el saldo y el total de la cuenta de barra eran iguales;
+    - el cambio a horas a los 60 minutos;
+    - el reloj de medio minuto;
+    - escribir y borrar antes de la pausa conservando la página;
+    - el aviso de una acción de la cuenta, que se buscaba por su texto.
+  - **Revisión independiente:**
+    - Con pruebas sonda y mutaciones encontró, como hallazgo mayor, las filas de la lectura anterior que quedaban en Auditoría bajo un filtro o una página que falló.
+    - Como menores encontró:
+      - «No se encontraron resultados.» con un error y algo buscado;
+      - la falta de «Reintentar»;
+      - los nombres de las tarjetas, que perdían el tiempo y las rondas;
+      - la cuenta abierta, que no se releía con los avisos;
+      - el texto para quien no administra el catálogo;
+      - «Por página»;
+      - el error doble del cobro;
+      - pruebas que prometían más: «Limpiar filtros», la cuenta de barra sin su nombre en `tableNumber` (como la abre Vender), la limpieza al salir, el sondeo, «Configurar mesas».
+    - Todo quedó corregido con pruebas que fallan sin el arreglo.
+    - Quedan fuera:
+      - el cobro desde la cuenta de una mesa sigue sin prueba de pantalla (el panel de cobro tiene las suyas);
+      - en el servidor, pasar una cuenta de mesa o cobrarla en parte no avisa por el hub, así que otro dispositivo lo ve con el sondeo de medio minuto;
+      - «Nombre exacto» pide nombres internos en inglés (`OrderInvoiceRequested`), y elegirlos de una lista queda para otro cambio;
+      - la primera conexión al hub también relee las mesas, como en las demás pantallas.
+  - **Pruebas que fallan con el código anterior:** 21 de las 49 de las suites tocadas. Algunas fallan solo porque buscan las tarjetas de Mesas por su nombre nuevo; las demás fijan lo que ya funcionaba.
+  - **Cliente:**
+    - 236 archivos y 1,982 pruebas, lint, `tsc`, `visual:typecheck` y build en verde; las suites tocadas pasan en orden aleatorio en Tokio, Ciudad de México y Kiritimati.
+    - Primera visita: 180,381 B de 180,400 B. Su código es el mismo que en `master` (180,395 B): comparé los cuatro archivos normalizando los hashes.
+  - **Escenas:** de las 33 de Mesas, la cuenta abierta, Auditoría, Transferencias y Conteos, cambian contra `master` (`ac2cc93`) las 3 de Auditoría: «Entidad» y «Acción» dicen «Nombre exacto», y «Por página» dice 20, lo que ya pedía («1–20 de 32»).
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

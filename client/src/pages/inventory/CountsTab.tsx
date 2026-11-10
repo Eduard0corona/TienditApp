@@ -43,9 +43,8 @@ export default function CountsTab({ locations, filter, onFilterChange: setFilter
         columns={COLUMNS}
         keyExtractor={(item) => item.id}
         loading={counts.isLoading}
-        emptyMessage={counts.isError
-          ? 'No se pudieron leer los conteos.'
-          : filtered
+        failedMessage={counts.isError ? 'No se pudieron leer los conteos.' : undefined}
+        emptyMessage={filtered
           ? 'Ningún conteo coincide con los filtros.'
           : 'Todavía no hay conteos. Empieza uno para cuadrar lo que hay en el anaquel con lo que dice el sistema.'}
         searchPlaceholder="Buscar por folio o ubicación"

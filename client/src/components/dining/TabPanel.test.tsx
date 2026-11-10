@@ -14,7 +14,10 @@ vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('../../api/ordersApi', () => ({
-  ordersApi: { getById: vi.fn(), cancelTabItem: vi.fn(), markRoundServed: vi.fn(), closeTab: vi.fn(), moveTab: vi.fn() },
+  ordersApi: {
+    getById: vi.fn(), cancelTabItem: vi.fn(), markRoundServed: vi.fn(), closeTab: vi.fn(), moveTab: vi.fn(), addPayment: vi.fn(),
+    uploadPaymentEvidence: vi.fn(),
+  },
 }));
 
 const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() };
@@ -188,9 +191,33 @@ describe('TabPanel', () => {
     await user.click(screen.getByRole('button', { name: 'El cliente ya no lo quiso' }));
     await user.click(screen.getByRole('button', { name: 'Cancelar platillo' }));
 
-    expect(await screen.findByText('No se pudo completar la acción.')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo completar la acción.');
     await waitFor(() => expect(ordersApi.getById).toHaveBeenCalledTimes(2));
   });
+
+  it('says why the tab could not be read', async () => {
+    vi.mocked(ordersApi.getById).mockRejectedValue({ isAxiosError: true, response: { status: 404, data: { error: 'La cuenta ya se cerró.' } } });
+    renderPanel();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('La cuenta ya se cerró.');
+  });
+  it('says once, next to the charge, why a payment could not be registered', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', role: 'Employee', permissions: ['ManageOrders', 'ChargeOrders'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: tab() } as never);
+    vi.mocked(ordersApi.addPayment).mockRejectedValue({ isAxiosError: true, response: { status: 400, data: { error: 'La caja está cerrada.' } } });
+    renderPanel();
+
+    await user.click(await screen.findByRole('button', { name: 'Cobrar $75.00' }));
+    await user.click(screen.getByRole('radio', { name: /Transferencia/ }));
+    await user.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('La caja está cerrada.');
+    expect(screen.getAllByText('La caja está cerrada.')).toHaveLength(1);
+  });
+
   it('moves the tab, and waits for the tables read again before offering another move', async () => {
     const user = userEvent.setup();
     const atFour = tab({ diningTableId: 'm4' });

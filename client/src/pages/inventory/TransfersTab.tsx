@@ -44,9 +44,8 @@ export default function TransfersTab({ locations, filter, onFilterChange: setFil
         columns={COLUMNS}
         keyExtractor={(item) => item.id}
         loading={transfers.isLoading}
-        emptyMessage={transfers.isError
-          ? 'No se pudieron leer las transferencias.'
-          : filtered
+        failedMessage={transfers.isError ? 'No se pudieron leer las transferencias.' : undefined}
+        emptyMessage={filtered
           ? 'Ninguna transferencia coincide con los filtros.'
           : 'Todavía no hay transferencias. Haz una para llevar artículos de una ubicación a otra.'}
         searchPlaceholder="Buscar por folio o ubicación"
