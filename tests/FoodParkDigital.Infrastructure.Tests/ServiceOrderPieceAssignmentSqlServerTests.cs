@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -168,15 +169,23 @@ public class ServiceOrderPieceAssignmentSqlServerTests
         => new AssignServiceOrderPieceToMeCommandHandler(context, member, Access(member, shop.TenantId), board)
             .Handle(new AssignServiceOrderPieceToMeCommand { PieceId = pieceId }, CancellationToken.None);
 
+    /// <summary>
+    /// Completes the piece as a request does: through <see cref="TransactionBehavior{TRequest, TResponse}"/>, which runs the
+    /// change again with fresh data when its save finds the order changed meanwhile (Fase 31G).
+    /// </summary>
     private static Task<Result> CompleteAsync(ApplicationDbContext context, Shop shop, Member member, Guid orderId, Guid pieceId)
-        => new UpdateServiceOrderPieceStatusCommandHandler(context, member, Access(member, shop.TenantId),
-                new OrderInventoryService(context, new Clock(), new FolioGenerator(context), NullLogger<OrderInventoryService>.Instance))
-            .Handle(new UpdateServiceOrderPieceStatusCommand
-            {
-                OrderId = orderId,
-                PieceId = pieceId,
-                NewStatus = ServiceOrderPieceStatus.Completed
-            }, CancellationToken.None);
+    {
+        var command = new UpdateServiceOrderPieceStatusCommand
+        {
+            OrderId = orderId,
+            PieceId = pieceId,
+            NewStatus = ServiceOrderPieceStatus.Completed
+        };
+        var handler = new UpdateServiceOrderPieceStatusCommandHandler(context, member, Access(member, shop.TenantId),
+            new OrderInventoryService(context, new Clock(), new FolioGenerator(context), NullLogger<OrderInventoryService>.Instance));
+        return new TransactionBehavior<UpdateServiceOrderPieceStatusCommand, Result>(context)
+            .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
+    }
 
     /// <summary>
     /// A context whose first save is preceded by <paramref name="change"/> of the piece through its order, saved by another
