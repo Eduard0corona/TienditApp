@@ -3343,6 +3343,31 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Con una contraseña equivocada, la API no arranca, el log guarda el error de SQL Server y `start-api.mjs` dice dónde está. El log no lleva la contraseña.
     - Cliente: 247 archivos y 2,102 pruebas, lint, `tsc`, `e2e:typecheck`, `visual:typecheck` y build en verde. Primera visita: 180,362 B, sin cambio. `check-pins.py` en verde.
 
+- Fase 31E, el segundo paso del inicio de sesión probado (sin ADR):
+  - **Qué cambia:** la verificación en dos pasos al entrar (`TwoFactorLoginStep`) era la única pantalla de la cuenta sin prueba. No cambia el código.
+  - **Cliente:**
+    - `TwoFactorLoginStep.test.tsx` (10, nuevo):
+      - el campo listo para el código de la app (foco, `one-time-code`, numérico, 7 caracteres);
+      - manda el código con el reto del inicio de sesión y sigue cuando el servidor lo toma;
+      - acepta los 6 dígitos con un espacio o un guion en medio y los manda como se escribieron;
+      - no manda uno vacío ni uno que no sea de 6 dígitos, y lo dice junto al campo (`aria-invalid` y su descripción);
+      - si el servidor lo rechaza dice su mensaje, se queda y deja intentar de nuevo; sin motivo, «No se pudo verificar el código»;
+      - con un código de recuperación acepta cualquiera que se escriba y lo manda como tal; vacío, lo pide;
+      - cambiar entre la app y un código de recuperación vacía el campo y quita el error, y al volver a la app se revisan otra vez los 6 dígitos;
+      - mientras verifica, nada más se puede apretar;
+      - «Volver al inicio de sesión» regresa sin mandar nada.
+    - `Login.test.tsx` (+2):
+      - con la verificación en dos pasos pide el código en vez de entrar, y con él va a la página de donde venía;
+      - «Volver al inicio de sesión» trae el formulario como estaba, y entrar otra vez pide un código nuevo.
+  - **Mutaciones:** de 12, fallan las pruebas en las 12:
+    - el aviso de código de recuperación, el reto o los espacios del código;
+    - no vaciar el campo ni quitar el error al cambiar de código, ni al mandar;
+    - seguir aunque el servidor lo rechace;
+    - los botones que no se deshabilitan mientras verifica;
+    - pedir 6 dígitos también a un código de recuperación;
+    - «Volver» que no regresa, y entrar sin pedir el código.
+  - **Verificación:** cliente con 248 archivos y 2,114 pruebas, lint y `tsc` en verde. Las pruebas nuevas pasan en orden aleatorio.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
