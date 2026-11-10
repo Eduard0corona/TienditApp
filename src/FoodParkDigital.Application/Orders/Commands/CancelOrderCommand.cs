@@ -11,8 +11,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
+/// <summary>
+/// Cancels an order and returns what it took from the inventory, in one transaction with the folio of that return (Fase
+/// 31G): a refusal or a conflict leaves no gap in the folios.
+/// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record CancelOrderCommand : IRequest<Result>
+public record CancelOrderCommand : IRequest<Result>, ITransactionalRequest
 {
     public Guid OrderId { get; init; }
     public string? Reason { get; init; }

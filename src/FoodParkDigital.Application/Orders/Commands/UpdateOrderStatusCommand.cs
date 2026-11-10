@@ -13,18 +13,26 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
-/// <summary>Moves an order to another status by hand, cancelling it included.</summary>
+/// <summary>
+/// Moves an order to another status by hand, cancelling it included. One transaction with what it takes from or returns to
+/// the inventory, its folio included (Fase 31G); a save that finds the order changed meanwhile runs it again.
+/// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record UpdateOrderStatusCommand : IRequest<Result>
+public record UpdateOrderStatusCommand : IRequest<Result>, IRetryOnConcurrencyConflict
 {
     public Guid OrderId { get; init; }
     public OrderStatus NewStatus { get; init; }
+
+    string? IRetryOnConcurrencyConflict.ConcurrencyConflictMessage => UpdateOrderStatusCommandHandler.UpdatedMeanwhileMessage;
 }
 
 /// <summary>The kitchen board moves an order through preparation: started and ready, nothing else.</summary>
 [RequiresPermission(TenantPermission.ManageServiceBoard)]
 [RequiresCapability(TenantCapability.Kitchen)]
-public record MoveKitchenOrderCommand(Guid OrderId, OrderStatus NewStatus) : IRequest<Result>;
+public record MoveKitchenOrderCommand(Guid OrderId, OrderStatus NewStatus) : IRequest<Result>, IRetryOnConcurrencyConflict
+{
+    string? IRetryOnConcurrencyConflict.ConcurrencyConflictMessage => UpdateOrderStatusCommandHandler.UpdatedMeanwhileMessage;
+}
 
 public class UpdateOrderStatusCommandValidator : AbstractValidator<UpdateOrderStatusCommand>
 {
@@ -49,6 +57,9 @@ public class MoveKitchenOrderCommandValidator : AbstractValidator<MoveKitchenOrd
 public class UpdateOrderStatusCommandHandler
     : IRequestHandler<UpdateOrderStatusCommand, Result>, IRequestHandler<MoveKitchenOrderCommand, Result>
 {
+    /// <summary>What it answers when the order kept changing after three attempts (409).</summary>
+    public const string UpdatedMeanwhileMessage = "La orden fue actualizada por otro proceso. Refresca la lista e intenta nuevamente.";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IOrderInventoryService _orderInventoryService;
@@ -71,63 +82,53 @@ public class UpdateOrderStatusCommandHandler
 
     private async Task<Result> ChangeStatusAsync(Guid orderId, OrderStatus newStatus, CancellationToken cancellationToken)
     {
-        const int maxAttempts = 3;
+        var order = await _context.Orders
+            .Include(o => o.Items)
+            .Include(o => o.StatusHistory)
+            .Include(o => o.ServicePieces)
+            .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
+            ?? throw new EntityNotFoundException("Order", orderId);
 
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        if (order.Status == newStatus)
+            return Result.Success();
+
+        // An open tab is closed when it is paid (CloseTabCommand); by hand it could only be cancelled.
+        if (order.IsOpenTab && newStatus != OrderStatus.Cancelled)
+            return Result.Failure("Es una cuenta abierta: ciérrala desde Mesas cuando esté pagada.");
+
+        var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
+
+        if (!stateMachine.GetAllowedTransitions(order.Status).Contains(newStatus))
+            return Result.Failure(
+                $"No se puede cambiar de '{order.Status}' a '{newStatus}'.");
+
+        if (newStatus == OrderStatus.Cancelled)
         {
-            var order = await _context.Orders
-                .Include(o => o.Items)
-                .Include(o => o.StatusHistory)
-                .Include(o => o.ServicePieces)
-                .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
-                ?? throw new EntityNotFoundException("Order", orderId);
+            // Same rules as CancelOrderCommand: cancellation event, payment guard and inventory reversal.
+            order.Cancel(stateMachine, _currentUserService.UserName);
+            await _orderInventoryService.ReverseConsumptionForOrderAsync(order, null, cancellationToken);
+        }
+        else
+        {
+            // Read before the inventory takes its folio, whose counter waits for this transaction to end.
+            var closesPaidCounterSale = newStatus == OrderStatus.Ready;
+            var salesSettings = closesPaidCounterSale
+                ? await TenantSalesSettings.ReadAsync(_context, order.TenantId, cancellationToken)
+                : null;
+            var capabilities = closesPaidCounterSale
+                ? await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, order.TenantId, cancellationToken)
+                : default;
 
-            if (order.Status == newStatus)
-                return Result.Success();
+            order.TransitionTo(newStatus, stateMachine, _currentUserService.UserName);
+            await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
 
-            // An open tab is closed when it is paid (CloseTabCommand); by hand it could only be cancelled.
-            if (order.IsOpenTab && newStatus != OrderStatus.Cancelled)
-                return Result.Failure("Es una cuenta abierta: ciérrala desde Mesas cuando esté pagada.");
-
-            var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
-
-            if (!stateMachine.GetAllowedTransitions(order.Status).Contains(newStatus))
-                return Result.Failure(
-                    $"No se puede cambiar de '{order.Status}' a '{newStatus}'.");
-
-            if (newStatus == OrderStatus.Cancelled)
-            {
-                // Same rules as CancelOrderCommand: cancellation event, payment guard and inventory reversal.
-                order.Cancel(stateMachine, _currentUserService.UserName);
-                await _orderInventoryService.ReverseConsumptionForOrderAsync(order, null, cancellationToken);
-            }
-            else
-            {
-                order.TransitionTo(newStatus, stateMachine, _currentUserService.UserName);
-                await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
-
-                // A counter sale paid while the kitchen prepared it is handed over once it is ready.
-                if (newStatus == OrderStatus.Ready)
-                {
-                    var salesSettings = await TenantSalesSettings.ReadAsync(_context, order.TenantId, cancellationToken);
-                    var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, order.TenantId, cancellationToken);
-                    CounterSaleClosing.TryClose(order, salesSettings, capabilities, _currentUserService.UserName);
-                }
-            }
-
-            try
-            {
-                await _context.SaveChangesAsync(cancellationToken);
-                return Result.Success();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (_context is DbContext dbContext)
-                    dbContext.ChangeTracker.Clear();
-            }
+            // A counter sale paid while the kitchen prepared it is handed over once it is ready.
+            if (closesPaidCounterSale)
+                CounterSaleClosing.TryClose(order, salesSettings!, capabilities, _currentUserService.UserName);
         }
 
-        return Result.Failure(
-            "La orden fue actualizada por otro proceso. Refresca la lista e intenta nuevamente.");
+        // A conflict here is retried by TransactionBehavior, from a transaction undone with its folio.
+        await _context.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 }

@@ -102,11 +102,11 @@ public class AddTabRoundCommandHandler : IRequestHandler<AddTabRoundCommand, Res
 
 /// <summary>
 /// Closes a paid tab and frees its table. Its rounds left the stock when they went to the kitchen; the ones that did
-/// not (a tab opened by an earlier version) leave it now.
+/// not (a tab opened by an earlier version) leave it now, in the same transaction as the close and its folio (Fase 31G).
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 [RequiresCapability(TenantCapability.Food)]
-public record CloseTabCommand(Guid OrderId) : IRequest<Result<OrderDto>>;
+public record CloseTabCommand(Guid OrderId) : IRequest<Result<OrderDto>>, ITransactionalRequest;
 
 public class CloseTabCommandHandler : IRequestHandler<CloseTabCommand, Result<OrderDto>>
 {

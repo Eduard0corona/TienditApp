@@ -24,7 +24,8 @@ public sealed record OrderRefundInput(
     string? Reference = null);
 
 /// <summary>
-/// Applies a refund to an order, the drawer and inventory, leaving everything to the caller's SaveChanges.
+/// Applies a refund to an order, the drawer and inventory, leaving everything to the caller's SaveChanges, in the
+/// caller's transaction (Fase 31G): the folio of the return comes back with it if the caller refuses or fails.
 /// Like a payment, every refund of money the business received goes through a drawer, whatever its method: one
 /// no open drawer takes is refused. What a delivery platform charged goes back as «Plataforma» (the order decides
 /// the method, <see cref="Order.RegisterRefund"/>): no money leaves a drawer, so it needs none open. What a customer paid

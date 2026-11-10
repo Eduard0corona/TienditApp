@@ -96,8 +96,9 @@ public class ArchitectureTests
     public void CommandsThatTakeAFolio_ShouldRunInATransaction()
     {
         // Outside one, a folio is committed at once and a refused request leaves a gap in the business's numbering.
-        // The inventory ledger takes the folio of every movement it posts.
-        Type[] takeFolios = [typeof(IFolioGenerator), typeof(InventoryLedger)];
+        // The inventory ledger takes the folio of every movement it posts, and the orders' inventory the folio of what an
+        // order takes or returns (Fase 31G: status changes, cancellations, refunds and closing a tab).
+        Type[] takeFolios = [typeof(IFolioGenerator), typeof(InventoryLedger), typeof(IOrderInventoryService)];
         var offending = Application.GetTypes()
             .Where(type => !type.IsAbstract && type.GetConstructors()
                 .Any(c => c.GetParameters().Any(p => takeFolios.Contains(p.ParameterType))))

@@ -17,7 +17,7 @@ namespace FoodParkDigital.Application.Orders.Commands;
 /// as not found.
 /// </summary>
 [AllowAnonymousRequest("Cancelar con el enlace imposible de adivinar de su recibo un pedido en línea que el negocio no ha aceptado.")]
-public record CancelPublicOrderCommand(string Token) : IRequest<Result<PublicOrderTrackingDto>>;
+public record CancelPublicOrderCommand(string Token) : IRequest<Result<PublicOrderTrackingDto>>, IRetryOnConcurrencyConflict;
 
 public class CancelPublicOrderCommandValidator : AbstractValidator<CancelPublicOrderCommand>
 {
@@ -61,7 +61,7 @@ public class CancelPublicOrderCommandHandler : IRequestHandler<CancelPublicOrder
 /// the link. Only an order of the account itself; any other is not found, whatever business it is in.
 /// </summary>
 [RequiresAuthentication]
-public record CancelMyOrderCommand(Guid Id) : IRequest<Result<MyOrderDetailDto>>;
+public record CancelMyOrderCommand(Guid Id) : IRequest<Result<MyOrderDetailDto>>, IRetryOnConcurrencyConflict;
 
 public class CancelMyOrderCommandHandler : IRequestHandler<CancelMyOrderCommand, Result<MyOrderDetailDto>>
 {
@@ -109,40 +109,28 @@ public class CancelMyOrderCommandHandler : IRequestHandler<CancelMyOrderCommand,
 /// <summary>
 /// Its customer cancels an order of the business in context (Fase 29R): the domain decides whether they may, and what the
 /// order took from the inventory goes back, as when the business cancels it (nothing was prepared before it was accepted).
+/// The commands that use it run in one transaction (Fase 31G): when the business accepted or changed the order at the same
+/// time, TransactionBehavior undoes it, the folio of the reversal included, and runs it again; the domain then says what
+/// the order is now.
 /// </summary>
 internal static class CustomerOrderCancellation
 {
     /// <summary>The account's detail says the same of an order that is not its own.</summary>
     public const string NotFoundMessage = "No encontramos ese pedido en tu cuenta.";
 
-    private const int MaxAttempts = 3;
-
     public static async Task CancelAsync(
         IApplicationDbContext context, IOrderInventoryService inventory, Guid orderId, CancellationToken cancellationToken)
     {
-        for (var attempt = 1; ; attempt++)
-        {
-            var order = await context.Orders
-                .Include(o => o.StatusHistory)
-                .Include(o => o.ServicePieces)
-                .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
-                ?? throw new EntityNotFoundException("Order", orderId);
-            // Already cancelled by its customer (tapped twice, or sent again after its answer was lost): nothing changes.
-            if (!order.CancelByCustomer(OrderStateMachineFactory.Create(order.BusinessType, order.OrderType)))
-                return;
+        var order = await context.Orders
+            .Include(o => o.StatusHistory)
+            .Include(o => o.ServicePieces)
+            .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
+            ?? throw new EntityNotFoundException("Order", orderId);
+        // Already cancelled by its customer (tapped twice, or sent again after its answer was lost): nothing changes.
+        if (!order.CancelByCustomer(OrderStateMachineFactory.Create(order.BusinessType, order.OrderType)))
+            return;
 
-            await inventory.ReverseConsumptionForOrderAsync(order, order.CancellationReason, cancellationToken);
-            try
-            {
-                await context.SaveChangesAsync(cancellationToken);
-                return;
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxAttempts)
-            {
-                // The business accepted (or changed) it at the same time: read it again, and the domain says what it is now.
-                if (context is DbContext dbContext)
-                    dbContext.ChangeTracker.Clear();
-            }
-        }
+        await inventory.ReverseConsumptionForOrderAsync(order, order.CancellationReason, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 }
