@@ -857,9 +857,9 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.
 
-## Nombre de las categorías (Fase 31C)
+## Nombre de las categorías (Fase 31E)
 
-Un nombre es de una sola categoría en cada negocio ([ADR 0085](../adr/0085-unique-category-name-per-business.md)).
+Un nombre es de una sola categoría en cada negocio ([ADR 0086](../adr/0086-unique-category-name-per-business.md)).
 
 - **Cuándo dos nombres son el mismo** (`Category.NameKey`): sin importar mayúsculas, espacios en las orillas ni espacios repetidos (también tabuladores, saltos de línea y espacio duro). Los acentos cuentan: «Café» y «Cafe» son dos. Cuentan también las archivadas. Otro negocio puede tener el mismo nombre.
 - **Crear o editar** con un nombre tomado se rechaza (400) con el de la categoría que lo tiene: «Ya tienes una categoría llamada «Bebidas». Ponle otro nombre.», o con una archivada, «Ya tienes una categoría archivada llamada «Temporada». Restáurala o ponle otro nombre.».

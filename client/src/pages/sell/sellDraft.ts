@@ -1,6 +1,16 @@
+import type { ProductDto } from '../../types';
 import { OrderChannel, PlatformCollectedBy } from '../../types';
 import { isDeliveryPlatform, normalizePlatformFolio, normalizePlatformOrderId } from '../../utils/deliveryPlatforms';
-import type { SaleAppointment } from './sellModel';
+import { getSelectionError } from '../../utils/productOptions';
+import {
+  COUNTER_ORIGIN,
+  MAX_QUANTITY_PER_LINE,
+  NO_SALE_DETAILS,
+  type CartLine,
+  type SaleAppointment,
+  type SaleDetails,
+  type ToCartLine,
+} from './sellModel';
 
 // The sale being built survives a reload or a trip to another screen (per browser and business). It is
 // a convenience: storage can be unavailable and the sale still works.
@@ -154,4 +164,76 @@ export function writeSellDraft(tenantId: string, draft: SellDraft) {
   } catch {
     // Storage blocked (private mode): the draft only lives in this screen.
   }
+}
+
+/** The sale on screen as the device keeps it. */
+export function toDraft(cart: CartLine[], details: SaleDetails): SellDraft {
+  return {
+    lines: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, notes: line.notes, optionIds: line.optionIds })),
+    ...details,
+  };
+}
+
+/**
+ * Where the sale starts before the catalog is in: an order of a delivery platform brought back from the device sells from
+ * the whole catalog from its first load (its lines come back with it once the catalog is in).
+ */
+export function initialDetails(draft: SellDraft | null): SaleDetails {
+  return draft && isDeliveryPlatform(draft.channel)
+    ? {
+      ...NO_SALE_DETAILS,
+      channel: draft.channel,
+      externalOrderNumber: draft.externalOrderNumber,
+      externalOrderId: draft.externalOrderId ?? '',
+      collectedBy: draft.collectedBy,
+    }
+    : { ...NO_SALE_DETAILS, delivery: draft?.delivery ?? null };
+}
+
+/**
+ * The details of a sale brought back from the device, and whether they start in sight. One of a platform the cashier took
+ * to the counter before the catalog loaded stays at the counter. The name for the bag of a platform's order is in sight
+ * with its folio: behind the link there are only notes.
+ */
+export function restoreDetails(draft: SellDraft, toCounter: boolean): { details: SaleDetails; showDetails: boolean } {
+  return {
+    details: {
+      customerName: draft.customerName,
+      customerPhone: draft.customerPhone,
+      tableNumber: draft.tableNumber,
+      orderNotes: draft.orderNotes,
+      channel: draft.channel,
+      externalOrderNumber: draft.externalOrderNumber,
+      externalOrderId: draft.externalOrderId ?? '',
+      collectedBy: draft.collectedBy,
+      delivery: draft.delivery ?? null,
+      appointment: draft.appointment ?? null,
+      ...(toCounter ? COUNTER_ORIGIN : {}),
+    },
+    showDetails: isDeliveryPlatform(draft.channel) && !toCounter
+      ? Boolean(draft.orderNotes)
+      : Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes),
+  };
+}
+
+/**
+ * The lines of a sale brought back from the device, as the catalog has them now. Options that changed since the draft was
+ * saved drop the line instead of selling something else, and so does a product no longer sold.
+ */
+export function linesFromDraft(lines: SellDraftLine[], catalog: ReadonlyMap<string, ProductDto>, toCartLine: ToCartLine): CartLine[] {
+  return lines.flatMap((line) => {
+    const product = catalog.get(line.productId);
+    const optionIds = line.optionIds ?? [];
+    if (!product || getSelectionError(product.optionGroups, optionIds)) return [];
+    return [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes, optionIds)];
+  });
+}
+
+/** The ticket with the catalog read again (a price changed): the current prices, and what is no longer sold drops. */
+export function refreshLines(cart: CartLine[], catalog: ReadonlyMap<string, ProductDto>, toCartLine: ToCartLine): CartLine[] {
+  return cart.flatMap((line) => {
+    const product = catalog.get(line.productId);
+    if (!product || getSelectionError(product.optionGroups, line.optionIds)) return [];
+    return [{ ...toCartLine(product, line.quantity, line.notes, line.optionIds), showNotes: line.showNotes }];
+  });
 }

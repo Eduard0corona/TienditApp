@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// AddUniqueCategoryNamePerTenant (Fase 31C): one name per category in a business. The unique index compares with the
+/// AddUniqueCategoryNamePerTenant (Fase 31E): one name per category in a business. The unique index compares with the
 /// collation of the database (without capitals, spaces at the end or the width of a letter, «ß» as «ss»; accents count) and
 /// lets another business have the name; the use cases answer a name taken at the same moment, or one only the collation
 /// takes as the same, naming the category that has it, not with an error; the migration stops before

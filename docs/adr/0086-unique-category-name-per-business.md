@@ -1,6 +1,6 @@
-# ADR 0085: Un nombre por categoría en cada negocio
+# ADR 0086: Un nombre por categoría en cada negocio
 
-- Estado: Aceptada en la Fase 31C (2026-11-10).
+- Estado: Aceptada en la Fase 31E (2026-11-10).
 - Fecha: 2026-11-10
 - Continúa: la Fase 30P ([estrategia de pruebas](../development/testing-strategy.md)), que cerró en Categorías las dos maneras de crear dos veces desde la pantalla y dejó anotado que el servidor no rechazaba nombres repetidos.
 

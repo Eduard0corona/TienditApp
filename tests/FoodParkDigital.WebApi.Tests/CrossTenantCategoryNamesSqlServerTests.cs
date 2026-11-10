@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.WebApi.Tests;
 
 /// <summary>
-/// One name per category in a business, through the API (Fase 31C): creating or editing with a name the business has,
+/// One name per category in a business, through the API (Fase 31E): creating or editing with a name the business has,
 /// whatever its capitals and spaces, answers 400 naming the category that has it; another business can have the name.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]

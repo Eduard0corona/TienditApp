@@ -1,18 +1,13 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Modal, Offcanvas } from 'react-bootstrap';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { productsApi } from '../../api/productsApi';
 import { appointmentsApi } from '../../api/appointmentsApi';
 import { ordersApi } from '../../api/ordersApi';
-import { cashApi } from '../../api/cashApi';
-import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
-import { HomeVisitChargePolicy } from '../../api/generated/enums';
-import { useDeliveryPlatformChannels } from '../../api/queries';
-import { useDeliveryZones } from '../../api/deliveryZones';
+import { getApiErrorMessage } from '../../api/errors';
 import { useCustomerAccount, useRefreshCustomerCredit } from '../../api/customerCredit';
 import { useFocusMode } from '../../components/layout/focusMode';
 import OpenDrawerModal from '../../components/cash/OpenDrawerModal';
-import ChargePanel, { type ChargeBalance, type ChargeCredit, type ChargeResult } from '../../components/sales/ChargePanel';
+import type { ChargeResult } from '../../components/sales/ChargePanel';
 import PendingSalesModal from '../../components/sales/PendingSalesModal';
 import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -21,89 +16,78 @@ import { useToast } from '../../hooks/useToast';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { usePendingSales } from '../../hooks/usePendingSales';
 import { useWorkingBranch } from '../../hooks/useWorkingBranch';
-import { buildOfflineTicketOrder } from '../../offline/offlineTicket';
-import { enqueueSale, isNetworkError } from '../../offline/saleQueue';
+import { isNetworkError } from '../../offline/saleQueue';
 import { newUuid } from '../../utils/uuid';
-import type { CreateOrderRequest, OrderDto, ProductDto } from '../../types';
+import type { CreateOrderRequest, ProductDto } from '../../types';
 import { BusinessType, OrderChannel, OrderPaymentMethod, OrderType, TenantCapability } from '../../types';
 import { getAccess } from '../../utils/access';
-import { formatDateTime, formatInBusinessZone } from '../../utils/dates';
-import {
-  PLATFORM_ONLY_PRODUCTS_MESSAGE,
-  getPlatformFolioProblem,
-  getPlatformOrderIdProblem,
-  isDeliveryPlatform,
-  normalizePlatformFolio,
-  normalizePlatformOrderId,
-  type DeliveryPlatform,
-} from '../../utils/deliveryPlatforms';
-import { getChannelLabel } from '../../utils/labels';
-import { formatMoney } from '../../utils/money';
-import {
-  ADDRESS_LINE_REQUIRED_MESSAGE,
-  DELIVERY_ONLY_PRODUCTS_MESSAGE,
-  belowMinimumMessage,
-  estimateDeliveryTotals,
-  findDeliveryZone,
-  meetsMinimum,
-  normalizePostalCode,
-  notCoveredMessage,
-} from '../../utils/homeDelivery';
-import { parsePaysWith, paysWithProblem } from '../../utils/courierCash';
-import { appointmentSaleProblem, estimateVisitTotals } from '../../utils/homeVisits';
-import { estimateOrderTotals } from '../../utils/orderTotals';
-import { isPostalCode } from '../../utils/postalCodes';
+import { isDeliveryPlatform, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
+import { appointmentSaleProblem } from '../../utils/homeVisits';
 import { hasCapability } from '../../utils/tenantCapabilities';
 import { allowsFractions } from '../../utils/units';
-import { getSelectionError, hasOptions } from '../../utils/productOptions';
+import { hasOptions } from '../../utils/productOptions';
 import { ROUND_STOCK_WARNING_TITLE, STOCK_WARNING_TITLE, stockWarningMessage } from '../../utils/stockWarnings';
 import CartPanel from './CartPanel';
 import CatalogPanel from './CatalogPanel';
+import ChargeModal from './ChargeModal';
 import CompletedSaleModal from './CompletedSaleModal';
 import MeasureModal from './MeasureModal';
 import OptionsModal from './OptionsModal';
 import SellHeader from './SellHeader';
-import { describeSale, readSellDraft, writeSellDraft, type PendingCharge, type SellDraft } from './sellDraft';
+import SellNotices from './SellNotices';
+import SellPhoneBar from './SellPhoneBar';
+import { keepSaleOnDevice } from './offlineSale';
+import { checkSale } from './saleChecks';
+import { buildOrderRequest, chargeFundsOf, countArticles, saleTotals } from './saleRequest';
+import { sendSale } from './sendSale';
+import {
+  describeSale,
+  initialDetails,
+  linesFromDraft,
+  readSellDraft,
+  refreshLines,
+  restoreDetails,
+  toDraft,
+  writeSellDraft,
+  type PendingCharge,
+  type SellDraft,
+} from './sellDraft';
 import {
   COUNTER_ORIGIN,
-  isPlausiblePhone,
   MAX_LINES,
-  MAX_QUANTITY_PER_LINE,
   NO_SALE_DETAILS,
+  categoriesInUse,
+  preselectedOptions,
   readAppointmentId,
   readChatOrigin,
   readCustomerPrefill,
   readTabTarget,
-  type CartLine,
+  saleOfAppointment,
+  scannedProduct,
+  filterCatalog,
   type CategoryFilter,
   type ChatOrigin,
   type CompletedSale,
   type CustomerPrefill,
   type MeasureRequest,
   type OptionsRequest,
-  type SaleAppointment,
   type SaleDetails,
   type TabTarget,
 } from './sellModel';
+import { useCashDrawer } from './useCashDrawer';
+import { useF9 } from './useF9';
+import { useSaleDelivery } from './useSaleDelivery';
+import { useSalePlatforms } from './useSalePlatforms';
 import { useSellCart } from './useSellCart';
 import { useSellCatalog } from './useSellCatalog';
+import { useTabOrder } from './useTabOrder';
 import './SellPage.css';
-
-/** The sale on screen as the device keeps it. */
-function toDraft(cart: CartLine[], details: SaleDetails): SellDraft {
-  return {
-    lines: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, notes: line.notes, optionIds: line.optionIds })),
-    ...details,
-  };
-}
 
 /**
  * Vender: touch catalog, ticket and charge in one screen. The cart survives a reload, F9 charges and
  * the server computes the final total (the sale is rejected if a price changed since it was shown).
  */
 export default function SellPage() {
-  const ticketTitleId = useId();
-  const chargeTitleId = useId();
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
   const toast = useToast();
@@ -135,20 +119,8 @@ export default function SellPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   // A table's tab (new or a new round): read once; the sale then goes to the kitchen instead of being charged.
   const [tabTarget] = useState<TabTarget | null>(() => readTabTarget(searchParams));
-  // The sale being built starts where it came from: an order of a delivery platform brought back from the device sells
-  // from the whole catalog from its first load (its lines come back with it once the catalog is in).
-  const [details, setDetails] = useState<SaleDetails>(() => {
-    const draft = tabTarget ? null : readSellDraft(tenantId);
-    return draft && isDeliveryPlatform(draft.channel)
-      ? {
-        ...NO_SALE_DETAILS,
-        channel: draft.channel,
-        externalOrderNumber: draft.externalOrderNumber,
-        externalOrderId: draft.externalOrderId ?? '',
-        collectedBy: draft.collectedBy,
-      }
-      : { ...NO_SALE_DETAILS, delivery: draft?.delivery ?? null };
-  });
+  // The sale being built starts where it came from (an order of a platform brought back sells from the whole catalog).
+  const [details, setDetails] = useState<SaleDetails>(() => initialDetails(tabTarget ? null : readSellDraft(tenantId)));
   // A folio left empty says so once a register was attempted, not while the cashier is still choosing products.
   const [folioChecked, setFolioChecked] = useState(false);
   // A long id half typed says so once the cashier leaves it or tries to register, not at its first character.
@@ -161,11 +133,9 @@ export default function SellPage() {
   const [saleError, setSaleError] = useState('');
   const [completedSale, setCompletedSale] = useState<CompletedSale | null>(null);
   const [cartOpenOnPhone, setCartOpenOnPhone] = useState(false);
-  const [cashClosed, setCashClosed] = useState(false);
   const [showOpenDrawer, setShowOpenDrawer] = useState(false);
   // Every charge enters a drawer: without one, Cobrar opens the cashier's drawer first and then the charge.
   const [chargeAfterOpening, setChargeAfterOpening] = useState(false);
-  const [drawerBranch, setDrawerBranch] = useState<{ id: string; name: string } | null>(null);
   const online = useOnlineStatus();
   const pendingSales = usePendingSales();
   const [showPendingSales, setShowPendingSales] = useState(false);
@@ -173,10 +143,7 @@ export default function SellPage() {
   // retry, also after a reload, sends the same key and never charges twice. Another cart is another sale.
   const pendingCharge = useRef<PendingCharge | null>(null);
   const workingBranch = useWorkingBranch();
-  // The sale is made where the cashier's drawer is; without one, at the branch this device works at.
-  const saleBranchId = drawerBranch?.id ?? (workingBranch.hasSeveral ? workingBranch.branch?.id : undefined);
   const navigate = useNavigate();
-  const [tabOrder, setTabOrder] = useState<OrderDto | null>(null);
   const [choosing, setChoosing] = useState<OptionsRequest | null>(null);
   // Read once: the link fills the customer after the saved draft is restored. Only a link from a chat (with its
   // conversation) makes it a WhatsApp order; the customer card just fills the customer in.
@@ -199,33 +166,12 @@ export default function SellPage() {
       draftLoadedFor.current = tenantId;
       const draft = tabTarget ? null : readSellDraft(tenantId);
       if (draft) {
-        setCart(draft.lines.flatMap((line) => {
-          const product = byId.get(line.productId);
-          const optionIds = line.optionIds ?? [];
-          // Options that changed since the draft was saved drop the line instead of selling something else.
-          if (!product || getSelectionError(product.optionGroups, optionIds)) return [];
-          return [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes, optionIds)];
-        }));
+        setCart(linesFromDraft(draft.lines, byId, toCartLine));
         // The cashier may have taken the sale to the counter before this first load (it waits without connection):
         // that choice stays, as when going back to the counter at any other moment.
-        const toCounter = originChosen.current && isDeliveryPlatform(draft.channel);
-        setDetails({
-          customerName: draft.customerName,
-          customerPhone: draft.customerPhone,
-          tableNumber: draft.tableNumber,
-          orderNotes: draft.orderNotes,
-          channel: draft.channel,
-          externalOrderNumber: draft.externalOrderNumber,
-          externalOrderId: draft.externalOrderId ?? '',
-          collectedBy: draft.collectedBy,
-          delivery: draft.delivery ?? null,
-          appointment: draft.appointment ?? null,
-          ...(toCounter ? COUNTER_ORIGIN : {}),
-        });
-        // The name for the bag of a platform's order is in sight with its folio: behind the link there are only notes.
-        setShowDetails(isDeliveryPlatform(draft.channel) && !toCounter
-          ? Boolean(draft.orderNotes)
-          : Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes));
+        const restored = restoreDetails(draft, originChosen.current && isDeliveryPlatform(draft.channel));
+        setDetails(restored.details);
+        setShowDetails(restored.showDetails);
         // A charge left on its way by a reload: the retry sends its key, unless the cart came back different.
         pendingCharge.current = draft.pendingCharge ?? null;
       }
@@ -242,33 +188,13 @@ export default function SellPage() {
       }
     } else {
       // Reload (a price changed): keep the cart with current prices and drop what is no longer sold.
-      setCart((current) => current.flatMap((line) => {
-        const product = byId.get(line.productId);
-        if (!product || getSelectionError(product.optionGroups, line.optionIds)) return [];
-        return [{ ...toCartLine(product, line.quantity, line.notes, line.optionIds), showNotes: line.showNotes }];
-      }));
+      setCart((current) => refreshLines(current, byId, toCartLine));
     }
   }, [setCart, tabTarget, tenantId, toCartLine]);
 
-  // Rappi, Uber Eats and DiDi Food as the business set them up: only the active ones are offered.
-  const platformChannels = useDeliveryPlatformChannels(access.sell);
-  const activePlatforms = useMemo(
-    () => (platformChannels.data ?? []).flatMap((row) => (row.isActive && isDeliveryPlatform(row.channel) ? [row.channel] : [])),
-    [platformChannels.data],
-  );
-  // A sale brought back from the device may come from a platform the business turned off since (or whose list did not
-  // load): once that is known, it goes back to the counter.
-  if (!platformChannels.isPending && isDeliveryPlatform(details.channel) && !activePlatforms.includes(details.channel)) {
-    setDetails((current) => ({ ...current, ...COUNTER_ORIGIN }));
-  }
-  // While the list is not known yet (without connection it waits), the platform of a sale brought back stays offered:
-  // its order is kept as it is, and the cashier can still take Vender back to the counter.
-  const offeredPlatforms = useMemo(
-    () => (platformChannels.isPending && activePlatforms.length === 0 && isDeliveryPlatform(details.channel)
-      ? [details.channel]
-      : activePlatforms),
-    [activePlatforms, details.channel, platformChannels.isPending],
-  );
+  const platforms = useSalePlatforms(access.sell, details.channel);
+  // A sale brought back from a platform turned off since goes back to the counter.
+  if (platforms.turnedOff) setDetails((current) => ({ ...current, ...COUNTER_ORIGIN }));
   // The platform whose app took the order on screen; a chat is a WhatsApp order and a tab goes to a table.
   const platform: DeliveryPlatform | null = !tabTarget && !chatOrigin && isDeliveryPlatform(details.channel) ? details.channel : null;
 
@@ -288,21 +214,7 @@ export default function SellPage() {
     [measure, products],
   );
 
-  useEffect(() => {
-    // A round goes to an open tab: show what it already has.
-    if (tabTarget?.kind !== 'round') return;
-    let cancelled = false;
-    ordersApi.getById(tabTarget.orderId)
-      .then(({ data }) => {
-        if (!cancelled) setTabOrder(data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setSaleError(getApiErrorMessage(err, 'No se encontró la cuenta.'));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tabTarget]);
+  const tabOrder = useTabOrder(tabTarget, setSaleError);
 
   // The customer (or the appointment) is already in the sale: a reload must not fill it again.
   useEffect(() => {
@@ -326,17 +238,7 @@ export default function SellPage() {
         confirmLabel: 'Cobrar la cita',
         cancelLabel: 'Seguir con la venta',
       }))) return;
-      const when = formatInBusinessZone(data.startAt, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      const appointment: SaleAppointment = {
-        id: data.id,
-        customerName: data.customerName,
-        description: `${data.serviceName} · ${when}`,
-        visitFee: data.visit && data.visit.fee > 0 ? data.visit.fee : null,
-        zoneName: data.visit?.zoneName ?? null,
-      };
-      // A visit to quote «Sin costo» (Fase 29B) does not charge its service: only what else the cashier adds.
-      const freeVisit = data.visit?.chargePolicy === HomeVisitChargePolicy.Free;
-      const service = data.serviceProductId && !freeVisit ? products.find((product) => product.id === data.serviceProductId) : undefined;
+      const { appointment, service, freeVisit } = saleOfAppointment(data, products);
       pendingCharge.current = null;
       setCart(service ? [toCartLine(service, 1, '', [])] : []);
       // A counter sale of the business, for the customer of the appointment: no platform and no delivery.
@@ -358,25 +260,10 @@ export default function SellPage() {
     void chargeAppointment(appointmentId);
   }, [catalog.loading, chargeAppointment]);
 
-  const workingBranchId = workingBranch.branch?.id;
-  useEffect(() => {
-    // Only people who manage the cash drawer can see it; for them a closed drawer is worth a warning. It is the
-    // drawer that would take their payments at the branch this device sells at.
-    if (!access.cash || !tenantId) return;
-    let cancelled = false;
-    cashApi.getCurrentSession(workingBranchId)
-      .then(({ data }) => {
-        if (cancelled) return;
-        setCashClosed(!data);
-        setDrawerBranch(data?.isMine && data.branchId ? { id: data.branchId, name: data.branchName ?? '' } : null);
-      })
-      .catch(() => {
-        if (!cancelled) setCashClosed(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [access.cash, tenantId, workingBranchId]);
+  const drawer = useCashDrawer(access.cash, tenantId, workingBranch.branch?.id);
+  const { cashClosed, drawerBranch } = drawer;
+  // The sale is made where the cashier's drawer is; without one, at the branch this device works at.
+  const saleBranchId = drawerBranch?.id ?? (workingBranch.hasSeveral ? workingBranch.branch?.id : undefined);
 
   /** Keeps the sale on screen, with the key of the charge sent for it (a table's round is not kept). */
   const saveDraft = useCallback((draft: SellDraft) => {
@@ -391,96 +278,39 @@ export default function SellPage() {
     saveDraft(draft);
   }, [cart, details, saveDraft]);
 
-  // A weighed product counts as one article, whatever it weighs.
-  const itemCount = cart.reduce((sum, line) => sum + (line.fractional ? 1 : line.quantity), 0);
   const hasServices = cart.some((line) => line.isService);
 
-  // To the customer's address (Fase 22C): with the active zones of the business, never for a tab or a platform's order.
-  const zones = useDeliveryZones(access.sell && !tabTarget);
-  const activeZones = useMemo(() => (zones.data ?? []).filter((zone) => zone.isActive), [zones.data]);
   // The appointment the sale charges: a counter sale, never a tab, a platform's order or a delivery.
   const appointment = !tabTarget && !platform ? details.appointment ?? null : null;
-  const deliveryPossible = !tabTarget && !platform && !appointment;
-  // A delivery typed (or brought back with the sale) stays on screen while the zones load, fail or were turned off, or
-  // with services in the ticket: it says why instead of sending the sale without its address.
-  const delivery = deliveryPossible ? details.delivery : null;
-  const deliveryOffered = deliveryPossible && ((!hasServices && activeZones.length > 0) || delivery !== null);
-  const deliveryZone = delivery ? findDeliveryZone(activeZones, delivery.postalCode) : null;
+  const { zones, delivery, deliveryOffered, deliveryZone } = useSaleDelivery(
+    access.sell && !tabTarget, !tabTarget && !platform && !appointment, details.delivery, hasServices,
+  );
 
-  const totals = useMemo(() => {
-    const lines = cart.map((line) => ({
-      unitPrice: line.unitPrice,
-      quantity: line.quantity,
-      ratePercent: line.ratePercent,
-      isExempt: line.isExempt,
-    }));
-    if (deliveryZone) return estimateDeliveryTotals(lines, pricesIncludeTax, deliveryZone, defaultTaxRate);
-    // The charge for the visit agreed, one more concept as the server adds it.
-    if (appointment?.visitFee) return estimateVisitTotals(lines, pricesIncludeTax, appointment.visitFee, defaultTaxRate);
-    return { ...estimateOrderTotals(lines, pricesIncludeTax), productsTotal: null, fee: null };
-  }, [cart, pricesIncludeTax, deliveryZone, defaultTaxRate, appointment?.visitFee]);
-  // Quick feedback only: the server finds the zone, checks its minimum and charges its fee.
-  const deliveryPostalCode = delivery ? normalizePostalCode(delivery.postalCode) : '';
-  const zonesProblem = !delivery ? ''
-    : hasServices ? DELIVERY_ONLY_PRODUCTS_MESSAGE
-    : zones.isPending ? 'Cargando tus zonas de entrega…'
-    : activeZones.length === 0
-      ? zones.isError
-        ? 'No se pudieron leer tus zonas de entrega: intenta de nuevo o quita «A domicilio».'
-        : 'Ninguna zona de entrega está activa: quita «A domicilio» o activa una en Configuración › Zonas de entrega.'
-      : '';
-  const deliveryProblem = !delivery ? ''
-    : zonesProblem ? zonesProblem
-    : !isPostalCode(deliveryPostalCode) ? 'Escribe el código postal de la entrega (5 dígitos).'
-    : !deliveryZone ? notCoveredMessage(deliveryPostalCode)
-    : totals.productsTotal !== null && !meetsMinimum(deliveryZone, totals.productsTotal)
-      ? belowMinimumMessage(deliveryPostalCode, deliveryZone.minimumOrder)
-      : !delivery.addressLine.trim() ? ADDRESS_LINE_REQUIRED_MESSAGE
-      : paysWithProblem(delivery.paysWith ?? '', totals.total);
-  // Said once the cashier wrote a whole postal code, not while typing it (what is wrong with the zones, right away).
-  const deliveryHint = delivery && (zonesProblem || isPostalCode(deliveryPostalCode)) ? deliveryProblem : '';
-  // An order of a platform never sends the phone: what is in the hidden field does not stop it.
-  const phoneError = !platform && details.customerPhone.trim() && !isPlausiblePhone(details.customerPhone)
-    ? 'Revisa el teléfono: 10 dígitos o el número con lada internacional (+52…).'
-    : '';
-  // Quick feedback only: the server checks the folio, the platform and the products again.
-  const folioProblem = platform ? getPlatformFolioProblem(platform, details.externalOrderNumber) : '';
-  // The long id is optional: what was typed and cannot be one stops the sale.
-  const orderIdProblem = platform ? getPlatformOrderIdProblem(details.externalOrderId) : '';
-  const platformProblem = platform && hasServices ? PLATFORM_ONLY_PRODUCTS_MESSAGE : folioProblem || orderIdProblem;
-  const folioError = folioProblem && (folioChecked || details.externalOrderNumber.trim()) ? folioProblem : '';
-  const orderIdError = orderIdProblem && (orderIdChecked || details.externalOrderId.trim().length >= 6) ? orderIdProblem : '';
+  const totals = useMemo(
+    () => saleTotals(cart, pricesIncludeTax, defaultTaxRate, deliveryZone, appointment?.visitFee),
+    [cart, pricesIncludeTax, deliveryZone, defaultTaxRate, appointment?.visitFee],
+  );
+  const { phoneError, folioProblem, orderIdProblem, platformProblem, folioError, orderIdError, deliveryProblem, deliveryHint } = checkSale({
+    details,
+    platform,
+    delivery,
+    deliveryZone,
+    zones,
+    totals,
+    hasServices,
+    folioChecked,
+    orderIdChecked,
+  });
 
-  const categoriesWithProducts = useMemo(() => {
-    const used = new Set(products.map((product) => product.categoryId));
-    return catalog.categories
-      .filter((category) => used.has(category.id))
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-  }, [catalog.categories, products]);
+  const categoriesWithProducts = useMemo(() => categoriesInUse(catalog.categories, products), [catalog.categories, products]);
   const hasFeatured = products.some((product) => product.isFeatured);
-
-  const visibleProducts = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return products
-      .filter((product) => {
-        if (categoryFilter === 'featured' && !product.isFeatured) return false;
-        if (categoryFilter !== 'all' && categoryFilter !== 'featured' && product.categoryId !== categoryFilter) return false;
-        if (!term) return true;
-        return product.name.toLowerCase().includes(term)
-          || (product.sku ?? '').toLowerCase().includes(term)
-          || (product.barcode ?? '') === term;
-      })
-      .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-  }, [categoryFilter, products, search]);
+  const visibleProducts = useMemo(() => filterCatalog(products, categoryFilter, search), [categoryFilter, products, search]);
 
   const addProduct = useCallback((product: ProductDto) => {
     setSaleError('');
     if (hasOptions(product)) {
       // Variants and extras: choose them (and how many) before it goes to the ticket.
-      const preselected = (product.optionGroups ?? [])
-        .filter((group) => group.minSelections === 1 && group.maxSelections === 1)
-        .flatMap((group) => group.options.filter((option) => option.isAvailable).slice(0, 1).map((option) => option.id));
-      setChoosing({ product, optionIds: preselected, quantityText: '1' });
+      setChoosing({ product, optionIds: preselectedOptions(product), quantityText: '1' });
       return;
     }
     if (allowsFractions(product.unit)) {
@@ -519,7 +349,7 @@ export default function SellPage() {
     const term = search.trim();
     if (!term) return;
     // A barcode scanner types the code and presses Enter: add the exact match.
-    const exact = products.find((product) => product.barcode === term || product.sku?.toLowerCase() === term.toLowerCase());
+    const exact = scannedProduct(products, term);
     if (exact) {
       addProduct(exact);
       setSearch('');
@@ -600,107 +430,19 @@ export default function SellPage() {
     setChargeOpen(true);
   }, [cart.length, submitting, tabTarget, canCharge, pricesPending, platformProblem, folioProblem, orderIdProblem, deliveryProblem, cashClosed, online]);
 
-  // «Paga con» goes only as an amount; anything else was refused before sending.
-  const paysWithTyped = delivery ? parsePaysWith(delivery.paysWith ?? '') : null;
-  const payingWith = typeof paysWithTyped === 'number' ? paysWithTyped : null;
-
-  const buildOrderRequest = (): CreateOrderRequest => ({
-    customerName: details.customerName.trim() || undefined,
-    // The app of a platform shares neither the customer's phone nor a table.
-    customerPhone: platform ? undefined : details.customerPhone.trim() || undefined,
-    customerNotes: details.orderNotes.trim() || undefined,
-    // An order sent to an address has no table: the address says where it goes.
-    tableNumber: isFood && !platform && !delivery ? details.tableNumber.trim() || undefined : undefined,
-    // A service in the cart makes it a service order (pieces to track, if the service is trackable).
-    orderType: hasServices ? OrderType.Service : OrderType.Retail,
-    items: cart.map((line) => ({
-      productId: line.productId,
-      quantity: line.quantity,
-      notes: line.notes.trim() || undefined,
-      optionIds: line.optionIds.length > 0 ? line.optionIds : undefined,
-    })),
-    expectedTotal: totals.total,
-    channel: chatOrigin ? OrderChannel.WhatsApp : platform ?? undefined,
-    externalOrderNumber: platform ? normalizePlatformFolio(details.externalOrderNumber) : undefined,
-    externalOrderId: platform && details.externalOrderId.trim() ? normalizePlatformOrderId(details.externalOrderId) : undefined,
-    collectedBy: platform ? details.collectedBy : undefined,
-    branchId: saleBranchId,
-    delivery: delivery
-      ? {
-        postalCode: normalizePostalCode(delivery.postalCode),
-        addressLine: delivery.addressLine.trim(),
-        references: delivery.references.trim() || undefined,
-        paysWith: payingWith ?? undefined,
-      }
-      : undefined,
-    appointmentId: appointment?.id,
+  const orderRequest = (): CreateOrderRequest => buildOrderRequest({
+    cart, details, totals, platform, chatOrigin, delivery, appointment, isFood, hasServices, branchId: saleBranchId,
   });
 
-  /** Keeps a charged sale on the device when the connection is down; it is sent with its key when it comes back. */
+  /** Keeps a charged sale on the device when the connection is down; false when this device cannot keep it. */
   const queueOfflineSale = async (request: CreateOrderRequest, charge: ChargeResult) => {
     if (!tenantId || !user) return false;
-    const capturedAt = new Date().toISOString();
-    try {
-      const pending = await enqueueSale({
-        id: request.idempotencyKey ?? newUuid(),
-        tenantId,
-        userId: user.id,
-        request: { ...request, idempotencyKey: undefined },
-        total: totals.total,
-        capturedAt,
-      });
-      const order = buildOfflineTicketOrder({
-        folio: pending.folio,
-        capturedAt,
-        lines: cart,
-        totals,
-        pricesIncludeTax,
-        payments: charge.payments.map((payment) => ({
-          amount: payment.amount,
-          method: payment.method,
-          reference: payment.reference,
-          tip: payment.tip,
-          cashReceived: payment.cashReceived,
-        })),
-        customerName: request.customerName,
-        tableNumber: request.tableNumber,
-      });
-      clearSale();
-      setChargeOpen(false);
-      setCompletedSale({ order, offline: true });
-      return true;
-    } catch {
-      // No IndexedDB on this device (private window): the sale needs the connection.
-      return false;
-    }
-  };
-
-  /**
-   * Sends the sale. A folio of a platform already registered today, or its long id ever, asks first: short folios repeat,
-   * so when it is another order it goes again with the same key, confirmed; null when the cashier goes to check instead.
-   */
-  const sendSale = async (request: CreateOrderRequest): Promise<OrderDto | null> => {
-    try {
-      const { data } = await ordersApi.create(request);
-      return data;
-    } catch (err: unknown) {
-      if (getApiErrorCode(err) !== 'possible_duplicate_order' || request.confirmPossibleDuplicate) throw err;
-      const channel = getChannelLabel(request.channel);
-      const confirmed = await confirm({
-        title: '¿Es otro pedido?',
-        // With a long id either one can repeat, and the server's answer says which; without it, only today's folio.
-        message: request.externalOrderId
-          ? `${getApiErrorMessage(err, `Ya registraste un pedido de ${channel} con el mismo folio o ID largo.`)} `
-            + 'Si no, búscalo en Pedidos.'
-          : `Hoy ya registraste un pedido de ${channel} con el folio ${request.externalOrderNumber}. `
-            + 'Los folios cortos se repiten: si es otro pedido, regístralo; si no, búscalo en Pedidos.',
-        confirmLabel: 'Registrar de todos modos',
-        cancelLabel: 'Revisar',
-      });
-      if (!confirmed) return null;
-      const { data } = await ordersApi.create({ ...request, confirmPossibleDuplicate: true });
-      return data;
-    }
+    const order = await keepSaleOnDevice({ tenantId, userId: user.id, request, charge, cart, totals, pricesIncludeTax });
+    if (!order) return false;
+    clearSale();
+    setChargeOpen(false);
+    setCompletedSale({ order, offline: true });
+    return true;
   };
 
   // Fiado (Fase 26A): read when the charge opens, for a counter sale with the customer's phone; the server checks the
@@ -710,14 +452,8 @@ export default function SellPage() {
     : '';
   const creditAccount = useCustomerAccount({ phone: creditPhone }, chargeOpen && creditPhone.length >= 10);
   const refreshCredit = useRefreshCustomerCredit();
-  const account = creditAccount.data;
-  const credit: ChargeCredit | undefined = account?.sellsOnCredit && account.available != null
-    ? { name: account.name ?? (details.customerName.trim() || 'El cliente'), available: account.available, overdue: account.overdue }
-    : undefined;
   // What the customer has in their favor (Fase 26D) pays like another method; the server checks it again as it charges.
-  const balance: ChargeBalance | undefined = account && account.creditBalance > 0
-    ? { name: account.name ?? (details.customerName.trim() || 'El cliente'), available: account.creditBalance }
-    : undefined;
+  const { credit, balance } = chargeFundsOf(creditAccount.data, details.customerName);
 
   const submitSale = async (charge: ChargeResult | null) => {
     if (!validateSale()) {
@@ -743,7 +479,7 @@ export default function SellPage() {
     // Saved before sending: a reload while the charge is on its way brings the cart back with this key.
     saveDraft(draft);
     const request: CreateOrderRequest = {
-      ...buildOrderRequest(),
+      ...orderRequest(),
       idempotencyKey: pending.key,
       payments: charge?.payments.map((payment) => ({
         amount: payment.amount,
@@ -760,7 +496,7 @@ export default function SellPage() {
       return;
     }
     try {
-      const order = await sendSale(request);
+      const order = await sendSale(request, confirm);
       // Nothing was recorded: the cart stays, with its key, while the cashier checks Pedidos.
       if (!order) return;
       const stockWarning = stockWarningMessage(order.stockWarnings);
@@ -802,7 +538,7 @@ export default function SellPage() {
     setSubmitting(true);
     setSaleError('');
     try {
-      const request = buildOrderRequest();
+      const request = orderRequest();
       const { data: tab } = tabTarget.kind === 'round'
         ? await ordersApi.addRound(tabTarget.orderId, request.items)
         : await ordersApi.create({
@@ -852,20 +588,7 @@ export default function SellPage() {
   // Vender is open (charging, opening the drawer, an option, a weight): there it would register past what is on screen.
   // The ticket's sheet on a phone is not one of them: it is the ticket itself.
   const dialogOpen = chargeOpen || showOpenDrawer || choosing !== null || measure !== null || showPendingSales || completedSale !== null;
-  const mainAction = useRef<() => void>(() => undefined);
-  useEffect(() => {
-    mainAction.current = dialogOpen ? () => undefined : platform ? registerPlatformOrder : openCharge;
-  });
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'F9') {
-        event.preventDefault();
-        mainAction.current();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  useF9(platform ? registerPlatformOrder : openCharge, dialogOpen);
 
   const cartPanel = (
     <CartPanel
@@ -895,7 +618,7 @@ export default function SellPage() {
       onSendToKitchen={() => void sendToKitchen()}
       onOpenCharge={openCharge}
       onSaveUnpaid={() => void submitSale(null)}
-      activePlatforms={offeredPlatforms}
+      activePlatforms={platforms.offered}
       platform={platform}
       onChannelChange={changeChannel}
       folioError={folioError}
@@ -938,27 +661,12 @@ export default function SellPage() {
         showOrders={access.orders}
       />
 
-      {catalog.offlineCatalogAt && (
-        <div className="alert alert-warning mt-3 mb-0" role="status">
-          <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>
-          Sin conexión: vendes con el catálogo guardado ({formatDateTime(catalog.offlineCatalogAt)}). Las ventas cobradas se guardan
-          en este dispositivo y se envían solas al volver la conexión.
-        </div>
-      )}
-
-      {cashClosed && (
-        <div className="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 mb-0" role="status">
-          <span>
-            <i className="ri-safe-2-line me-1" aria-hidden="true"></i>
-            {activePlatforms.length > 0
-              ? 'Tu caja está cerrada: ábrela para cobrar. Sin ella puedes guardar pedidos y registrar los que ya cobró una plataforma.'
-              : 'Tu caja está cerrada: ábrela para cobrar. Todo cobro se registra en una caja; sin ella solo puedes guardar pedidos.'}
-          </span>
-          <button type="button" className="btn btn-sm btn-warning" onClick={() => setShowOpenDrawer(true)}>
-            Abrir caja
-          </button>
-        </div>
-      )}
+      <SellNotices
+        offlineCatalogAt={catalog.offlineCatalogAt}
+        cashClosed={cashClosed}
+        hasPlatforms={platforms.active.length > 0}
+        onOpenDrawer={() => setShowOpenDrawer(true)}
+      />
 
       <OpenDrawerModal
         show={showOpenDrawer}
@@ -970,12 +678,9 @@ export default function SellPage() {
         defaultBranchId={workingBranch.branch?.id}
         onOpened={(session) => {
           setShowOpenDrawer(false);
-          setCashClosed(false);
-          if (session.isMine && session.branchId) {
-            setDrawerBranch({ id: session.branchId, name: session.branchName ?? '' });
-            // The device keeps working where the drawer is.
-            workingBranch.setBranch(session.branchId);
-          }
+          drawer.opened(session);
+          // The device keeps working where the drawer is.
+          if (session.isMine && session.branchId) workingBranch.setBranch(session.branchId);
           toast.success('Tu caja quedó abierta.');
           if (chargeAfterOpening) {
             setChargeAfterOpening(false);
@@ -1010,29 +715,20 @@ export default function SellPage() {
         </aside>
       </div>
 
-      {/* Phones: the ticket lives in a bottom sheet behind this bar. */}
-      <div className="sell-phone-bar d-lg-none">
-        <button type="button" className="btn btn-light btn-touch flex-grow-1" onClick={() => setCartOpenOnPhone(true)}>
-          <i className="ri-shopping-basket-2-line me-1" aria-hidden="true"></i>
-          {itemCount} {itemCount === 1 ? 'artículo' : 'artículos'} · <span className="ta-money">{formatMoney(totals.total)}</span>
-        </button>
-        <button
-          type="button"
-          className="btn btn-primary btn-touch"
-          onClick={tabTarget
-            ? () => void sendToKitchen()
-            : platform ? registerFromPhoneBar : canCharge ? openCharge : () => void submitSale(null)}
-          disabled={cart.length === 0 || submitting || pricesPending || (platform !== null && !online)}
-        >
-          {tabTarget ? 'Enviar' : platform ? 'Registrar' : canCharge ? 'Cobrar' : 'Guardar'}
-        </button>
-      </div>
-      <Offcanvas show={cartOpenOnPhone} onHide={() => setCartOpenOnPhone(false)} placement="bottom" className="sell-sheet" aria-labelledby={ticketTitleId}>
-        <Offcanvas.Header closeButton>
-          <Offcanvas.Title id={ticketTitleId} as="span" className="visually-hidden">Ticket</Offcanvas.Title>
-        </Offcanvas.Header>
-        <Offcanvas.Body>{cartPanel}</Offcanvas.Body>
-      </Offcanvas>
+      <SellPhoneBar
+        articles={countArticles(cart)}
+        total={totals.total}
+        actionLabel={tabTarget ? 'Enviar' : platform ? 'Registrar' : canCharge ? 'Cobrar' : 'Guardar'}
+        onAction={tabTarget
+          ? () => void sendToKitchen()
+          : platform ? registerFromPhoneBar : canCharge ? openCharge : () => void submitSale(null)}
+        actionDisabled={cart.length === 0 || submitting || pricesPending || (platform !== null && !online)}
+        ticketOpen={cartOpenOnPhone}
+        onOpenTicket={() => setCartOpenOnPhone(true)}
+        onCloseTicket={() => setCartOpenOnPhone(false)}
+      >
+        {cartPanel}
+      </SellPhoneBar>
 
       <OptionsModal
         request={choosingNow}
@@ -1054,30 +750,18 @@ export default function SellPage() {
         onClose={() => setMeasure(null)}
       />
 
-      <Modal show={chargeOpen} onHide={() => !submitting && setChargeOpen(false)} centered size="lg" fullscreen="sm-down" aria-labelledby={chargeTitleId}>
-        <Modal.Header closeButton={!submitting}>
-          <Modal.Title id={chargeTitleId} as="h2" className="h5">Cobrar</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {chargeOpen && (
-            <ChargePanel
-              amountDue={totals.total}
-              submitting={submitting}
-              error={saleError}
-              // The tip of a platform's order is in its app, for the courier.
-              allowTip={!platform}
-              credit={credit}
-              balance={balance}
-              onSubmit={(charge) => void submitSale(charge)}
-              onCancel={() => setChargeOpen(false)}
-              uploadEvidence={async (file) => {
-                const { data } = await ordersApi.uploadPaymentEvidence(file);
-                return { url: data.url, fileName: data.fileName };
-              }}
-            />
-          )}
-        </Modal.Body>
-      </Modal>
+      <ChargeModal
+        show={chargeOpen}
+        amountDue={totals.total}
+        submitting={submitting}
+        error={saleError}
+        // The tip of a platform's order is in its app, for the courier.
+        allowTip={!platform}
+        credit={credit}
+        balance={balance}
+        onSubmit={(charge) => void submitSale(charge)}
+        onClose={() => setChargeOpen(false)}
+      />
 
       {showPendingSales && <PendingSalesModal onClose={() => setShowPendingSales(false)} />}
 
