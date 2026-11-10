@@ -1139,17 +1139,18 @@ La Fase 31E trae una migración, [`database/production/20261110022936_AddUniqueC
 - **Volver a la versión anterior:** funciona sin tocar la base.
 - **Dejar también la base como estaba:** el `rollback.sql` borra el índice sin tocar ninguna fila. Los nombres que haya cambiado `repair.sql` no regresan solos: su salida los lista.
 
-## Las llaves foráneas de las citas (Fase 31H)
+## La llave foránea de quien atiende una cita (Fase 31H)
 
-La Fase 31H trae una migración, [`database/production/20261110192224_AddAppointmentForeignKeys`](../../database/production/20261110192224_AddAppointmentForeignKeys). Su `apply.sql` va antes del merge ([ADR 0088](../adr/0088-appointment-foreign-keys.md)).
+La Fase 31H trae una migración, [`database/production/20261110201340_AddAppointmentStaffForeignKey`](../../database/production/20261110201340_AddAppointmentStaffForeignKey). Su `apply.sql` va antes del merge ([ADR 0088](../adr/0088-appointment-foreign-keys.md)).
 
-- **Antes del `apply.sql`:** las consultas 3 y 4 de su `verify.sql` listan las citas cuyo servicio apunta a un producto que ya se borró y cuya persona apunta a una cuenta que no existe. No bloquean: la migración les vacía ese vínculo y cada una conserva el nombre del servicio y de quien la atiende. La consulta 5 lista citas con un servicio de otro negocio (se esperan cero; la migración no las cambia).
-- **La migración:** vacía esos vínculos y crea `FK_Appointments_Products_ServiceProductId` (`ON DELETE SET NULL`), `FK_Appointments_AspNetUsers_StaffUserId` (sin cascada) y sus índices filtrados. Bloquea `Appointments`, y deja leer pero no borrar `Products`, hasta crear las llaves: milisegundos o pocos segundos, según cuántas citas haya.
-- **Mientras se publica:** la versión de `master` (la 31G) no conoce las llaves y sigue agendando, editando y borrando productos igual. Al borrar un producto, la base vacía el vínculo de sus citas.
+- **Antes del `apply.sql`:** la consulta 3 de su `verify.sql` tiene que salir vacía. Lista las citas cuya persona apunta a una cuenta que no existe; si hay alguna, el `apply.sql` se detiene con el error 50058 sin cambiar nada. Como las cuentas no se borran, ese Id sería de otra cosa: revísalo, y si no es de nadie del equipo, vacíalo como dice la consulta (la cita conserva el nombre de quien atiende).
+- **La migración:** crea `FK_Appointments_AspNetUsers_StaffUserId` (sin cascada) y su índice filtrado `IX_Appointments_StaffUserId`. No cambia datos. El servicio de la cita (`ServiceProductId`) se queda sin llave, a propósito.
+- **Candados:** bloquea `Appointments` hasta crear la llave, y crearla toma un candado de esquema sobre `AspNetUsers`. Mientras tanto nadie lee las cuentas y los inicios de sesión esperan; dura milisegundos o pocos segundos, según cuántas citas haya, así que mejor en una hora tranquila. Si un candado tarda más de 15 s (`LOCK_TIMEOUT`), el script se detiene con el error 1222 sin cambiar nada; vuelve a correrlo.
+- **Mientras se publica:** la versión de `master` (la 31G) no conoce la llave y sigue igual: solo guarda a una persona activa del equipo, con su cuenta, y nada borra cuentas.
 - **Sin `apply.sql`:** a la versión nueva le falta una migración, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
 - **Sin configuración nueva.**
 - **Volver a la versión anterior:** funciona sin tocar la base.
-- **Dejar también la base como estaba:** el `rollback.sql` borra las dos llaves y sus índices sin tocar ninguna fila. Los vínculos que vació el `apply.sql` siguen vacíos (apuntaban a algo que no existe).
+- **Dejar también la base como estaba:** el `rollback.sql` borra la llave y su índice sin tocar ninguna fila.
 
 ## Slot de staging con swap y aprobación
 

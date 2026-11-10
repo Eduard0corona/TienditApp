@@ -1,39 +1,40 @@
 ﻿-- =====================================================================================
 -- TienditApp (FoodParkDigital): migraciones para producción (SQL Server / Azure SQL).
--- Generado el 2026-11-10 con `dotnet ef migrations script 0 20261110192224_AddAppointmentForeignKeys --idempotent`
+-- Generado el 2026-11-10 con `dotnet ef migrations script 0 20261110201340_AddAppointmentStaffForeignKey --idempotent`
 -- (EF Core 10.0.12) desde la rama claude/amazing-babbage-175ks9 (Fase 31H).
 -- Debajo del bloque SET, el contenido es el que genera EF, sin cambios.
 --
 -- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory]. En una base que
 -- ya tiene 20261110022936_AddUniqueCategoryNamePerTenant (lo que exige master hoy, con la Fase 31G)
--- solo ejecuta 20261110192224_AddAppointmentForeignKeys:
---   - Vacía los vínculos de una cita que no apuntan a nada: [ServiceProductId] de un producto que
---     ya se borró (la cita conserva el nombre del servicio en [ServiceName]) y [StaffUserId] de una
---     cuenta que no existe (conserva el nombre en [StaffName]). Las consultas 3 y 4 de verify.sql
---     los listan antes; no cambia nada más de esas citas.
---   - [FK_Appointments_Products_ServiceProductId]: llave nueva con ON DELETE SET NULL. Borrar un
---     producto (la app lo borra de verdad) deja a sus citas con su nombre y sin el vínculo.
---   - [FK_Appointments_AspNetUsers_StaffUserId]: llave nueva sin cascada (las cuentas no se borran).
---   - [IX_Appointments_ServiceProductId] e [IX_Appointments_StaffUserId]: índices filtrados (solo
---     las citas con vínculo) que sostienen las llaves.
---   Bloquea [Appointments] (y deja leer, pero no borrar, [Products]) hasta crear las llaves, en la
---   misma transacción: milisegundos o pocos segundos, según cuántas citas haya.
+-- solo ejecuta 20261110201340_AddAppointmentStaffForeignKey:
+--   - [FK_Appointments_AspNetUsers_StaffUserId]: llave nueva, sin cascada, de la persona que
+--     atiende una cita ([StaffUserId]) a su cuenta. Las cuentas no se borran.
+--   - [IX_Appointments_StaffUserId]: índice filtrado (solo las citas con persona) que la sostiene.
+--   - Antes de crearla se detiene con el error 50058, sin cambiar nada, si una cita apunta a una
+--     cuenta que no existe: la consulta 3 de verify.sql las lista. Como las cuentas no se borran,
+--     sería otro tipo de Id; revísalo antes de vaciarlo (la cita conserva el nombre en [StaffName]).
+--   - [ServiceProductId] se queda sin llave, a propósito: la venta de una visita y el crédito de
+--     su cotización se cruzan por ese Id también después de borrar el producto (ADR 0088).
+--   No agrega columnas ni cambia datos. Bloquea [Appointments] hasta crear la llave, y crearla
+--   toma un candado de esquema (Sch-M) sobre [AspNetUsers]: mientras tanto nadie lee las cuentas y
+--   los inicios de sesión esperan (milisegundos o pocos segundos, según cuántas citas haya). Mejor
+--   en una hora tranquila. Si un candado tarda más de 15 s (LOCK_TIMEOUT, abajo), se detiene con
+--   el error 1222 sin cambiar nada: vuelve a ejecutarlo.
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
 -- vacía): revisa antes el verify.sql de database/production/20261110022936_AddUniqueCategoryNamePerTenant.
 --
--- Compatible con la versión desplegada (master con la Fase 31G): no conoce las llaves y sigue
--- agendando, editando y borrando productos igual; revisa al guardar que el servicio y la persona
--- sean del negocio, así que no guarda un vínculo que no exista, y al borrar un producto la base
--- vacía el vínculo de sus citas. /health/schema sigue sano. Volver a ella (redespliegue, o swap si
+-- Compatible con la versión desplegada (master con la Fase 31G): no conoce la llave y sigue
+-- agendando y editando igual. Solo guarda a una persona activa del equipo del negocio, con su
+-- cuenta, y nada borra cuentas. /health/schema sigue sano. Volver a ella (redespliegue, o swap si
 -- el slot de staging está activo) funciona sin rollback.sql.
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a
 -- ejecutar el script. Las opciones SET son las que exigen los índices filtrados (el sqlcmd
--- clásico arranca con QUOTED_IDENTIFIER OFF).
+-- clásico arranca con QUOTED_IDENTIFIER OFF), más LOCK_TIMEOUT.
 --
--- Orden: respaldo de la base -> verify.sql -> este script -> verify.sql -> fusionar la PR, cuyo
--- merge a master despliega a producción. Por ejemplo:
+-- Orden: respaldo de la base -> verify.sql (la consulta 3 vacía) -> este script -> verify.sql ->
+-- fusionar la PR, cuyo merge a master despliega a producción. Por ejemplo:
 --     sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql
 -- =====================================================================================
 SET ANSI_NULLS ON;
@@ -44,6 +45,7 @@ SET CONCAT_NULL_YIELDS_NULL ON;
 SET NUMERIC_ROUNDABORT OFF;
 SET QUOTED_IDENTIFIER ON;
 SET XACT_ABORT ON;
+SET LOCK_TIMEOUT 15000;
 GO
 
 IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
@@ -10107,32 +10109,19 @@ GO
 BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261110192224_AddAppointmentForeignKeys'
+    WHERE [MigrationId] = N'20261110201340_AddAppointmentStaffForeignKey'
 )
 BEGIN
 
-    EXEC(N'UPDATE a SET [ServiceProductId] = NULL
-    FROM [Appointments] a WITH (TABLOCKX, HOLDLOCK)
-    WHERE a.[ServiceProductId] IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM [Products] p WITH (TABLOCK, HOLDLOCK) WHERE p.[Id] = a.[ServiceProductId]);
-    UPDATE a SET [StaffUserId] = NULL
-    FROM [Appointments] a
-    WHERE a.[StaffUserId] IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM [AspNetUsers] u WHERE u.[Id] = a.[StaffUserId]);');
+    EXEC(N'IF EXISTS (SELECT 1 FROM [Appointments] a WITH (TABLOCKX, HOLDLOCK)
+        WHERE a.[StaffUserId] IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [AspNetUsers] u WHERE u.[Id] = a.[StaffUserId]))
+        THROW 50058, N''An appointment points to a team member whose account does not exist; look into it (query 3 of verify.sql) before applying this migration.'', 1;');
 
 END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261110192224_AddAppointmentForeignKeys'
-)
-BEGIN
-    EXEC(N'CREATE INDEX [IX_Appointments_ServiceProductId] ON [Appointments] ([ServiceProductId]) WHERE [ServiceProductId] IS NOT NULL');
-END;
-
-IF NOT EXISTS (
-    SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261110192224_AddAppointmentForeignKeys'
+    WHERE [MigrationId] = N'20261110201340_AddAppointmentStaffForeignKey'
 )
 BEGIN
     EXEC(N'CREATE INDEX [IX_Appointments_StaffUserId] ON [Appointments] ([StaffUserId]) WHERE [StaffUserId] IS NOT NULL');
@@ -10140,7 +10129,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261110192224_AddAppointmentForeignKeys'
+    WHERE [MigrationId] = N'20261110201340_AddAppointmentStaffForeignKey'
 )
 BEGIN
     ALTER TABLE [Appointments] ADD CONSTRAINT [FK_Appointments_AspNetUsers_StaffUserId] FOREIGN KEY ([StaffUserId]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION;
@@ -10148,21 +10137,12 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261110192224_AddAppointmentForeignKeys'
-)
-BEGIN
-    ALTER TABLE [Appointments] ADD CONSTRAINT [FK_Appointments_Products_ServiceProductId] FOREIGN KEY ([ServiceProductId]) REFERENCES [Products] ([Id]) ON DELETE SET NULL;
-END;
-
-IF NOT EXISTS (
-    SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261110192224_AddAppointmentForeignKeys'
+    WHERE [MigrationId] = N'20261110201340_AddAppointmentStaffForeignKey'
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261110192224_AddAppointmentForeignKeys', N'10.0.12');
+    VALUES (N'20261110201340_AddAppointmentStaffForeignKey', N'10.0.12');
 END;
 
 COMMIT;
 GO
-
