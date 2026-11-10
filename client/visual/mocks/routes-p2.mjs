@@ -1,5 +1,5 @@
 // Phase 2 endpoints for the fake backend: access, customer card, messaging, cash shifts, refunds.
-import { NOW_ISO } from './data.mjs';
+import { NOW_ISO, uuid } from './data.mjs';
 import { balanceOfAccount, owedBy, phoneKey, recordOf, sellsOnCredit } from './routes-p15.mjs';
 
 const ago = (minutes) => new Date(new Date(NOW_ISO).getTime() - minutes * 60000).toISOString();
@@ -8,7 +8,7 @@ export function phase2Data(data) {
   const templates = [
     { id: 't-promo', name: '2x1 de fin de semana', purpose: 0, body: 'Hola {nombre}, este fin de semana tenemos 2x1 en lattes en {negocio}. Escribe BAJA si no quieres recibir mensajes.', providerTemplateName: 'promo_fin_semana', languageCode: 'es_MX', isActive: true, parameters: ['nombre', 'negocio'], createdAt: ago(5000) },
     { id: 't-volver', name: 'Te extrañamos', purpose: 0, body: 'Hola {nombre}, hace tiempo que no te vemos en {negocio}. Tu siguiente café va por nuestra cuenta.', providerTemplateName: null, languageCode: 'es_MX', isActive: true, parameters: ['nombre', 'negocio'], createdAt: ago(9000) },
-    { id: 't-cita', name: 'Recordatorio de cita', purpose: 1, body: 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora} en {negocio}.', providerTemplateName: 'cita_recordatorio', languageCode: 'es_MX', isActive: true, parameters: ['nombre', 'servicio', 'fecha', 'hora', 'negocio'], createdAt: ago(9500) },
+    { id: uuid('t-cita'), name: 'Recordatorio de cita', purpose: 1, body: 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora} en {negocio}.', providerTemplateName: 'cita_recordatorio', languageCode: 'es_MX', isActive: true, parameters: ['nombre', 'servicio', 'fecha', 'hora', 'negocio'], createdAt: ago(9500) },
   ];
   const progress = (p) => ({ pending: 0, sent: 0, delivered: 0, read: 0, failed: 0, skipped: 0, cancelled: 0, ...p });
   const campaigns = [
@@ -21,21 +21,22 @@ export function phase2Data(data) {
     { id: 'm-2', purpose: 0, campaignId: 'c-1', phone: '+525522107765', recipientName: 'Valeria Morales', body: 'Hola Valeria, este fin de semana…', status: 1, attempts: 1, createdAt: ago(29), nextAttemptAt: ago(29), sentAt: ago(28), deliveredAt: ago(27) },
     { id: 'm-3', purpose: 0, campaignId: 'c-1', phone: '+525599210087', recipientName: 'Roberto Sánchez', body: 'Hola Roberto, este fin de semana…', status: 2, attempts: 1, createdAt: ago(29), nextAttemptAt: ago(29), sentAt: ago(28), lastError: 'WhatsApp no pudo entregar el mensaje (código 131026).' },
     { id: 'm-4', purpose: 0, campaignId: 'c-1', phone: '+525533487712', recipientName: 'Luis Ángel Martínez', body: 'Hola Luis, este fin de semana…', status: 0, attempts: 0, createdAt: ago(29), nextAttemptAt: ago(1) },
-    { id: 'r-1', purpose: 1, appointmentId: 'a-1', phone: '+525514576630', recipientName: 'Daniela Torres', body: 'Hola Daniela, te recordamos tu cita de Corte el lunes 5 de octubre a las 10:00 a. m. en Café Luna.', status: 1, attempts: 1, createdAt: ago(120), nextAttemptAt: ago(120), sentAt: ago(119), deliveredAt: ago(118) },
-    { id: 'r-2', purpose: 1, appointmentId: 'a-2', phone: '+525570124456', recipientName: 'Ana Patricia Gómez', body: 'Hola Ana, te recordamos tu cita de Tinte el lunes 5 de octubre a las 12:30 p. m. en Café Luna.', status: 3, attempts: 0, createdAt: ago(60), nextAttemptAt: ago(60), lastError: 'El cliente pidió no recibir mensajes.' },
-    { id: 'n-1', purpose: 2, appointmentId: 'a-3', phone: '+525514576630', recipientName: 'Daniela Torres', body: 'Hola Daniela, tu cita de Corte ahora es el martes 6 de octubre a las 11:00 a. m. en Café Luna.', status: 1, attempts: 1, createdAt: ago(30), nextAttemptAt: ago(30), sentAt: ago(30), deliveredAt: ago(29) },
-    { id: 'n-2', purpose: 2, appointmentId: 'a-3', phone: '+525514576630', recipientName: 'Daniela Torres', body: 'Hola Daniela, quedó agendada tu cita de Corte el lunes 5 de octubre a las 10:00 a. m. en Café Luna.', status: 3, attempts: 0, createdAt: ago(45), nextAttemptAt: ago(45), lastError: 'Hay un aviso más reciente de la misma cita.' },
-    { id: 'n-3', purpose: 2, appointmentId: 'a-4', phone: '+525570124456', recipientName: 'Ana Patricia Gómez', body: 'Hola Ana, tu cita de Tinte del lunes 5 de octubre a las 12:30 p. m. en Café Luna está confirmada.', status: 2, attempts: 1, createdAt: ago(90), nextAttemptAt: ago(90), lastError: 'WhatsApp no lo entregó: el cliente no escribió en las últimas 24 horas. Usa una plantilla aprobada en Meta.' },
+    { id: 'r-1', purpose: 1, appointmentId: uuid('a-1'), phone: '+525514576630', recipientName: 'Daniela Torres', body: 'Hola Daniela, te recordamos tu cita de Corte el lunes 5 de octubre a las 10:00 a. m. en Café Luna.', status: 1, attempts: 1, createdAt: ago(120), nextAttemptAt: ago(120), sentAt: ago(119), deliveredAt: ago(118) },
+    { id: 'r-2', purpose: 1, appointmentId: uuid('a-2'), phone: '+525570124456', recipientName: 'Ana Patricia Gómez', body: 'Hola Ana, te recordamos tu cita de Tinte el lunes 5 de octubre a las 12:30 p. m. en Café Luna.', status: 3, attempts: 0, createdAt: ago(60), nextAttemptAt: ago(60), lastError: 'El cliente pidió no recibir mensajes.' },
+    { id: 'n-1', purpose: 2, appointmentId: uuid('a-3'), phone: '+525514576630', recipientName: 'Daniela Torres', body: 'Hola Daniela, tu cita de Corte ahora es el martes 6 de octubre a las 11:00 a. m. en Café Luna.', status: 1, attempts: 1, createdAt: ago(30), nextAttemptAt: ago(30), sentAt: ago(30), deliveredAt: ago(29) },
+    { id: 'n-2', purpose: 2, appointmentId: uuid('a-3'), phone: '+525514576630', recipientName: 'Daniela Torres', body: 'Hola Daniela, quedó agendada tu cita de Corte el lunes 5 de octubre a las 10:00 a. m. en Café Luna.', status: 3, attempts: 0, createdAt: ago(45), nextAttemptAt: ago(45), lastError: 'Hay un aviso más reciente de la misma cita.' },
+    { id: 'n-3', purpose: 2, appointmentId: uuid('a-4'), phone: '+525570124456', recipientName: 'Ana Patricia Gómez', body: 'Hola Ana, tu cita de Tinte del lunes 5 de octubre a las 12:30 p. m. en Café Luna está confirmada.', status: 2, attempts: 1, createdAt: ago(90), nextAttemptAt: ago(90), lastError: 'WhatsApp no lo entregó: el cliente no escribió en las últimas 24 horas. Usa una plantilla aprobada en Meta.' },
   ];
   const optOuts = [
-    { id: 'o-1', phone: '+525587761234', source: 0, optedOutAt: ago(1440), isActive: true },
-    { id: 'o-2', phone: '+525511112222', source: 1, optedOutAt: ago(10000), isActive: true },
+    { id: uuid('o-1'), phone: '+525587761234', source: 0, optedOutAt: ago(1440), isActive: true },
+    { id: uuid('o-2'), phone: '+525511112222', source: 1, optedOutAt: ago(10000), isActive: true },
   ];
   const settings = {
     whatsAppConnected: true, appointmentsEnabled: true, appointmentRemindersEnabled: true, appointmentReminderHoursBefore: 24,
-    appointmentReminderTemplateId: 't-cita', defaultReminderBody: 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora} en {negocio}. Si no puedes venir, respóndenos este mensaje. Escribe BAJA si no quieres recibir recordatorios.',
+    appointmentReminderTemplateId: uuid('t-cita'), defaultReminderBody: 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora} en {negocio}. Si no puedes venir, respóndenos este mensaje. Escribe BAJA si no quieres recibir recordatorios.',
     minReminderHoursBefore: 1, maxReminderHoursBefore: 72, campaignPlaceholders: ['nombre', 'negocio'], reminderPlaceholders: ['nombre', 'negocio', 'servicio', 'fecha', 'hora'],
     creditReminderPlaceholders: ['nombre', 'negocio', 'monto', 'vencido', 'fecha'],
+    creditDueSoonPlaceholders: ['nombre', 'negocio', 'monto', 'porvencer', 'fecha'],
   };
   return { templates, campaigns, messages, optOuts, settings };
 }

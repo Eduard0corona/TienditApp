@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { messagingApi } from '../../api/messagingApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -72,10 +72,16 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
   const [draft, setDraft] = useState<Draft | null>(null);
   const [preview, setPreview] = useState<CampaignPreviewDto | null>(null);
   const [busy, setBusy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [formError, setFormError] = useState('');
   const [detail, setDetail] = useState<CampaignDto | null>(null);
+  /** Each preview asked for, and each change of the audience: a late answer is for what was there before. */
+  const previewFor = useRef(0);
 
   const openNew = async () => {
+    setOpening(true);
+    setError('');
     setFormError('');
     setPreview(null);
     try {
@@ -84,6 +90,8 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
       setDraft(newDraft(list));
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudieron cargar las plantillas.'));
+    } finally {
+      setOpening(false);
     }
   };
 
@@ -99,14 +107,17 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
   const runPreview = async () => {
     if (!draft || busy) return;
     setBusy(true);
+    setPreviewing(true);
     setFormError('');
+    const asked = ++previewFor.current;
     try {
       const { data: result } = await messagingApi.previewCampaign(audienceRequest(draft));
-      setPreview(result);
+      if (asked === previewFor.current) setPreview(result);
     } catch (err: unknown) {
-      setFormError(getApiErrorMessage(err, 'No se pudo calcular a quién llega.'));
+      if (asked === previewFor.current) setFormError(getApiErrorMessage(err, 'No se pudo calcular a quién llega.'));
     } finally {
       setBusy(false);
+      setPreviewing(false);
     }
   };
 
@@ -161,8 +172,11 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
   const updateDraft = (changes: Partial<Draft>) => {
     if (!draft) return;
     setDraft({ ...draft, ...changes });
-    // The audience or the text changed: the preview no longer applies.
-    if ('templateId' in changes || 'audienceKind' in changes || 'minimumOrders' in changes || 'days' in changes) setPreview(null);
+    // The audience or the text changed: the preview no longer applies, nor one still being calculated.
+    if ('templateId' in changes || 'audienceKind' in changes || 'minimumOrders' in changes || 'days' in changes) {
+      setPreview(null);
+      previewFor.current += 1;
+    }
   };
 
   return (
@@ -173,16 +187,24 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
             <h4 className="header-title mb-1">Campañas</h4>
             <p className="text-muted small mb-0">Se envían en segundo plano y nunca llegan a quien escribió BAJA.</p>
           </div>
-          <button type="button" className="btn btn-primary" onClick={() => void openNew()}>
+          {/* It waits for the templates: a second click would open the form twice. */}
+          <button type="button" className="btn btn-primary" onClick={() => void openNew()} disabled={opening}>
             <i className="ri-megaphone-line me-1" aria-hidden="true"></i>Nueva campaña
           </button>
         </div>
 
-        {error && <div className="alert alert-danger">{error}</div>}
-        {campaigns.error && <div className="alert alert-danger">{getApiErrorMessage(campaigns.error, 'No se pudieron cargar las campañas.')}</div>}
+        {error && <div className="alert alert-danger" role="alert">{error}</div>}
+        {campaigns.error && (
+          <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+            <span className="me-auto">{getApiErrorMessage(campaigns.error, 'No se pudieron cargar las campañas.')}</span>
+            <button type="button" className="btn btn-sm btn-light" disabled={campaigns.isFetching} onClick={() => void campaigns.refetch()}>
+              Reintentar
+            </button>
+          </div>
+        )}
         {campaigns.isPending ? (
-          <p className="text-muted mb-0">Cargando…</p>
-        ) : !data || (data.items ?? []).length === 0 ? (
+          <p className="text-muted mb-0" role="status">Cargando…</p>
+        ) : !data ? null : (data.items ?? []).length === 0 ? (
           <p className="text-muted mb-0">Todavía no has enviado campañas.</p>
         ) : (
           <>
@@ -333,7 +355,7 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
                     <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
                       <span className="fw-semibold">Vista previa</span>
                       <button type="button" className="btn btn-sm btn-soft-primary" onClick={() => void runPreview()} disabled={busy || !draft.templateId}>
-                        {busy && !preview ? 'Calculando…' : preview ? 'Actualizar' : '¿A cuántos llega?'}
+                        {previewing ? 'Calculando…' : preview ? 'Actualizar' : '¿A cuántos llega?'}
                       </button>
                     </div>
                     {preview && (
@@ -363,7 +385,7 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
                   </div>
                 </>
               )}
-              {formError && <div className="alert alert-danger mt-3 mb-0">{formError}</div>}
+              {formError && <div className="alert alert-danger mt-3 mb-0" role="alert">{formError}</div>}
             </Modal.Body>
             {templates.length > 0 && (
               <Modal.Footer>
@@ -400,10 +422,17 @@ function CampaignDetail({ campaign, onClose }: { campaign: CampaignDto; onClose:
           {describeAudience(campaign)} · plantilla {campaign.templateName ?? '-'} · {campaign.createdBy ?? ''}
           {' · '}programada {formatDateTime(campaign.scheduledAt)}
         </p>
-        {error && <div className="alert alert-danger">{error}</div>}
-        {!messages ? (
-          <p className="text-muted mb-0">Cargando…</p>
-        ) : (messages.items ?? []).length === 0 ? (
+        {error && (
+          <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+            <span className="me-auto">{error}</span>
+            <button type="button" className="btn btn-sm btn-light" disabled={query.isFetching} onClick={() => void query.refetch()}>
+              Reintentar
+            </button>
+          </div>
+        )}
+        {query.isPending ? (
+          <p className="text-muted mb-0" role="status">Cargando…</p>
+        ) : !messages ? null : (messages.items ?? []).length === 0 ? (
           <p className="text-muted mb-0">
             {campaign.status === CampaignStatus.Scheduled ? 'Los clientes se eligen cuando empiece.' : 'No hubo clientes que cumplieran el filtro.'}
           </p>
