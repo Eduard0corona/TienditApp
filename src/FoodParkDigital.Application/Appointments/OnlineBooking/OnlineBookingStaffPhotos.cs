@@ -10,6 +10,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.Appointments.OnlineBooking;
 
@@ -82,19 +83,22 @@ public class OnlineBookingStaffPhotoHandler :
     private readonly ICurrentUserService _currentUserService;
     private readonly IFileStorageService _fileStorageService;
     private readonly IImageProcessingService _imageProcessingService;
+    private readonly ILogger<OnlineBookingStaffPhotoHandler> _logger;
 
     public OnlineBookingStaffPhotoHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
         IFileStorageService fileStorageService,
-        IImageProcessingService imageProcessingService)
+        IImageProcessingService imageProcessingService,
+        ILogger<OnlineBookingStaffPhotoHandler> logger)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
         _fileStorageService = fileStorageService;
         _imageProcessingService = imageProcessingService;
+        _logger = logger;
     }
 
     public async Task<Result<OnlineBookingStaffPhotoDto>> Handle(UploadOnlineBookingStaffPhotoCommand request, CancellationToken cancellationToken)
@@ -136,7 +140,7 @@ public class OnlineBookingStaffPhotoHandler :
 
         // The previous files go only once the new photo is saved, as with the cover: a rejected image keeps the old one.
         if (!string.IsNullOrEmpty(previous))
-            await _fileStorageService.DeleteVariantsAsync(previous, folder, cancellationToken);
+            await DeletePreviousAsync(staff, previous, folder, cancellationToken);
 
         return Result.Success(new OnlineBookingStaffPhotoDto { PhotoUrl = OnlineBookingStaffPhotos.Url(baseUrl) });
     }
@@ -153,8 +157,24 @@ public class OnlineBookingStaffPhotoHandler :
         staff.SetPhoto(null);
         Record(staff, "OnlineBookingStaffPhotoRemoved", previous);
         await _context.SaveChangesAsync(cancellationToken);
-        await _fileStorageService.DeleteVariantsAsync(previous, TenantStorageFolders.StaffPhotos(_tenantService.TenantId), cancellationToken);
+        await DeletePreviousAsync(staff, previous, TenantStorageFolders.StaffPhotos(_tenantService.TenantId), cancellationToken);
         return Result.Success(new OnlineBookingStaffPhotoDto());
+    }
+
+    /// <summary>
+    /// The files of the photo there was. The change is saved already: a storage that fails here leaves them behind and says
+    /// so in the log, instead of answering an error for a photo that did change.
+    /// </summary>
+    private async Task DeletePreviousAsync(OnlineBookingStaff staff, string previous, string folder, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _fileStorageService.DeleteVariantsAsync(previous, folder, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "The previous photo files of online booking staff {StaffId} of tenant {TenantId} were left in storage", staff.Id, staff.TenantId);
+        }
     }
 
     /// <summary>What strangers see of the team is the owner's decision, as the name: worth recording.</summary>

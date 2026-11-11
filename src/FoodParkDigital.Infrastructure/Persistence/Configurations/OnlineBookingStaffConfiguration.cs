@@ -100,7 +100,8 @@ public class OnlineBookingStaffAbsenceConfiguration : IEntityTypeConfiguration<O
             .HasForeignKey(x => x.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // The absences of a person, by when they end: the booking page reads the ones not over yet.
+        // The absences of a person, by when they end (it also serves the key to the person). The booking page reads all of a
+        // person's: at most 20, the ones over go when the owner saves them again.
         builder.HasIndex(x => new { x.StaffId, x.LastDay });
     }
 }

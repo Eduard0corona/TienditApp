@@ -205,7 +205,7 @@ describe('OnlineBookingStaffCard', () => {
     await user.click(screen.getByRole('button', { name: 'Editar a Ana López' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Ana López' }));
     expect(dialog.getAllByLabelText('Desde').map((input) => (input as HTMLInputElement).value)).toEqual(['2026-11-16', '2026-12-24']);
-    await user.click(dialog.getByRole('button', { name: 'Quitar la ausencia 2' }));
+    await user.click(dialog.getByRole('button', { name: 'Quitar la ausencia Jue 24 dic' }));
     await user.click(dialog.getByRole('button', { name: 'Agregar días' }));
     // A single day is one choice: «Hasta» follows «Desde».
     const from = dialog.getAllByLabelText('Desde')[1];

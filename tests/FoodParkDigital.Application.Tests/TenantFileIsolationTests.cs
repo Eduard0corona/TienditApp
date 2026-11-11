@@ -616,7 +616,8 @@ public class TenantFileIsolationTests
             _tenantService,
             CurrentUser,
             Storage,
-            new FakeImageProcessingService());
+            new FakeImageProcessingService(),
+            NullLogger<OnlineBookingStaffPhotoHandler>.Instance);
 
         public Task<Result<OnlineBookingStaffPhotoDto>> UploadStaffPhotoAsync(Guid userId) =>
             CreateStaffPhotoHandler().Handle(

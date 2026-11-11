@@ -10,6 +10,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { TenantCapability } from '../../types';
+import { getBusinessToday } from '../../utils/dates';
 import { fromDraft } from '../../utils/openingHours';
 import { hasCapability } from '../../utils/tenantCapabilities';
 import PhotoOrInitial from '../common/PhotoOrInitial';
@@ -17,6 +18,7 @@ import {
   MAX_ABSENCES,
   absenceDraft,
   absencesToSave,
+  describeAbsence,
   chosenServices,
   describeStaff,
   draftOf,
@@ -98,6 +100,8 @@ interface AbsencesFieldsProps {
 
 /** «Días que no atiende» (Fase 31I): runs of whole days, both included, when customers do not book the person. */
 function AbsencesFields({ absences, idPrefix, onChange }: AbsencesFieldsProps) {
+  // One that already ended is dropped when saving: the picker starts «Hasta» at today.
+  const today = getBusinessToday();
   const set = (key: string, patch: Partial<AbsenceDraft>) =>
     onChange(absences.map((absence) => (absence.key === key ? { ...absence, ...patch } : absence)));
   // Choosing the first day moves the last one along when it was empty or earlier: a single day is one choice.
@@ -109,41 +113,45 @@ function AbsencesFields({ absences, idPrefix, onChange }: AbsencesFieldsProps) {
       <legend className="form-label fw-semibold fs-6 mb-1">Días que no atiende</legend>
       <p className="small text-muted mb-2">
         Vacaciones, un curso o un permiso: esos días tus clientes no la pueden elegir. Sus citas de esos días no cambian;
-        revísalas en tu agenda.
+        revísalas en tu agenda. Las que ya pasaron se quitan al guardar.
       </p>
-      {absences.map((absence, index) => (
-        <div key={absence.key} className="d-flex flex-wrap align-items-end gap-2 mb-2">
-          <div>
-            <label className="form-label small mb-1" htmlFor={`${idPrefix}-${absence.key}-from`}>Desde</label>
-            <input
-              id={`${idPrefix}-${absence.key}-from`}
-              type="date"
-              className="form-control form-control-sm"
-              value={absence.from}
-              onChange={(event) => setFrom(absence, event.target.value)}
-            />
+      {absences.map((absence, index) => {
+        // Each row says which absence it is, so «Desde» and «Hasta» are not the same for a screen reader.
+        const name = absence.from && absence.to ? describeAbsence(absence) : String(index + 1);
+        return (
+          <div key={absence.key} className="d-flex flex-wrap align-items-end gap-2 mb-2" role="group" aria-label={`Ausencia ${name}`}>
+            <div>
+              <label className="form-label small mb-1" htmlFor={`${idPrefix}-${absence.key}-from`}>Desde</label>
+              <input
+                id={`${idPrefix}-${absence.key}-from`}
+                type="date"
+                className="form-control form-control-sm"
+                value={absence.from}
+                onChange={(event) => setFrom(absence, event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="form-label small mb-1" htmlFor={`${idPrefix}-${absence.key}-to`}>Hasta</label>
+              <input
+                id={`${idPrefix}-${absence.key}-to`}
+                type="date"
+                className="form-control form-control-sm"
+                min={absence.from && absence.from > today ? absence.from : today}
+                value={absence.to}
+                onChange={(event) => set(absence.key, { to: event.target.value })}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn btn-light btn-sm"
+              aria-label={`Quitar la ausencia ${name}`}
+              onClick={() => onChange(absences.filter((item) => item.key !== absence.key))}
+            >
+              <i className="ri-delete-bin-line" aria-hidden="true"></i>
+            </button>
           </div>
-          <div>
-            <label className="form-label small mb-1" htmlFor={`${idPrefix}-${absence.key}-to`}>Hasta</label>
-            <input
-              id={`${idPrefix}-${absence.key}-to`}
-              type="date"
-              className="form-control form-control-sm"
-              min={absence.from || undefined}
-              value={absence.to}
-              onChange={(event) => set(absence.key, { to: event.target.value })}
-            />
-          </div>
-          <button
-            type="button"
-            className="btn btn-light btn-sm"
-            aria-label={`Quitar la ausencia ${index + 1}`}
-            onClick={() => onChange(absences.filter((item) => item.key !== absence.key))}
-          >
-            <i className="ri-delete-bin-line" aria-hidden="true"></i>
-          </button>
-        </div>
-      ))}
+        );
+      })}
       {absences.length < MAX_ABSENCES ? (
         <button type="button" className="btn btn-light btn-sm" onClick={() => onChange([...absences, absenceDraft()])}>
           <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar días
@@ -378,11 +386,18 @@ export default function OnlineBookingStaffCard() {
     });
   }
 
-  /** The photo went up or away: the list, the open form and the booking page show the new one. */
+  /**
+   * The photo went up or away: the list, the open form and the booking page show the new one. Only the photo changes, on
+   * what each one has now (the list may have come again meanwhile).
+   */
   const photoChanged = (member: OnlineBookingStaffMember, photoUrl: string | null) => {
-    const changed = { ...member, photoUrl };
-    replaceMember(changed);
-    setEditing((current) => current && current.member.userId === member.userId ? { ...current, member: changed } : current);
+    queryClient.setQueryData<OnlineBookingStaffSettings>(STAFF_KEY, (current) => current && {
+      ...current,
+      members: current.members.map((item) => (item.userId === member.userId ? { ...item, photoUrl } : item)),
+    });
+    setEditing((current) => current && current.member.userId === member.userId
+      ? { ...current, member: { ...current.member, photoUrl } }
+      : current);
     void queryClient.invalidateQueries({ queryKey: ['public-booking'] });
   };
 

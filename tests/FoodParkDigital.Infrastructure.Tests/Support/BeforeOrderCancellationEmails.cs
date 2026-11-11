@@ -21,6 +21,7 @@ internal static class BeforeOrderCancellationEmails
     {
         modelBuilder.Entity<TenantUser>().Ignore(m => m.OrderCancellationEmails);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.AnswerReminderMinutes);
+        BeforeStaffAbsencesAndPhotos.Ignore(modelBuilder);
     }
 
     private sealed class Context(
