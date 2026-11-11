@@ -4,9 +4,26 @@ namespace FoodParkDigital.Domain.Appointments.OnlineBooking;
 
 /// <summary>
 /// One person a customer may book for a service (Fase 24J, ADR 0032): their own weekly hours (null when they attend all of
-/// the business's) and what their open appointments hold of their time.
+/// the business's), what their open appointments hold of their time and the days they do not attend (Fase 31I).
 /// </summary>
-public sealed record StaffCalendar(Guid StaffId, OpeningHours? WeeklyHours, IReadOnlyCollection<BookedInterval> Booked);
+public sealed record StaffCalendar(
+    Guid StaffId,
+    OpeningHours? WeeklyHours,
+    IReadOnlyCollection<BookedInterval> Booked,
+    IReadOnlyCollection<StaffAbsence>? Absences = null)
+{
+    /// <summary>Whether they are away on a day of the business's calendar.</summary>
+    public bool AwayOn(DateOnly day) => Absences?.Any(absence => absence.Covers(day)) == true;
+}
+
+/// <summary>
+/// A run of whole days a person does not attend (Fase 31I, ADR 0089), in the business's calendar, both included. A time that
+/// starts on one of them is not theirs to take.
+/// </summary>
+public sealed record StaffAbsence(DateOnly FirstDay, DateOnly LastDay)
+{
+    public bool Covers(DateOnly day) => FirstDay <= day && day <= LastDay;
+}
 
 /// <summary>A time a customer may book, with the people free for it.</summary>
 public sealed record StaffSlot(DateTimeOffset StartAt, IReadOnlyList<Guid> FreeStaff);
@@ -14,8 +31,8 @@ public sealed record StaffSlot(DateTimeOffset StartAt, IReadOnlyList<Guid> FreeS
 /// <summary>
 /// The times a customer may book when the business says who attends online (Fase 24J, ADR 0032). The same times as
 /// <see cref="BookingSlots"/> (inside the business's openings of a date, every half hour from each one, from the earliest
-/// allowed on), each with the people free for all of it: they attend then (their own hours, when they have them) and none
-/// of their open appointments overlaps it. An open appointment without anyone assigned takes someone too: a time is
+/// allowed on), each with the people free for all of it: they attend then (their own hours, when they have them, and not on
+/// a day they are away, by the day it starts) and none of their open appointments overlaps it. An open appointment without anyone assigned takes someone too: a time is
 /// offered only while more people are free than such appointments run at once. A visit at the customer's address
 /// (Fase 29B) needs each person's trip before and after it free too, as in the agenda (ADR 0020).
 /// </summary>
@@ -54,8 +71,10 @@ public static class StaffSlots
                     continue;
                 var end = start + duration;
                 var (heldFrom, heldTo) = (start - around, end + around);
+                var startDay = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(start, zone).DateTime);
                 var free = staff
-                    .Where(person => Covers(hours[person.StaffId], start, end)
+                    .Where(person => !person.AwayOn(startDay)
+                        && Covers(hours[person.StaffId], start, end)
                         && !person.Booked.Any(interval => interval.StartAt < heldTo && interval.EndAt > heldFrom))
                     .Select(person => person.StaffId)
                     .ToList();
