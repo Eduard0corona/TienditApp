@@ -475,6 +475,23 @@ public class OnlineBookingStaffFlowTests
     }
 
     [Fact]
+    public async Task Absences_ShouldGoBy_TheBusinessToday_NotTheServers()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var ana = await MemberAsync(fixture, tenant.Id, "Ana", "López");
+        var sunday = Monday.AddDays(-1);
+        // Sunday 21:00 in Mexico City is already Monday 03:00 UTC: a day off on Sunday is still running.
+        fixture.Clock.UtcNow = Local(sunday, "21:00").ToUniversalTime();
+
+        var saved = await Handler(fixture).Handle(
+            Person(ana) with { Absences = [new StaffAbsenceDto { From = sunday, To = sunday }] }, CancellationToken.None);
+
+        Assert.Equal([(sunday, sunday)], saved.Value!.Absences.Select(a => (a.From, a.To)));
+        Assert.Single(await fixture.Context.Set<OnlineBookingStaffAbsence>().ToListAsync());
+    }
+
+    [Fact]
     public async Task Absences_ShouldRefuse_TwoThatCross_AndTooMany_WithoutSavingAnything()
     {
         await using var fixture = SalesTestFixture.Create();
