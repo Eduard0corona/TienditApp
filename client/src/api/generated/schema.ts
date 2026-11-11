@@ -623,6 +623,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appointments/online-booking/staff/{userId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        file?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineBookingStaffPhotoDto"];
+                        "application/json": components["schemas"]["OnlineBookingStaffPhotoDto"];
+                        "text/json": components["schemas"]["OnlineBookingStaffPhotoDto"];
+                    };
+                };
+            };
+        };
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineBookingStaffPhotoDto"];
+                        "application/json": components["schemas"]["OnlineBookingStaffPhotoDto"];
+                        "text/json": components["schemas"]["OnlineBookingStaffPhotoDto"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/appointments/{id}/accept": {
         parameters: {
             query?: never;
@@ -19355,6 +19424,11 @@ export interface components {
             allServices: boolean;
             serviceIds: string[];
             weeklyHours?: components["schemas"]["OpeningIntervalDto"][] | null;
+            absences: components["schemas"]["StaffAbsenceDto"][];
+            photoUrl?: string | null;
+        };
+        OnlineBookingStaffPhotoDto: {
+            photoUrl?: string | null;
         };
         OnlineBookingStaffSettingsDto: {
             members: components["schemas"]["OnlineBookingStaffMemberDto"][];
@@ -20792,6 +20866,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            photoUrl?: string | null;
         };
         PublicCfdiDto: {
             businessName: string;
@@ -22161,6 +22236,12 @@ export interface components {
             opens: string;
             closes: string;
         };
+        StaffAbsenceDto: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+        };
         StartInventoryCountCommand: {
             /** Format: uuid */
             inventoryLocationId: string;
@@ -22668,6 +22749,7 @@ export interface components {
             allServices: boolean;
             serviceIds?: string[] | null;
             weeklyHours?: components["schemas"]["OpeningIntervalDto"][] | null;
+            absences?: components["schemas"]["StaffAbsenceDto"][] | null;
         };
         UpdateOnlineMenuRequest: {
             mode: components["schemas"]["OnlineMenuMode"];

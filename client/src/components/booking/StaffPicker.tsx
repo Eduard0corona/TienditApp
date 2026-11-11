@@ -16,8 +16,8 @@ interface StaffPickerProps {
 }
 
 /**
- * «¿Con quién?» (Fase 24J, ADR 0032): the people a business books online, or no preference. The booking page and the
- * request page of a visit (Fase 29B) choose the same way.
+ * «¿Con quién?» (Fase 24J, ADR 0032): the people a business books online, with the photo it chose for them (Fase 31I)
+ * or their initial, or no preference. The booking page and the request page of a visit (Fase 29B) choose the same way.
  */
 export default function StaffPicker({ people, personId, onChoose, anyoneRef, label }: StaffPickerProps) {
   const { ref, fadeClass } = useScrollFade<HTMLDivElement>(people.length);
@@ -46,7 +46,7 @@ export default function StaffPicker({ people, personId, onChoose, anyoneRef, lab
               aria-pressed={active}
               onClick={() => onChoose(item.id)}
             >
-              <PhotoOrInitial name={item.name} className="pb-person-initial" />
+              <PhotoOrInitial src={item.photoUrl} name={item.name} className="pb-person-initial" />
               <span className="d-block fw-semibold text-truncate pb-person-name">{item.name}</span>
             </button>
           );

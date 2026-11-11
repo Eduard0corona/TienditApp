@@ -1,0 +1,15 @@
+/* The photo customers see of a person who takes online appointments (Fase 31I), or their initial. */
+.obs-photo {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  object-fit: cover;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.obs-photo.obs-photo-sm {
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.875rem;
+}

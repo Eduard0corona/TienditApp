@@ -11,6 +11,12 @@ public static class TenantStorageFolders
     /// <summary>The cover of the online menu (Fase 24E): public, like the logo and the product photos.</summary>
     public static string Covers(Guid tenantId) => $"covers/{tenantId}";
 
+    /// <summary>
+    /// The photos of the people a business books online (Fase 31I): public, like the cover, and the business's, not the
+    /// person's account (another business shows them its own way, or not at all).
+    /// </summary>
+    public static string StaffPhotos(Guid tenantId) => $"staff/{tenantId}";
+
     /// <summary>The avatar of an account: the person is the same in every business, and so is their folder.</summary>
     public static string UserAvatars(Guid userId) => $"avatars/users/{userId}";
 

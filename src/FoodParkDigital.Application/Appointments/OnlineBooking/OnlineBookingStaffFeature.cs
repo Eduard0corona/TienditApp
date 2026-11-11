@@ -2,9 +2,11 @@ using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants;
@@ -41,6 +43,17 @@ public class OnlineBookingStaffMemberDto
     public List<Guid> ServiceIds { get; set; } = [];
     /// <summary>Their own hours; null when they attend all of the business's.</summary>
     public List<OpeningIntervalDto>? WeeklyHours { get; set; }
+    /// <summary>The days they do not attend still to come or running (Fase 31I), in order.</summary>
+    public List<StaffAbsenceDto> Absences { get; set; } = [];
+    /// <summary>The photo customers see instead of their initial (Fase 31I); null without one.</summary>
+    public string? PhotoUrl { get; set; }
+}
+
+/// <summary>A run of whole days a person does not attend (Fase 31I), in the business's calendar, both included.</summary>
+public class StaffAbsenceDto
+{
+    public DateOnly From { get; set; }
+    public DateOnly To { get; set; }
 }
 
 public class OnlineBookingServiceOptionDto
@@ -61,7 +74,7 @@ public record GetOnlineBookingStaffQuery : IRequest<OnlineBookingStaffSettingsDt
 
 /// <summary>
 /// Sets what customers see of a team member and when they book them (owners and admins): the name, whether they take online
-/// appointments now, their services and their own hours (none: the business's).
+/// appointments now, their services, their own hours (none: the business's) and the days they do not attend (Fase 31I).
 /// </summary>
 [RequiresTenantManager]
 [RequiresCapability(TenantCapability.Appointments)]
@@ -73,6 +86,11 @@ public record UpdateOnlineBookingStaffCommand : IRequest<Result<OnlineBookingSta
     public bool AllServices { get; init; } = true;
     public List<Guid>? ServiceIds { get; init; }
     public List<OpeningIntervalDto>? WeeklyHours { get; init; }
+    /// <summary>
+    /// The days they do not attend, all of them (Fase 31I): they replace the ones they had, and the ones over are dropped.
+    /// Null keeps the ones they have, for a screen that does not know them yet.
+    /// </summary>
+    public List<StaffAbsenceDto>? Absences { get; init; }
 }
 
 public class UpdateOnlineBookingStaffCommandValidator : AbstractValidator<UpdateOnlineBookingStaffCommand>
@@ -90,6 +108,11 @@ public class UpdateOnlineBookingStaffCommandValidator : AbstractValidator<Update
             .LessThanOrEqualTo(7 * OpeningHours.MaxIntervalsPerDay)
             .WithMessage("Un horario admite como máximo dos horarios por día.")
             .When(x => x.WeeklyHours is not null);
+        // The ones still to come are at most 20 (the domain says it with its message); a few more may be over already.
+        RuleFor(x => x.Absences!.Count).LessThanOrEqualTo(4 * OnlineBookingStaff.MaxAbsences)
+            .WithMessage(OnlineBookingStaff.TooManyAbsencesMessage)
+            .When(x => x.Absences is not null);
+        RuleForEach(x => x.Absences).NotNull();
         RuleForEach(x => x.WeeklyHours).ChildRules(interval =>
         {
             interval.RuleFor(i => i.Day).IsInEnum().WithMessage("El día del horario no existe.");
@@ -110,20 +133,28 @@ public class OnlineBookingStaffHandler :
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IDateTimeProvider _clock;
 
-    public OnlineBookingStaffHandler(IApplicationDbContext context, ICurrentTenantService tenantService, ICurrentUserService currentUserService)
+    public OnlineBookingStaffHandler(
+        IApplicationDbContext context,
+        ICurrentTenantService tenantService,
+        ICurrentUserService currentUserService,
+        IDateTimeProvider clock)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
+        _clock = clock;
     }
 
     public async Task<OnlineBookingStaffSettingsDto> Handle(GetOnlineBookingStaffQuery request, CancellationToken cancellationToken)
     {
         var members = await TeamAsync(null, cancellationToken);
+        var today = await TodayAsync(_context, _tenantService.TenantId, _clock.UtcNow, cancellationToken);
         var staff = await _context.OnlineBookingStaff
             .AsNoTracking()
             .Include(s => s.Services)
+            .Include(s => s.Absences)
             .ToListAsync(cancellationToken);
         var services = await OnlineBookingCalendar.CatalogServices(_context)
             .AsNoTracking()
@@ -137,7 +168,7 @@ public class OnlineBookingStaffHandler :
         return new OnlineBookingStaffSettingsDto
         {
             Members = members
-                .Select(member => Describe(member, staff.FirstOrDefault(s => s.UserId == member.UserId)))
+                .Select(member => Describe(member, staff.FirstOrDefault(s => s.UserId == member.UserId), today))
                 .OrderBy(member => member.FullName, StringComparer.CurrentCultureIgnoreCase)
                 .ToList(),
             Services = services
@@ -165,7 +196,9 @@ public class OnlineBookingStaffHandler :
 
         var staff = await _context.OnlineBookingStaff
             .Include(s => s.Services)
+            .Include(s => s.Absences)
             .FirstOrDefaultAsync(s => s.UserId == request.UserId, cancellationToken);
+        var today = await TodayAsync(_context, tenantId, _clock.UtcNow, cancellationToken);
         if (request.Enabled && staff is not { Enabled: true })
         {
             var enabled = (await OnlineBookingCalendar.StaffAsync(_context, tenantId, cancellationToken)).Count;
@@ -173,7 +206,7 @@ public class OnlineBookingStaffHandler :
                 return Result.Failure<OnlineBookingStaffMemberDto>(TooManyEnabledMessage);
         }
 
-        var previous = staff is null ? null : Snapshot(staff);
+        var previous = staff is null ? null : Snapshot(staff, today);
         if (staff is null)
         {
             staff = OnlineBookingStaff.Create(tenantId, request.UserId, request.Name, request.Enabled, request.AllServices, serviceIds, hours);
@@ -183,8 +216,10 @@ public class OnlineBookingStaffHandler :
         {
             staff.Change(request.Name, request.Enabled, request.AllServices, serviceIds, hours);
         }
+        if (request.Absences is { } absences)
+            staff.ReplaceAbsences(absences.Select(absence => new StaffAbsence(absence.From, absence.To)), today);
 
-        var current = Snapshot(staff);
+        var current = Snapshot(staff, today);
         if (previous is null || !previous.Equals(current))
         {
             // Who strangers may book, and when, is the owner's decision: worth recording.
@@ -207,7 +242,18 @@ public class OnlineBookingStaffHandler :
             }
         }
 
-        return Result.Success(Describe(member, staff));
+        return Result.Success(Describe(member, staff, today));
+    }
+
+    /// <summary>Today in the business's calendar, where its absences and its special days are.</summary>
+    internal static async Task<DateOnly> TodayAsync(IApplicationDbContext context, Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var timeZone = await context.TenantSettings
+            .AsNoTracking()
+            .Where(s => s.TenantId == tenantId)
+            .Select(s => s.TimeZone)
+            .FirstOrDefaultAsync(cancellationToken);
+        return DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(now, timeZone));
     }
 
     /// <summary>The business's active team members (one, when <paramref name="userId"/> is given), with their names.</summary>
@@ -219,7 +265,7 @@ public class OnlineBookingStaffHandler :
                 m => m.UserId, u => u.Id, (m, u) => new TeamMember(u.Id, u.FirstName, u.LastName))
             .ToListAsync(cancellationToken);
 
-    private static OnlineBookingStaffMemberDto Describe(TeamMember member, OnlineBookingStaff? staff) => new()
+    private static OnlineBookingStaffMemberDto Describe(TeamMember member, OnlineBookingStaff? staff, DateOnly today) => new()
     {
         UserId = member.UserId,
         FullName = $"{member.FirstName} {member.LastName}".Trim(),
@@ -228,18 +274,21 @@ public class OnlineBookingStaffHandler :
         Enabled = staff?.Enabled ?? false,
         AllServices = staff?.AllServices ?? true,
         ServiceIds = staff?.Services.Select(s => s.ProductId).ToList() ?? [],
-        WeeklyHours = staff?.WeeklyHours?.ToDtos()
+        WeeklyHours = staff?.WeeklyHours?.ToDtos(),
+        Absences = staff?.AbsencesFrom(today).Select(absence => new StaffAbsenceDto { From = absence.FirstDay, To = absence.LastDay }).ToList() ?? [],
+        PhotoUrl = OnlineBookingStaffPhotos.Url(staff?.PhotoUrl)
     };
 
     /// <summary>What the activity log keeps of a person: what customers see and when they book them.</summary>
-    private static StaffSnapshot Snapshot(OnlineBookingStaff staff) => new(
+    private static StaffSnapshot Snapshot(OnlineBookingStaff staff, DateOnly today) => new(
         staff.Name,
         staff.Enabled,
         staff.AllServices,
         string.Join(",", staff.Services.Select(s => s.ProductId).Order()),
-        staff.WeeklyHours is null ? null : OpeningHoursText.Describe(staff.WeeklyHours));
+        staff.WeeklyHours is null ? null : OpeningHoursText.Describe(staff.WeeklyHours),
+        string.Join(",", staff.AbsencesFrom(today).Select(absence => $"{absence.FirstDay:yyyy-MM-dd}/{absence.LastDay:yyyy-MM-dd}")));
 
     private sealed record TeamMember(Guid UserId, string? FirstName, string? LastName);
 
-    private sealed record StaffSnapshot(string Name, bool Enabled, bool AllServices, string Services, string? WeeklyHours);
+    private sealed record StaffSnapshot(string Name, bool Enabled, bool AllServices, string Services, string? WeeklyHours, string Absences);
 }

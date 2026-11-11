@@ -137,8 +137,10 @@ internal static class OnlineBookingCalendar
     }
 
     /// <summary>
-    /// The people customers book online now (Fase 24J): turned on by the business, with an active membership and account.
-    /// Empty when the business did not say who attends: its times come from how many it attends at once.
+    /// The people customers book online now (Fase 24J): turned on by the business, with an active membership and account,
+    /// with the days they are away (Fase 31I: at most <see cref="OnlineBookingStaff.MaxAbsences"/> each, the ones over go
+    /// when the owner saves them again) and their photo. Empty when the business did not say who attends: its times come
+    /// from how many it attends at once.
     /// </summary>
     public static async Task<List<BookableStaff>> StaffAsync(IApplicationDbContext context, Guid tenantId, CancellationToken cancellationToken)
     {
@@ -158,12 +160,18 @@ internal static class OnlineBookingCalendar
                     user.LastName,
                     staff.WeeklyHours,
                     staff.AllServices,
-                    Services = staff.Services.Select(service => service.ProductId).ToList()
+                    staff.PhotoUrl,
+                    Services = staff.Services.Select(service => service.ProductId).ToList(),
+                    Absences = staff.Absences.Select(absence => new { absence.FirstDay, absence.LastDay }).ToList()
                 })
             .ToListAsync(cancellationToken);
         return rows
             .Select(row => new BookableStaff(
-                row.Id, row.UserId, row.Name, AgendaName(row.FirstName, row.LastName), row.WeeklyHours, row.AllServices, row.Services.ToHashSet()))
+                row.Id, row.UserId, row.Name, AgendaName(row.FirstName, row.LastName), row.WeeklyHours, row.AllServices, row.Services.ToHashSet())
+            {
+                Absences = row.Absences.Select(absence => new StaffAbsence(absence.FirstDay, absence.LastDay)).ToList(),
+                PhotoUrl = OnlineBookingStaffPhotos.Url(row.PhotoUrl)
+            })
             .OrderBy(person => person.Name, StringComparer.InvariantCultureIgnoreCase)
             .ThenBy(person => person.Id)
             .ToList();
@@ -193,9 +201,9 @@ internal static class OnlineBookingCalendar
             .ToListAsync(cancellationToken);
 
     /// <summary>
-    /// What each person's appointments hold of their time, and the appointments nobody attends yet. A visit at the
-    /// customer's address holds the trip too, before and after, as in the agenda (ADR 0020); appointments of someone who
-    /// does not take online appointments hold nobody's.
+    /// What each person's appointments hold of their time, with the days they are away (Fase 31I), and the appointments
+    /// nobody attends yet. A visit at the customer's address holds the trip too, before and after, as in the agenda
+    /// (ADR 0020); appointments of someone who does not take online appointments hold nobody's.
     /// </summary>
     public static (List<StaffCalendar> Calendars, List<BookedInterval> Unassigned) Calendars(
         IEnumerable<BookableStaff> staff, IReadOnlyCollection<StaffBooking> bookings, int travelMinutes)
@@ -208,7 +216,8 @@ internal static class OnlineBookingCalendar
             .Select(person => new StaffCalendar(
                 person.Id,
                 person.WeeklyHours,
-                bookings.Where(booking => booking.StaffUserId == person.UserId).Select(Held).ToList()))
+                bookings.Where(booking => booking.StaffUserId == person.UserId).Select(Held).ToList(),
+                person.Absences))
             .ToList();
         var unassigned = bookings
             .Where(booking => booking.StaffUserId is null)
@@ -218,7 +227,10 @@ internal static class OnlineBookingCalendar
     }
 }
 
-/// <summary>A person customers book online (Fase 24J): their name for customers and for the agenda, hours and services.</summary>
+/// <summary>
+/// A person customers book online (Fase 24J): their name for customers and for the agenda, hours and services, and since
+/// Fase 31I the days they are away and the URL of the photo customers see (null without one).
+/// </summary>
 internal sealed record BookableStaff(
     Guid Id,
     Guid UserId,
@@ -228,6 +240,9 @@ internal sealed record BookableStaff(
     bool AllServices,
     IReadOnlySet<Guid> ServiceIds)
 {
+    public IReadOnlyCollection<StaffAbsence> Absences { get; init; } = [];
+    public string? PhotoUrl { get; init; }
+
     public bool Offers(Guid serviceId) => AllServices || ServiceIds.Contains(serviceId);
 }
 

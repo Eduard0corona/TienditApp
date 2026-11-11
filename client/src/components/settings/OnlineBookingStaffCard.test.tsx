@@ -8,10 +8,24 @@ import { useToast } from '../../hooks/useToast';
 import { TenantCapability, type TenantProfileDto } from '../../types';
 import OnlineBookingStaffCard from './OnlineBookingStaffCard';
 import { toDraft } from '../../utils/openingHours';
-import { describeStaff, nameLength, staffDraftProblem, type StaffDraft } from './onlineBookingStaff';
+import {
+  MAX_ABSENCES,
+  absenceDraft,
+  absencesProblem,
+  absencesToSave,
+  describeStaff,
+  nameLength,
+  staffDraftProblem,
+  type StaffDraft,
+} from './onlineBookingStaff';
 
 vi.mock('../../api/appointmentsApi', () => ({
-  appointmentsApi: { getOnlineBookingStaff: vi.fn(), updateOnlineBookingStaff: vi.fn() },
+  appointmentsApi: {
+    getOnlineBookingStaff: vi.fn(),
+    updateOnlineBookingStaff: vi.fn(),
+    uploadOnlineBookingStaffPhoto: vi.fn(),
+    deleteOnlineBookingStaffPhoto: vi.fn(),
+  },
 }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
@@ -23,7 +37,7 @@ const WEEKDAYS = [1, 2, 3, 4, 5].map((day) => ({ day, opens: '09:00', closes: '1
 function member(overrides: Partial<OnlineBookingStaffMember> = {}): OnlineBookingStaffMember {
   return {
     userId: 'u1', fullName: 'Ana López', name: 'Ana L.', configured: false, enabled: false, allServices: true, serviceIds: [],
-    weeklyHours: null, ...overrides,
+    weeklyHours: null, absences: [], photoUrl: null, ...overrides,
   } as OnlineBookingStaffMember;
 }
 
@@ -177,6 +191,103 @@ describe('OnlineBookingStaffCard', () => {
     expect(dialog.getByRole('switch', { name: 'Agenda citas en línea' })).not.toBeChecked();
   });
 
+  // Fase 31I (ADR 0089): the days a person does not attend, and their photo.
+
+  it('says the next days a person does not attend in the list, and saves the ones the owner changes', async () => {
+    const user = userEvent.setup();
+    const absences = [{ from: '2026-11-16', to: '2026-11-18' }, { from: '2026-12-24', to: '2026-12-24' }];
+    api.getOnlineBookingStaff.mockResolvedValue(settings([member({ configured: true, enabled: true, absences })]) as never);
+    api.updateOnlineBookingStaff.mockResolvedValue(member({ configured: true, enabled: true, absences: [absences[0]] }) as never);
+    renderCard();
+
+    expect(await screen.findByText('Tus clientes ven «Ana L.» · Todos los servicios · Horario del negocio · No atiende: Lun 16 nov – Mié 18 nov y 1 más'))
+      .toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Editar a Ana López' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ana López' }));
+    expect(dialog.getAllByLabelText('Desde').map((input) => (input as HTMLInputElement).value)).toEqual(['2026-11-16', '2026-12-24']);
+    await user.click(dialog.getByRole('button', { name: 'Quitar la ausencia Jue 24 dic' }));
+    await user.click(dialog.getByRole('button', { name: 'Agregar días' }));
+    // A single day is one choice: «Hasta» follows «Desde».
+    const from = dialog.getAllByLabelText('Desde')[1];
+    await user.type(from, '2027-01-04');
+    expect(dialog.getAllByLabelText('Hasta')[1]).toHaveValue('2027-01-04');
+    await user.click(dialog.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(api.updateOnlineBookingStaff).toHaveBeenCalledTimes(1));
+    expect(api.updateOnlineBookingStaff.mock.calls[0][1].absences).toEqual([
+      { from: '2026-11-16', to: '2026-11-18' },
+      { from: '2027-01-04', to: '2027-01-04' },
+    ]);
+    expect(await screen.findByText(/No atiende: Lun 16 nov – Mié 18 nov$/)).toBeInTheDocument();
+  });
+
+  it('says two absences that cross before saving', async () => {
+    const user = userEvent.setup();
+    api.getOnlineBookingStaff.mockResolvedValue(settings([member({
+      configured: true, enabled: true, absences: [{ from: '2026-11-16', to: '2026-11-18' }, { from: '2026-11-18', to: '2026-11-20' }],
+    })]) as never);
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: 'Editar a Ana López' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ana López' }));
+    await user.click(dialog.getByRole('button', { name: 'Guardar' }));
+
+    expect(dialog.getByRole('alert')).toHaveTextContent('Dos ausencias se cruzan: júntalas en una.');
+    expect(api.updateOnlineBookingStaff).not.toHaveBeenCalled();
+  });
+
+  it('puts and takes away the photo of someone saved at once, and asks to save someone new first', async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    api.getOnlineBookingStaff.mockResolvedValue(settings([
+      member({ configured: true, enabled: true }),
+      member({ userId: 'u2', fullName: 'Luis Méndez', name: 'Luis M.' }),
+    ]) as never);
+    api.uploadOnlineBookingStaffPhoto.mockResolvedValue({ photoUrl: '/uploads/staff/t1/ana_xs.webp' });
+    api.deleteOnlineBookingStaffPhoto.mockResolvedValue({ photoUrl: null } as never);
+    const { container } = renderCard(queryClient);
+
+    await user.click(await screen.findByRole('button', { name: 'Editar a Ana López' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ana López' }));
+    const photo = new File(['photo'], 'ana.png', { type: 'image/png' });
+    await user.upload(dialog.getByLabelText('Foto que ven tus clientes'), photo);
+
+    await waitFor(() => expect(api.uploadOnlineBookingStaffPhoto).toHaveBeenCalledWith('u1', photo));
+    expect(toast.success).toHaveBeenCalledWith('Foto guardada: tus clientes ya la ven junto a «Ana L.».');
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['public-booking'] });
+    expect(await dialog.findByRole('button', { name: /Cambiar foto/ })).toBeInTheDocument();
+    expect(document.querySelectorAll('img[src="/uploads/staff/t1/ana_xs.webp"]')).toHaveLength(2);
+
+    await user.click(dialog.getByRole('button', { name: /Quitar foto/ }));
+    await waitFor(() => expect(api.deleteOnlineBookingStaffPhoto).toHaveBeenCalledWith('u1'));
+    expect(await dialog.findByRole('button', { name: /Subir foto/ })).toBeInTheDocument();
+    expect(container.ownerDocument.querySelector('img')).toBeNull();
+    await user.click(dialog.getByRole('button', { name: 'Cancelar' }));
+
+    await user.click(screen.getByRole('button', { name: 'Configurar a Luis Méndez' }));
+    const newcomer = within(await screen.findByRole('dialog', { name: 'Luis Méndez' }));
+    expect(newcomer.getByText('Guárdala primero; luego le pones su foto.')).toBeInTheDocument();
+    expect(newcomer.queryByRole('button', { name: /Subir foto/ })).not.toBeInTheDocument();
+  });
+
+  it('says what the server refused about a photo, and keeps the one there was', async () => {
+    const user = userEvent.setup();
+    api.getOnlineBookingStaff.mockResolvedValue(settings([member({ configured: true, enabled: true, photoUrl: '/uploads/staff/t1/old_xs.webp' })]) as never);
+    api.uploadOnlineBookingStaffPhoto.mockRejectedValue({
+      isAxiosError: true, response: { status: 400, data: { detail: 'El archivo no puede exceder 5 MB.' } },
+    });
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: 'Editar a Ana López' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ana López' }));
+    await user.upload(dialog.getByLabelText('Foto que ven tus clientes'), new File(['x'], 'big.png', { type: 'image/png' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('El archivo no puede exceder 5 MB.'));
+    expect(document.querySelectorAll('img[src="/uploads/staff/t1/old_xs.webp"]')).toHaveLength(2);
+    expect(dialog.getByRole('button', { name: /Cambiar foto/ })).toBeEnabled();
+  });
+
   it('is not there for a business without the agenda', () => {
     withCapabilities(TenantCapability.Retail);
     renderCard();
@@ -189,7 +300,7 @@ describe('OnlineBookingStaffCard', () => {
 describe('onlineBookingStaff', () => {
   const draft: StaffDraft = {
     enabled: true, name: 'Ana L.', allServices: true, serviceIds: [], ownHours: false,
-    week: toDraft([]),
+    week: toDraft([]), absences: [],
   };
 
   it('asks for a name customers may see, a service and the hours of a day turned on', () => {
@@ -215,5 +326,26 @@ describe('onlineBookingStaff', () => {
     expect(describeStaff(member({ allServices: false, serviceIds: ['s1', 's2'] }), [...SERVICES, { id: 's3', name: 'Tinte', bookableNow: true }]))
       .toBe('2 servicios · Horario del negocio');
     expect(describeStaff(member({ allServices: false, serviceIds: ['s1', 'gone'] }), SERVICES)).toBe('1 servicio · Horario del negocio');
+  });
+
+  it('asks for both days of each absence, in order, up to a year, up to the most, and none crossing another', () => {
+    const away = (from: string, to: string) => absenceDraft(from, to);
+    expect(absencesProblem([away('2026-11-16', '2026-11-18'), away('2026-11-19', '2026-11-19')])).toBeNull();
+    // A year: 366 days, both included.
+    expect(absencesProblem([away('2026-01-01', '2027-01-01')])).toBeNull();
+    expect(absencesProblem([away('2026-11-16', '')])).toBe('Escribe desde y hasta qué día de cada ausencia.');
+    expect(absencesProblem([away('2026-11-18', '2026-11-16')])).toBe('Una ausencia no puede terminar antes de empezar.');
+    expect(absencesProblem([away('2026-01-01', '2027-01-02')])).toBe('Una ausencia puede durar hasta un año.');
+    expect(absencesProblem([away('2026-12-01', '2026-12-10'), away('2026-11-20', '2026-12-01')])).toBe('Dos ausencias se cruzan: júntalas en una.');
+    const many = Array.from({ length: MAX_ABSENCES + 1 }, (_, n) => away(`2027-01-${String(n + 1).padStart(2, '0')}`, `2027-01-${String(n + 1).padStart(2, '0')}`));
+    expect(absencesProblem(many)).toBe('Una persona puede tener hasta 20 ausencias por venir.');
+    expect(staffDraftProblem({ ...draft, absences: [away('2026-11-18', '2026-11-16')] }, SERVICES)).toBe('Una ausencia no puede terminar antes de empezar.');
+    expect(absencesToSave([away('2026-12-01', '2026-12-02'), away('2026-11-01', '2026-11-01')]))
+      .toEqual([{ from: '2026-11-01', to: '2026-11-01' }, { from: '2026-12-01', to: '2026-12-02' }]);
+  });
+
+  it('says the next absence of a person, a single day by itself', () => {
+    expect(describeStaff(member({ absences: [{ from: '2026-12-25', to: '2026-12-25' }] }), SERVICES))
+      .toBe('Todos los servicios · Horario del negocio · No atiende: Vie 25 dic');
   });
 });

@@ -54,12 +54,19 @@ public class PublicBookingDto
     public ResponseTime? ResponseTime { get; set; }
 }
 
-/// <summary>A person customers book (Fase 24J): only the name the business gave them for customers.</summary>
+/// <summary>
+/// A person customers book (Fase 24J): only the name the business gave them for customers and, since Fase 31I, the photo it
+/// chose for them.
+/// </summary>
 public class PublicBookingStaffDto
 {
     public Guid Id { get; set; }
     /// <summary>«Ana L.».</summary>
     public string Name { get; set; } = null!;
+    /// <summary>The smallest variant of their photo; null without one (the page shows their initial).</summary>
+    public string? PhotoUrl { get; set; }
+
+    internal static PublicBookingStaffDto From(BookableStaff person) => new() { Id = person.Id, Name = person.Name, PhotoUrl = person.PhotoUrl };
 }
 
 public class PublicBookingServiceDto
@@ -200,7 +207,7 @@ public class GetPublicBookingQueryHandler : IRequestHandler<GetPublicBookingQuer
                 ImageUrl = ProductImageUrlsDto.FromBaseUrl(s.ImageUrl)?.Medium,
                 StaffIds = staff.Where(person => person.Offers(s.Id)).Select(person => person.Id).ToList()
             }).ToList(),
-            Staff = staff.Select(person => new PublicBookingStaffDto { Id = person.Id, Name = person.Name }).ToList(),
+            Staff = staff.Select(PublicBookingStaffDto.From).ToList(),
             ResponseTime = await PublicResponseTime.ShownAsync(
                 _directory, _context, _dateTimeProvider.UtcNow, tenant.Id, takesRequests: business.Settings.ListedInDirectory, _logger,
                 cancellationToken)

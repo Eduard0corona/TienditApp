@@ -1152,6 +1152,19 @@ La Fase 31H trae una migración, [`database/production/20261110201340_AddAppoint
 - **Volver a la versión anterior:** funciona sin tocar la base.
 - **Dejar también la base como estaba:** el `rollback.sql` borra la llave y su índice sin tocar ninguna fila.
 
+## Los días que no atiende quien atiende citas en línea, y su foto (Fase 31I)
+
+La Fase 31I trae una migración, [`database/production/20261111060433_AddOnlineBookingStaffAbsencesAndPhotos`](../../database/production/20261111060433_AddOnlineBookingStaffAbsencesAndPhotos). Su `apply.sql` va antes del merge ([ADR 0089](../adr/0089-staff-absences-and-photos.md)).
+
+- **La migración:** crea la tabla `OnlineBookingStaffAbsences` (una fila por ausencia, que se borra con su persona) y la columna `OnlineBookingStaff.PhotoUrl` (`nvarchar(500)`, nula). No cambia datos.
+- **Candados:** crear la tabla toma un candado de esquema sobre `Tenants` y `OnlineBookingStaff` hasta que termina la migración. Mientras lo espera y lo tiene, esperan las solicitudes que leen los negocios (casi todas, también las páginas públicas). Con las tablas libres dura milisegundos; mejor en una hora tranquila. Córrelo con `sqlcmd ... -b -t 15 -i apply.sql`: si un lote tarda más de 15 s, sqlcmd lo cancela, `XACT_ABORT` deshace su transacción sin cambiar nada y se vuelve a correr en otro momento. El `rollback.sql` toma el mismo candado; también con `-t 15`.
+- **Archivos:** las fotos van a la carpeta pública `staff/{negocio}` del almacenamiento que ya usan el logo y la portada; no hace falta crear nada.
+- **Mientras se publica:** la versión de `master` (la 31H) no conoce la tabla ni la columna y sigue guardando y borrando a quien atiende.
+- **Sin `apply.sql`:** a la versión nueva le falta una migración, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base. La página de citas vuelve a ofrecer a cada persona también los días que no atiende y deja de mostrar su foto; lo guardado se queda.
+- **Dejar también la base como estaba:** el `rollback.sql` borra la tabla y la columna, y se detiene con el error 50059, sin cambiar nada, si algún negocio ya puso una ausencia o una foto. La consulta 3 del `verify.sql` las cuenta por negocio y dice cómo borrarlas, solo si se decide perderlas; los archivos de las fotos se quedan en `staff/{negocio}`.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

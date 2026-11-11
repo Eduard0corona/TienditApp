@@ -12,6 +12,7 @@ export type OnlineBookingSettings = Schemas['OnlineBookingSettingsDto'];
 export type OnlineBookingStaffSettings = Schemas['OnlineBookingStaffSettingsDto'];
 export type OnlineBookingStaffMember = Schemas['OnlineBookingStaffMemberDto'];
 export type UpdateOnlineBookingStaff = Schemas['UpdateOnlineBookingStaffRequest'];
+export type OnlineBookingStaffPhoto = Schemas['OnlineBookingStaffPhotoDto'];
 export type HomeVisitRequestsSettings = Schemas['HomeVisitRequestsSettingsDto'];
 export type HomeVisitPrice = Schemas['HomeVisitPriceDto'];
 
@@ -70,6 +71,23 @@ export const appointmentsApi = {
   /** Sets what customers see of a team member and when they book them online. */
   updateOnlineBookingStaff: (userId: string, body: UpdateOnlineBookingStaff) =>
     apiRequest('put', '/api/v1/appointments/online-booking/staff/{userId}', { path: { userId }, body }),
+
+  /** Puts or replaces the photo customers see of a person (Fase 31I); they must be saved first. */
+  uploadOnlineBookingStaffPhoto: async (userId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    // A stalled upload over mobile data gives up after two minutes, and may go again.
+    const response = await api.post<OnlineBookingStaffPhoto>(
+      `/appointments/online-booking/staff/${encodeURIComponent(userId)}/photo`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120_000 },
+    );
+    return response.data;
+  },
+
+  /** Takes away the photo customers see of a person: the pages show their initial again. */
+  deleteOnlineBookingStaffPhoto: (userId: string) =>
+    apiRequest('delete', '/api/v1/appointments/online-booking/staff/{userId}/photo', { path: { userId } }),
 
   /** Whether the business receives visits to quote, its visit service, how it charges it and what is missing (Fase 29A). */
   getHomeVisitRequests: (signal?: AbortSignal) => apiRequest('get', '/api/v1/appointments/home-visit-requests', { signal }),

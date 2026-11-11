@@ -24,6 +24,8 @@ public class OnlineBookingStaffConfiguration : IEntityTypeConfiguration<OnlineBo
         builder.Property(x => x.WeeklyHours)
             .HasConversion(OpeningHoursStorage.Converter)
             .HasMaxLength(OpeningHoursStorage.MaxLength);
+        // Fase 31I (ADR 0089): the base URL of the photo customers see, as a product's image.
+        builder.Property(x => x.PhotoUrl).HasMaxLength(OnlineBookingStaff.MaxPhotoUrlLength);
 
         builder.HasOne<ApplicationUser>()
             .WithMany()
@@ -39,6 +41,12 @@ public class OnlineBookingStaffConfiguration : IEntityTypeConfiguration<OnlineBo
             .HasForeignKey(service => service.StaffId)
             .OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(x => x.Services).UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.HasMany(x => x.Absences)
+            .WithOne()
+            .HasForeignKey(absence => absence.StaffId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(x => x.Absences).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // One per team member and business; it is also the business's list.
         builder.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
@@ -66,5 +74,34 @@ public class OnlineBookingStaffServiceConfiguration : IEntityTypeConfiguration<O
 
         // Deleting a service finds its rows.
         builder.HasIndex(x => x.ProductId);
+    }
+}
+
+/// <summary>
+/// A run of whole days a person who takes online appointments does not attend (Fase 31I, ADR 0089); it goes with the
+/// person.
+/// </summary>
+public class OnlineBookingStaffAbsenceConfiguration : IEntityTypeConfiguration<OnlineBookingStaffAbsence>
+{
+    public void Configure(EntityTypeBuilder<OnlineBookingStaffAbsence> builder)
+    {
+        builder.ToTable("OnlineBookingStaffAbsences", table =>
+            table.HasCheckConstraint("CK_OnlineBookingStaffAbsences_Days", "[LastDay] >= [FirstDay]"));
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+
+        builder.Property(x => x.TenantId).IsRequired();
+        builder.Property(x => x.FirstDay).IsRequired();
+        builder.Property(x => x.LastDay).IsRequired();
+        builder.Ignore(x => x.Days);
+
+        builder.HasOne<Tenant>()
+            .WithMany()
+            .HasForeignKey(x => x.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // The absences of a person, by when they end (it also serves the key to the person). The booking page reads all of a
+        // person's: at most 20, the ones over go when the owner saves them again.
+        builder.HasIndex(x => new { x.StaffId, x.LastDay });
     }
 }
