@@ -34,7 +34,10 @@ interface StaffPhotoProps {
   member: OnlineBookingStaffMember;
   /** The name next to it, for the initial while it has no photo. */
   name: string;
+  /** The form is saving or a photo is going up or away: nothing else starts. */
   busy: boolean;
+  /** A photo is going up or away. */
+  uploading: boolean;
   onUpload: (file: File) => void;
   onRemove: () => void;
 }
@@ -43,7 +46,7 @@ interface StaffPhotoProps {
  * The photo customers see of the person (Fase 31I), instead of their initial. It goes up and away at once, apart from the
  * rest of the form; the server keeps it only for someone already saved.
  */
-function StaffPhoto({ member, name, busy, onUpload, onRemove }: StaffPhotoProps) {
+function StaffPhoto({ member, name, busy, uploading, onUpload, onRemove }: StaffPhotoProps) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const pick = (event: ChangeEvent<HTMLInputElement>) => {
@@ -81,7 +84,7 @@ function StaffPhoto({ member, name, busy, onUpload, onRemove }: StaffPhotoProps)
         )}
       </div>
       <div className="form-text">
-        {busy ? 'Subiendo…' : 'JPG, PNG o WebP de hasta 5 MB. Se guarda al momento; sin foto, tus clientes ven su inicial.'}
+        {uploading ? 'Guardando la foto…' : 'Con su permiso: la ve quien abra tu página de citas. JPG, PNG o WebP de hasta 5 MB; se guarda al momento.'}
       </div>
     </div>
   );
@@ -220,7 +223,14 @@ function StaffForm({
               </div>
             </div>
 
-            <StaffPhoto member={member} name={draft.name.trim()} busy={busy} onUpload={onUploadPhoto} onRemove={onRemovePhoto} />
+            <StaffPhoto
+              member={member}
+              name={draft.name.trim()}
+              busy={busy}
+              uploading={photoBusy}
+              onUpload={onUploadPhoto}
+              onRemove={onRemovePhoto}
+            />
 
             <fieldset className="mb-3">
               <legend className="form-label fw-semibold fs-6 mb-1">Servicios</legend>
