@@ -23,7 +23,7 @@ El dueño del producto pidió avanzar los puntos de la lista sin esperar su resp
 4. **La foto que ven los clientes es del negocio, no de la cuenta** (`OnlineBookingStaff.PhotoUrl`).
    - El avatar de la cuenta lo elige la persona y lo ven todos sus negocios; esta la elige el dueño o un administrador para su página, con la capacidad de agenda, y otro negocio la muestra a su manera o no la muestra.
    - Se sube (`POST online-booking/staff/{userId}/photo`) y se quita (`DELETE`) al momento, aparte del resto del formulario, y solo para alguien ya guardado en «Quién atiende». Las mismas reglas que la portada: imagen de hasta 5 MB, con las variantes del logo (se decodifica al hacerlas).
-   - Va a una carpeta pública del negocio, `staff/{negocio}`, como la portada. Los archivos de la anterior se borran después de guardar la nueva, y solo si están en esa carpeta. Subir y quitar quedan en la actividad.
+   - Va a una carpeta pública del negocio, `staff/{negocio}`, como la portada. Los archivos de la anterior se borran después de guardar la nueva, y solo si están en esa carpeta; si el almacenamiento falla ahí, el cambio ya está guardado y responde bien, y el registro lo dice. Subir y quitar quedan en la actividad.
    - Las páginas muestran la variante más chica (`_xs`, 128 px) en un círculo; sin foto, la inicial, como antes.
 5. **Deshacer la migración se detiene (error 50059) sin cambiar nada si algún negocio ya puso una ausencia o una foto**: se perderían. La consulta 3 del `verify.sql` las cuenta por negocio y dice cómo borrarlas si de todos modos se decide revertir.
 6. **`sqlcmd -t 15` al correr el `apply.sql` y el `rollback.sql`.** Crear o borrar la tabla toma un candado de esquema sobre `Tenants` y `OnlineBookingStaff` hasta el commit (comprobado con `sys.dm_tran_locks`); mientras lo espera y lo tiene, esperan las solicitudes que leen los negocios.
@@ -37,7 +37,7 @@ El dueño del producto pidió avanzar los puntos de la lista sin esperar su resp
   - **La página no dice por qué** alguien no tiene horas un día (no dice «de vacaciones»).
   - **La agenda del equipo no revisa las ausencias**, y las citas ya agendadas de esos días no se mueven ni avisan.
   - **La foto es pública**, como el logo y la portada: la ve quien abra la página de citas. El formulario pide subirla con permiso de la persona.
-  - **Una foto cuya persona se borra** (al borrar su cuenta, que hoy ningún camino hace) deja sus archivos en el almacenamiento.
+  - **Archivos sin uso en `staff/{negocio}`**, como con la portada: los de una foto cuya persona se borra (al borrar su cuenta, que hoy ningún camino hace), los que subió una foto que no se pudo guardar, los de dos fotos subidas a la vez para la misma persona y los de una anterior que el almacenamiento no dejó borrar (queda en el registro). No hay limpieza.
   - **Dos dueños que cambian a la misma persona al mismo tiempo:** gana el último que guarda, también con sus ausencias, como con el resto de su perfil.
   - **Mientras se crea la tabla** (milisegundos con las tablas libres, hasta 15 s si espera) las solicitudes que leen los negocios esperan. Mejor en una hora tranquila.
 - **Decisiones por omisión** (sin preferencia expresa del dueño): días completos en lugar de horas; el día en que empieza el horario decide; las citas ya agendadas no cambian; la foto separada del avatar y solo para alguien guardado; detener el rollback en lugar de perder lo guardado.
