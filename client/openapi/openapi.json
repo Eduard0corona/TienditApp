@@ -789,6 +789,104 @@
         }
       }
     },
+    "/api/v1/appointments/online-booking/staff/{userId}/photo": {
+      "post": {
+        "tags": [
+          "Appointments"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffPhotoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffPhotoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffPhotoDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Appointments"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffPhotoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffPhotoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffPhotoDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/appointments/{id}/accept": {
       "post": {
         "tags": [
@@ -30348,6 +30446,7 @@
       },
       "OnlineBookingStaffMemberDto": {
         "required": [
+          "absences",
           "allServices",
           "configured",
           "enabled",
@@ -30389,6 +30488,26 @@
             "items": {
               "$ref": "#/components/schemas/OpeningIntervalDto"
             },
+            "nullable": true
+          },
+          "absences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffAbsenceDto"
+            }
+          },
+          "photoUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OnlineBookingStaffPhotoDto": {
+        "type": "object",
+        "properties": {
+          "photoUrl": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -35148,6 +35267,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "photoUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -39861,6 +39984,24 @@
         },
         "additionalProperties": false
       },
+      "StaffAbsenceDto": {
+        "required": [
+          "from",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "additionalProperties": false
+      },
       "StartInventoryCountCommand": {
         "required": [
           "inventoryLocationId",
@@ -41664,6 +41805,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OpeningIntervalDto"
+            },
+            "nullable": true
+          },
+          "absences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffAbsenceDto"
             },
             "nullable": true
           }
