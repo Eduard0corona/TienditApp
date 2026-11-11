@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Catalog.Commands;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -6,6 +7,7 @@ using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.DTOs;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
@@ -273,6 +275,92 @@ public class TenantFileIsolationTests
     }
 
     [Fact]
+    public async Task UploadStaffPhoto_ShouldStoreInOwnStaffFolder_ReplaceTheOwnPrevious_AndRecordIt()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var previousFiles = fixture.SeedVariantFiles($"staff/{fixture.TenantId}/ana");
+        var coverFiles = fixture.SeedVariantFiles($"covers/{fixture.TenantId}/portada");
+        var staff = await fixture.SeedStaffAsync($"/uploads/staff/{fixture.TenantId}/ana");
+
+        var result = await fixture.UploadStaffPhotoAsync(fixture.UserId);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var saved = await fixture.Context.OnlineBookingStaff.AsNoTracking().SingleAsync(s => s.Id == staff.Id);
+        Assert.StartsWith($"/uploads/staff/{fixture.TenantId}/", saved.PhotoUrl);
+        Assert.Equal($"{saved.PhotoUrl}_xs.webp", result.Value.PhotoUrl);
+        AssertAllExist(fixture.VariantPathsOfUrl(saved.PhotoUrl!));
+        AssertNoneExist(previousFiles);
+        AssertAllExist(coverFiles);
+        var audit = await fixture.Context.AuditLogs.SingleAsync(a => a.Action == "OnlineBookingStaffPhotoChanged");
+        Assert.Equal((fixture.TenantId, staff.Id.ToString()), (audit.TenantId, audit.EntityId));
+        Assert.Contains($"/uploads/staff/{fixture.TenantId}/ana", audit.Metadata);
+    }
+
+    [Fact]
+    public async Task UploadStaffPhoto_ShouldKeepOtherTenantFiles_WhenPhotoUrlPointsToTheirFolder()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var otherTenantFiles = fixture.SeedVariantFiles($"staff/{fixture.OtherTenantId}/ana");
+        await fixture.SeedStaffAsync($"/uploads/staff/{fixture.OtherTenantId}/ana");
+
+        var result = await fixture.UploadStaffPhotoAsync(fixture.UserId);
+
+        Assert.True(result.IsSuccess, result.Error);
+        AssertAllExist(otherTenantFiles);
+    }
+
+    [Fact]
+    public async Task StaffPhoto_ShouldRefuse_APersonNotSavedInThisBusiness_AndStoreNothing()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        // Saved in the other business only: this one's filter does not find them.
+        fixture.Context.OnlineBookingStaff.Add(OnlineBookingStaff.Create(fixture.OtherTenantId, fixture.UserId, "Ana C.", true, true, [], null));
+        await fixture.Context.SaveChangesAsync();
+
+        var upload = await fixture.UploadStaffPhotoAsync(fixture.UserId);
+        var delete = await fixture.CreateStaffPhotoHandler().Handle(new DeleteOnlineBookingStaffPhotoCommand(fixture.UserId), CancellationToken.None);
+
+        Assert.Equal(OnlineBookingStaffPhotos.NotConfiguredMessage, upload.Error);
+        Assert.Equal(OnlineBookingStaffPhotos.NotConfiguredMessage, delete.Error);
+        Assert.False(Directory.Exists(Path.Combine(fixture.UploadsRootPath, "staff")));
+    }
+
+    [Fact]
+    public async Task DeleteStaffPhoto_ShouldDeleteOwnVariants_AndRecordIt()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var ownFiles = fixture.SeedVariantFiles($"staff/{fixture.TenantId}/ana");
+        var staff = await fixture.SeedStaffAsync($"/uploads/staff/{fixture.TenantId}/ana");
+
+        var result = await fixture.CreateStaffPhotoHandler()
+            .Handle(new DeleteOnlineBookingStaffPhotoCommand(fixture.UserId), CancellationToken.None);
+        var again = await fixture.CreateStaffPhotoHandler()
+            .Handle(new DeleteOnlineBookingStaffPhotoCommand(fixture.UserId), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Null(result.Value.PhotoUrl);
+        Assert.True(again.IsSuccess, again.Error);
+        AssertNoneExist(ownFiles);
+        Assert.Null((await fixture.Context.OnlineBookingStaff.AsNoTracking().SingleAsync(s => s.Id == staff.Id)).PhotoUrl);
+        Assert.Equal(1, await fixture.Context.AuditLogs.CountAsync(a => a.Action == "OnlineBookingStaffPhotoRemoved"));
+    }
+
+    [Fact]
+    public async Task DeleteStaffPhoto_ShouldKeepOtherTenantFiles_WhenPhotoUrlPointsToTheirFolder()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var otherTenantFiles = fixture.SeedVariantFiles($"staff/{fixture.OtherTenantId}/ana");
+        var staff = await fixture.SeedStaffAsync($"/uploads/staff/{fixture.OtherTenantId}/ana");
+
+        var result = await fixture.CreateStaffPhotoHandler()
+            .Handle(new DeleteOnlineBookingStaffPhotoCommand(fixture.UserId), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        AssertAllExist(otherTenantFiles);
+        Assert.Null((await fixture.Context.OnlineBookingStaff.AsNoTracking().SingleAsync(s => s.Id == staff.Id)).PhotoUrl);
+    }
+
+    [Fact]
     public async Task UploadAvatar_ShouldKeepOtherTenantFiles_WhenAvatarUrlPointsToTheirFolder()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -431,6 +519,7 @@ public class TenantFileIsolationTests
         public Guid UserId => User.Id;
 
         private string UploadsRoot => Path.Combine(_contentRoot, "wwwroot", "uploads");
+        public string UploadsRootPath => UploadsRoot;
 
         public static async Task<TestFixture> CreateAsync()
         {
@@ -511,6 +600,35 @@ public class TenantFileIsolationTests
             Tenant.SetCoverImage(coverUrl);
             await Context.SaveChangesAsync();
         }
+
+        /// <summary>The account, saved in Quién atiende of this business, with that photo.</summary>
+        public async Task<OnlineBookingStaff> SeedStaffAsync(string? photoUrl)
+        {
+            var staff = OnlineBookingStaff.Create(TenantId, UserId, "Ana C.", true, true, [], null);
+            staff.SetPhoto(photoUrl);
+            Context.OnlineBookingStaff.Add(staff);
+            await Context.SaveChangesAsync();
+            return staff;
+        }
+
+        public OnlineBookingStaffPhotoHandler CreateStaffPhotoHandler() => new(
+            Context,
+            _tenantService,
+            CurrentUser,
+            Storage,
+            new FakeImageProcessingService());
+
+        public Task<Result<OnlineBookingStaffPhotoDto>> UploadStaffPhotoAsync(Guid userId) =>
+            CreateStaffPhotoHandler().Handle(
+                new UploadOnlineBookingStaffPhotoCommand
+                {
+                    UserId = userId,
+                    FileStream = new MemoryStream([0x89, 0x50, 0x4E, 0x47]),
+                    FileName = "ana.png",
+                    ContentType = "image/png",
+                    FileSize = 4
+                },
+                CancellationToken.None);
 
         public async Task SetAvatarUrlAsync(string avatarUrl)
         {

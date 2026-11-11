@@ -140,7 +140,7 @@ public class GetPublicHomeVisitQueryHandler : IRequestHandler<GetPublicHomeVisit
             ChargePolicy = settings.HomeVisitChargePolicy,
             // It receives visits: it has an active zone, so there is a price.
             Price = HomeVisitPriceDto.From(HomeVisitCharge.Starting(settings.HomeVisitChargePolicy, visit.Price, zoneFees))!,
-            Staff = staff.Select(person => new PublicBookingStaffDto { Id = person.Id, Name = person.Name }).ToList(),
+            Staff = staff.Select(PublicBookingStaffDto.From).ToList(),
             ResponseTime = entry?.Business.ResponseTime,
             QuoteTime = entry?.Business.QuoteTime
         };

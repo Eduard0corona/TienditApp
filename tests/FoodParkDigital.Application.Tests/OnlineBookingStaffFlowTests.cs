@@ -429,6 +429,124 @@ public class OnlineBookingStaffFlowTests
         Assert.Equal(1, settings.StaffCount);
     }
 
+    // Fase 31I (ADR 0089): the days a person is away and the photo customers see of them.
+
+    [Fact]
+    public async Task Absences_ShouldBeSaved_FromToday_KeptWhenNotSent_AndRecorded()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var ana = await MemberAsync(fixture, tenant.Id, "Ana", "López");
+        var today = Monday.AddDays(-1);
+
+        var saved = await Handler(fixture).Handle(Person(ana) with
+        {
+            Absences =
+            [
+                new StaffAbsenceDto { From = Monday.AddDays(7), To = Monday.AddDays(9) },
+                new StaffAbsenceDto { From = today.AddDays(-5), To = today.AddDays(-1) },
+                new StaffAbsenceDto { From = today, To = Monday }
+            ]
+        }, CancellationToken.None);
+        var kept = await Handler(fixture).Handle(Person(ana) with { Name = "Ana López" }, CancellationToken.None);
+
+        // Today is Sunday in Mexico City: the one over goes, the one running today stays.
+        Assert.True(saved.IsSuccess, saved.Error);
+        Assert.Equal([(today, Monday), (Monday.AddDays(7), Monday.AddDays(9))], saved.Value!.Absences.Select(a => (a.From, a.To)));
+        Assert.Equal([(today, Monday), (Monday.AddDays(7), Monday.AddDays(9))], kept.Value!.Absences.Select(a => (a.From, a.To)));
+        var settings = await Handler(fixture).Handle(new GetOnlineBookingStaffQuery(), CancellationToken.None);
+        Assert.Equal(2, settings.Members.Single().Absences.Count);
+        var audit = await fixture.Context.AuditLogs.Where(a => a.Action == "OnlineBookingStaffUpdated").ToListAsync();
+        Assert.Equal(2, audit.Count);
+        Assert.All(audit, a => Assert.Contains($"{today:yyyy-MM-dd}/{Monday:yyyy-MM-dd},{Monday.AddDays(7):yyyy-MM-dd}/{Monday.AddDays(9):yyyy-MM-dd}", a.Metadata));
+
+        // Saving them the same records nothing; none takes them all away.
+        var same = (await Handler(fixture).Handle(Person(ana) with
+        {
+            Name = "Ana López",
+            Absences = [new StaffAbsenceDto { From = today, To = Monday }, new StaffAbsenceDto { From = Monday.AddDays(7), To = Monday.AddDays(9) }]
+        }, CancellationToken.None)).Value!;
+        Assert.Equal(2, same.Absences.Count);
+        Assert.Equal(2, await fixture.Context.AuditLogs.CountAsync(a => a.Action == "OnlineBookingStaffUpdated"));
+        var none = await Handler(fixture).Handle(Person(ana) with { Name = "Ana López", Absences = [] }, CancellationToken.None);
+        Assert.Empty(none.Value!.Absences);
+        Assert.Empty(await fixture.Context.Set<OnlineBookingStaffAbsence>().ToListAsync());
+        Assert.Equal(3, await fixture.Context.AuditLogs.CountAsync(a => a.Action == "OnlineBookingStaffUpdated"));
+    }
+
+    [Fact]
+    public async Task Absences_ShouldRefuse_TwoThatCross_AndTooMany_WithoutSavingAnything()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var ana = await MemberAsync(fixture, tenant.Id, "Ana", "López");
+        var crossing = Person(ana) with
+        {
+            Absences = [new StaffAbsenceDto { From = Monday, To = Monday.AddDays(3) }, new StaffAbsenceDto { From = Monday.AddDays(3), To = Monday.AddDays(4) }]
+        };
+        var tooMany = Person(ana) with
+        {
+            Absences = Enumerable.Range(0, 4 * OnlineBookingStaff.MaxAbsences + 1)
+                .Select(n => new StaffAbsenceDto { From = Monday.AddDays(n), To = Monday.AddDays(n) }).ToList()
+        };
+
+        var refused = await Assert.ThrowsAsync<DomainException>(() => Handler(fixture).Handle(crossing, CancellationToken.None));
+        var invalid = await new UpdateOnlineBookingStaffCommandValidator().ValidateAsync(tooMany);
+
+        Assert.Equal(OnlineBookingStaff.AbsencesOverlapMessage, refused.Message);
+        Assert.Contains(invalid.Errors, e => e.ErrorMessage == OnlineBookingStaff.TooManyAbsencesMessage);
+        Assert.True((await new UpdateOnlineBookingStaffCommandValidator().ValidateAsync(crossing)).IsValid);
+        Assert.Empty(await fixture.Context.OnlineBookingStaff.ToListAsync());
+    }
+
+    [Fact]
+    public async Task APersonAway_ShouldNotBeOffered_NorBooked_ThatDay_AndWhoeverIsFreeGoesToTheOthers()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        var ana = await StaffAsync(fixture, tenant, "Ana", "Ana L.");
+        var luis = await StaffAsync(fixture, tenant, "Luis", "Luis M.");
+        ana.ReplaceAbsences([new StaffAbsence(Monday, Monday)], Monday.AddDays(-1));
+        await fixture.Context.SaveChangesAsync();
+
+        var withAna = await SlotsAsync(fixture, haircut.Id, staffId: ana.Id);
+        var anyone = await SlotsAsync(fixture, haircut.Id);
+
+        Assert.Empty(withAna!.Days[1].Slots);
+        Assert.Equal("9:00 a. m.", withAna.Days[2].Slots[0].Label);
+        Assert.Equal("9:00 a. m.", anyone!.Days[1].Slots[0].Label);
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TimeTakenMessage,
+            (await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), ana.Id)).Error);
+        // Luis has more appointments that day than Ana, but she is away: whoever is free is Luis.
+        await AppointmentAsync(fixture, tenant, Local(Monday, "13:00"), Local(Monday, "14:00"), luis.UserId);
+        var whoever = await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), staffId: null);
+        Assert.Equal("Luis M.", whoever.Value!.StaffName);
+        // Nobody left that time on Monday; on Tuesday she is back.
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TimeTakenMessage,
+            (await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), staffId: null, phone: "5512345678")).Error);
+        Assert.Equal("Ana L.", (await RequestAsync(fixture, haircut.Id, Local(Monday.AddDays(1), "10:00"), ana.Id, phone: "5512345678")).Value!.StaffName);
+    }
+
+    [Fact]
+    public async Task BookingPage_ShouldShow_ThePhotoTheBusinessChose_OrNone()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        await ServiceAsync(fixture, tenant, "Corte de cabello", 45);
+        var ana = await StaffAsync(fixture, tenant, "Ana", "Ana L.");
+        var luis = await StaffAsync(fixture, tenant, "Luis", "Luis M.");
+        ana.SetPhoto($"/uploads/staff/{tenant.Id}/ana");
+        await fixture.Context.SaveChangesAsync();
+
+        var page = await BookingAsync(fixture);
+        var settings = await Handler(fixture).Handle(new GetOnlineBookingStaffQuery(), CancellationToken.None);
+
+        Assert.Equal([(ana.Id, $"/uploads/staff/{tenant.Id}/ana_xs.webp"), (luis.Id, null)], page.Staff.Select(p => (p.Id, p.PhotoUrl)));
+        Assert.Equal($"/uploads/staff/{tenant.Id}/ana_xs.webp", settings.Members.Single(m => m.UserId == ana.UserId).PhotoUrl);
+        Assert.Null(settings.Members.Single(m => m.UserId == luis.UserId).PhotoUrl);
+    }
+
     private static async Task<PublicBookingDto> BookingAsync(SalesTestFixture fixture)
         => (await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicBookingQueryHandler>.Instance)
             .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None))!;
@@ -462,7 +580,7 @@ public class OnlineBookingStaffFlowTests
 
     private static UpdateOnlineBookingStaffCommand Person(Guid userId) => new() { UserId = userId, Enabled = true, Name = "Ana L.", AllServices = true };
 
-    private static OnlineBookingStaffHandler Handler(SalesTestFixture fixture) => new(fixture.Context, fixture.TenantService, fixture.CurrentUser);
+    private static OnlineBookingStaffHandler Handler(SalesTestFixture fixture) => new(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock);
 
     private static OpeningHours Weekdays(string opens, string closes) => OpeningHours.Create(
         new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday }

@@ -149,8 +149,44 @@ public class AppointmentsController : ControllerBase
             Name = request.Name,
             AllServices = request.AllServices,
             ServiceIds = request.ServiceIds,
-            WeeklyHours = request.WeeklyHours
+            WeeklyHours = request.WeeklyHours,
+            Absences = request.Absences
         }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Puts or replaces the photo customers see of a person the business books online (owners and admins, Fase 31I); they
+    /// must be saved in Quién atiende first.
+    /// </summary>
+    [HttpPost("online-booking/staff/{userId:guid}/photo")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<OnlineBookingStaffPhotoDto>> UploadOnlineBookingStaffPhoto(
+        Guid userId, IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
+
+        var result = await _mediator.Send(new UploadOnlineBookingStaffPhotoCommand
+        {
+            UserId = userId,
+            FileStream = file.OpenReadStream(),
+            FileName = file.FileName,
+            ContentType = file.ContentType,
+            FileSize = file.Length
+        }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Takes away the photo customers see of a person: the pages show their initial again (Fase 31I).</summary>
+    [HttpDelete("online-booking/staff/{userId:guid}/photo")]
+    public async Task<ActionResult<OnlineBookingStaffPhotoDto>> DeleteOnlineBookingStaffPhoto(Guid userId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeleteOnlineBookingStaffPhotoCommand(userId), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -254,4 +290,6 @@ public class UpdateOnlineBookingStaffRequest
     public bool AllServices { get; init; } = true;
     public List<Guid>? ServiceIds { get; init; }
     public List<FoodParkDigital.Application.Tenants.DTOs.OpeningIntervalDto>? WeeklyHours { get; init; }
+    /// <summary>The days they are away from today on (Fase 31I); null keeps the ones they have.</summary>
+    public List<StaffAbsenceDto>? Absences { get; init; }
 }
