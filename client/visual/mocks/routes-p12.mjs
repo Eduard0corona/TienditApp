@@ -34,6 +34,8 @@ export function demoOnlineBookingStaff(data) {
         allServices: true,
         serviceIds: [],
         weeklyHours: null,
+        absences: [],
+        photoUrl: null,
       }))
       .sort((a, b) => a.fullName.localeCompare(b.fullName, 'es')),
     services: BOOKABLE
@@ -80,6 +82,8 @@ export function phase24dRoutes(data, { ok, notFound }) {
         allServices: body?.allServices ?? true,
         serviceIds: body?.allServices ? [] : body?.serviceIds ?? [],
         weeklyHours: body?.weeklyHours ?? null,
+        // Null keeps them, as the API does (Fase 31I).
+        absences: body?.absences ?? member.absences ?? [],
       });
       data.onlineBooking = { ...data.onlineBooking, staffCount: data.onlineBookingStaff.members.filter((item) => item.enabled).length };
       return ok(member);
