@@ -3421,6 +3421,15 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la pieza del taller o la cancelación del cliente reintentando dentro de la transacción, como antes de la fase.
   - **Verificación:** Domain 1,462, Application 2,252, Infrastructure 729 (con las de SQL Server; 7 omitidas) y WebApi 515 en verde, sobre `d3a945d` (con la 31F). Sin cambios en el cliente ni en las dependencias.
 
+- Fase 31H, la llave foránea de quien atiende una cita (punto 12; [ADR 0088](../adr/0088-appointment-staff-foreign-key.md)):
+  - **Qué cambia:** `Appointment.StaffUserId` apunta a `AspNetUsers` sin cascada, con un índice filtrado. La migración `AddAppointmentStaffForeignKey` se detiene con el error 50058, sin cambiar nada, si una cita apunta a una cuenta que no existe. `ServiceProductId` se queda sin llave a propósito: el crédito de la visita en su cotización cruza por él las líneas de la venta aunque el producto se haya borrado. Ningún endpoint ni mensaje cambia.
+  - **Infrastructure:** `AppointmentStaffForeignKeyMigrationSqlServerTests` (3, nuevo, SQL Server, desde la migración anterior):
+    - una cita con una cuenta que no existe detiene la migración sin llave, sin índice y sin tocar las citas; vaciada como dice el `verify.sql`, se aplica, la cita conserva el nombre y la buena conserva su persona;
+    - la llave rechaza una cita con una cuenta que no existe y el borrado de la cuenta de quien atiende (`NO_ACTION`); borrar el producto, como lo hace `DeleteProductCommand`, deja a la cita con su `ServiceProductId`;
+    - el rollback borra solo la llave y su índice y vuelve a aceptar una cuenta que no existe; volver a aplicar revisa otra vez y se detiene.
+  - **Mutaciones:** de 4, fallan las pruebas en las 4: la migración sin detenerse ante una cuenta que no existe, sin la llave, con la llave en cascada y con un rollback que no borra el índice. Quitar el candado de la revisión es equivalente (la llave `WITH CHECK` también detendría una cita colada, con 547) y no se cuenta.
+  - **Verificación:** Domain 1,462, Application 2,252, Infrastructure 732 (con las de SQL Server; 7 omitidas) y WebApi 515 en verde, sobre `fbd15a0` (con la 31G). El `apply.sql` y el `rollback.sql` coinciden con lo que genera el job `Migrations` (comparados en local con su `set-options.sql`). Sin cambios en el cliente ni en las dependencias.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

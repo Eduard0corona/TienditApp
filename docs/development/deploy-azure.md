@@ -1139,6 +1139,19 @@ La Fase 31E trae una migración, [`database/production/20261110022936_AddUniqueC
 - **Volver a la versión anterior:** funciona sin tocar la base.
 - **Dejar también la base como estaba:** el `rollback.sql` borra el índice sin tocar ninguna fila. Los nombres que haya cambiado `repair.sql` no regresan solos: su salida los lista.
 
+## La llave foránea de quien atiende una cita (Fase 31H)
+
+La Fase 31H trae una migración, [`database/production/20261110201340_AddAppointmentStaffForeignKey`](../../database/production/20261110201340_AddAppointmentStaffForeignKey). Su `apply.sql` va antes del merge ([ADR 0088](../adr/0088-appointment-staff-foreign-key.md)).
+
+- **Antes del `apply.sql`:** la consulta 3 de su `verify.sql` tiene que salir vacía. Lista las citas cuya persona apunta a una cuenta que no existe; si hay alguna, el `apply.sql` se detiene con el error 50058 sin cambiar nada. Como las cuentas no se borran, ese Id sería de otra cosa: revísalo, y si no es de nadie del equipo, vacíalo como dice la consulta (la cita conserva el nombre de quien atiende).
+- **La migración:** crea `FK_Appointments_AspNetUsers_StaffUserId` (sin cascada) y su índice filtrado `IX_Appointments_StaffUserId`. No cambia datos. El servicio de la cita (`ServiceProductId`) se queda sin llave, a propósito.
+- **Candados:** bloquea `Appointments` hasta crear la llave, y crearla toma un candado de esquema sobre `AspNetUsers`. Mientras lo espera y lo tiene, nadie lee las cuentas: todas las solicitudes con sesión y los inicios de sesión esperan. Con la tabla libre dura milisegundos o pocos segundos, según cuántas citas haya, así que mejor en una hora tranquila. Córrelo con `sqlcmd ... -b -t 15 -i apply.sql`: si un lote tarda más de 15 s, sqlcmd lo cancela, `XACT_ABORT` deshace su transacción sin cambiar nada y se vuelve a correr en otro momento. El `rollback.sql` toma el mismo candado; también con `-t 15`.
+- **Mientras se publica:** la versión de `master` (la 31G) no conoce la llave y sigue igual: solo guarda a una persona activa del equipo, con su cuenta, y nada borra cuentas.
+- **Sin `apply.sql`:** a la versión nueva le falta una migración, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base.
+- **Dejar también la base como estaba:** el `rollback.sql` borra la llave y su índice sin tocar ninguna fila.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

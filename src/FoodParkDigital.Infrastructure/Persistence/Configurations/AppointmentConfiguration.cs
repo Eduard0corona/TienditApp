@@ -78,6 +78,18 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
             .HasForeignKey(x => x.WorkOrderId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Fase 31H (ADR 0088): the team member who attends it. Accounts are never deleted; the user stays while an
+        // appointment points to it, as the customer's does.
+        builder.HasOne<ApplicationUser>()
+            .WithMany()
+            .HasForeignKey(x => x.StaffUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.StaffUserId)
+            .HasFilter("[StaffUserId] IS NOT NULL");
+        // ServiceProductId has no key on purpose, like OrderItem.ProductId: a product is deleted for real, and the history
+        // keeps its Id. The sale of a visit and the credit of its quote (QuoteVisitCredits) match their lines on it, also
+        // once the product is gone. Which business it is of is checked when the appointment is saved.
+
         builder.HasIndex(x => new { x.TenantId, x.StartAt });
         builder.HasIndex(x => new { x.TenantId, x.Status });
         // The appointments of the job of an order, for the order and its quote.

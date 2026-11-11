@@ -265,6 +265,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SaleOrderId");
 
+                    b.HasIndex("StaffUserId")
+                        .HasFilter("[StaffUserId] IS NOT NULL");
+
                     b.HasIndex("TrackingToken")
                         .IsUnique()
                         .HasDatabaseName("IX_Appointments_TrackingToken")
@@ -7522,6 +7525,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
                         .WithMany()
                         .HasForeignKey("SaleOrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("StaffUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
