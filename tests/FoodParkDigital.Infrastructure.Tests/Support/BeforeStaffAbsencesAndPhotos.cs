@@ -21,6 +21,7 @@ internal static class BeforeStaffAbsencesAndPhotos
         modelBuilder.Entity<OnlineBookingStaff>().Ignore(staff => staff.Absences);
         modelBuilder.Entity<OnlineBookingStaff>().Ignore(staff => staff.PhotoUrl);
         modelBuilder.Ignore<OnlineBookingStaffAbsence>();
+        BeforeAccountCarts.Ignore(modelBuilder);
     }
 
     private sealed class Context(
