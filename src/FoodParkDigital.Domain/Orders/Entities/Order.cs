@@ -131,6 +131,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public string? TrackingToken { get; private set; }
     /// <summary>When the device captured the sale without connection (its own clock; payments keep the server time).</summary>
     public DateTimeOffset? CapturedOfflineAt { get; private set; }
+    /// <summary>
+    /// When its business was reminded by email that it still waited to be accepted or declined (Fase 31K, ADR 0091): once,
+    /// between the 15 minutes the bell marks it and the half hour it counts among the slowest
+    /// (<see cref="OrderConfirmTimes"/>). Null for every other order, and for those from before the Fase 31K.
+    /// </summary>
+    public DateTimeOffset? ConfirmReminderSentAt { get; private set; }
     /// <summary>Taxable base: item amounts without IVA.</summary>
     public decimal SubTotal { get; private set; }
     public decimal Tax { get; private set; }
@@ -719,6 +725,32 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public bool CustomerMayCancel =>
         Channel == OrderChannel.Online && Status == OrderStatus.Pending && PaidAmount == 0 && WrittenOffAmount == 0
         && TableNumber is null && OpenTableId is null;
+
+    /// <summary>
+    /// Whether it waits for its business to accept or decline it as the bell counts it (Fase 29X, ADR 0078): of the online
+    /// menu, still «Por confirmar», placed by its customer (not taken by the team) and not of a table.
+    /// </summary>
+    public bool WaitsForConfirmation =>
+        Channel == OrderChannel.Online && Status == OrderStatus.Pending && !CreatedByBusiness
+        && TableNumber is null && OpenTableId is null;
+
+    /// <summary>
+    /// Reminds its business by email that it still waits (Fase 31K, ADR 0091): once, from
+    /// <see cref="OrderConfirmTimes.RemindAt"/> (15 minutes after it arrived) until <see cref="OrderConfirmTimes.ConfirmBy"/>
+    /// (the half hour it counts among the slowest), while <see cref="WaitsForConfirmation"/>. Past that, or already reminded,
+    /// <see cref="OnlineOrderWaitingEvent"/> is not raised: the bell keeps marking it.
+    /// </summary>
+    /// <returns>Whether it is reminded now.</returns>
+    public bool RemindToConfirm(DateTimeOffset now)
+    {
+        if (!WaitsForConfirmation || ConfirmReminderSentAt is not null
+            || now < OrderConfirmTimes.RemindAt(CreatedAt) || now >= OrderConfirmTimes.ConfirmBy(CreatedAt))
+            return false;
+
+        ConfirmReminderSentAt = now;
+        AddDomainEvent(new OnlineOrderWaitingEvent(Id, TenantId));
+        return true;
+    }
 
     /// <summary>
     /// Its customer cancels it from their link or their account, while <see cref="CustomerMayCancel"/>: once the business

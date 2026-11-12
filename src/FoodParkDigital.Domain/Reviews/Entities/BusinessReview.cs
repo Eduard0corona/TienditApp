@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Reviews.Enums;
+using FoodParkDigital.Domain.Reviews.Events;
 
 namespace FoodParkDigital.Domain.Reviews.Entities;
 
@@ -80,7 +81,10 @@ public partial class BusinessReview : AuditableEntity, IAggregateRoot, ITenantSc
 
     public bool IsPublished => Status == ReviewStatus.Published;
 
-    /// <summary>A new review of the business by the account. One per account and business is the caller's to keep.</summary>
+    /// <summary>
+    /// A new review of the business by the account. One per account and business is the caller's to keep. Its business is told
+    /// (<see cref="BusinessReviewWrittenEvent"/>, Fase 31K, ADR 0091).
+    /// </summary>
     public static BusinessReview Write(Guid tenantId, Guid userId, string authorName, int rating, string? comment, DateTimeOffset now)
     {
         if (tenantId == Guid.Empty || userId == Guid.Empty)
@@ -88,6 +92,7 @@ public partial class BusinessReview : AuditableEntity, IAggregateRoot, ITenantSc
 
         var review = new BusinessReview { TenantId = tenantId, UserId = userId, WrittenAt = now, Status = ReviewStatus.Published };
         review.SetContent(authorName, rating, comment);
+        review.AddDomainEvent(new BusinessReviewWrittenEvent(review.Id, tenantId));
         return review;
     }
 

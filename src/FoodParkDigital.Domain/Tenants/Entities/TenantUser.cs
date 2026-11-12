@@ -55,7 +55,8 @@ public class TenantUser : AuditableEntity, ITenantScoped
 
     /// <summary>
     /// Whether this member gets an email each time a customer cancels an online order of the business before it was accepted
-    /// (Fase 30B, ADR 0082), as they chose; null until they choose, when only the owners get them
+    /// (Fase 30B, ADR 0082), or asks it to cancel one (Fase 31B), and the reminder of the one that waits 15 minutes to be
+    /// accepted (Fase 31K, ADR 0091), as they chose; null until they choose, when only the owners get them
     /// (<see cref="GetsOrderCancellationEmails"/>). Theirs to choose and whoever runs the team's, except the owner's.
     /// </summary>
     public bool? OrderCancellationEmails { get; private set; }
@@ -64,6 +65,19 @@ public class TenantUser : AuditableEntity, ITenantScoped
     public bool GetsOrderCancellationEmails => OrderCancellationEmails ?? Role == TenantUserRole.Owner;
 
     public void ChooseOrderCancellationEmails(bool enabled) => OrderCancellationEmails = enabled;
+
+    /// <summary>
+    /// Whether this member gets an email each time a customer writes a new review of the business (Fase 31K, ADR 0091), as
+    /// they chose; null until they choose, when only the owners get them (<see cref="GetsReviewEmails"/>). Only its owners
+    /// and admins read and answer the reviews, so only they get them. Theirs to choose and whoever runs the team's, except
+    /// the owner's.
+    /// </summary>
+    public bool? ReviewEmails { get; private set; }
+
+    /// <summary>What they chose or, until they choose, whether they own the business.</summary>
+    public bool GetsReviewEmails => ReviewEmails ?? Role == TenantUserRole.Owner;
+
+    public void ChooseReviewEmails(bool enabled) => ReviewEmails = enabled;
 
     public void SetStatus(TenantUserStatus status) => Status = status;
 

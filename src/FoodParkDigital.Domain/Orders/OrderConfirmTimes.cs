@@ -45,6 +45,12 @@ public static class OrderConfirmTimes
     /// </summary>
     public static int WarnAfterMinutes => LimitMinutes[1];
 
+    /// <summary>
+    /// When the business of an order that arrived at <paramref name="arrivedAt"/> and still waits is reminded by email (Fase
+    /// 31K, ADR 0091): when the bell starts marking it, <see cref="WarnAfterMinutes"/> after it arrived.
+    /// </summary>
+    public static DateTimeOffset RemindAt(DateTimeOffset arrivedAt) => arrivedAt.AddMinutes(WarnAfterMinutes);
+
     /// <summary>When an order that arrived at <paramref name="arrivedAt"/> is answered in time not to count among the slowest.</summary>
     public static DateTimeOffset ConfirmBy(DateTimeOffset arrivedAt) => arrivedAt.AddMinutes(SlowAfterMinutes);
 
