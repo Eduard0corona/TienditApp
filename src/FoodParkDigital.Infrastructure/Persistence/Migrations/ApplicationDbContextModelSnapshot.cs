@@ -7337,6 +7337,22 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(200)");
 
+                    b.Property<string>("MediaId")
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<int?>("MediaKind")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MediaPath")
+                        .HasMaxLength(300)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(300)");
+
+                    b.Property<int?>("MediaState")
+                        .HasColumnType("int");
+
                     b.Property<DateTimeOffset>("SentAt")
                         .HasColumnType("datetimeoffset");
 
@@ -7351,7 +7367,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConversationId", "SentAt");
 
-                    b.ToTable("WhatsAppMessages", (string)null);
+                    b.ToTable("WhatsAppMessages", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_WhatsAppMessages_Media", "([MediaKind] IS NULL AND [MediaId] IS NULL AND [MediaPath] IS NULL AND [MediaState] IS NULL) OR ([MediaKind] IN (1, 2) AND [MediaId] IS NOT NULL AND (([MediaState] IN (0, 2) AND [MediaPath] IS NULL) OR ([MediaState] = 1 AND [MediaPath] IS NOT NULL)))");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Infrastructure.BackgroundJobs.Inbox.InboxMessage", b =>

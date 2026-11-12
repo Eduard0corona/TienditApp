@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.WhatsApp.Commands;
+using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Domain.WhatsApp.Enums;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
 using MediatR;
@@ -122,6 +123,7 @@ public sealed class WhatsAppWebhookProcessor
             var from = msg.TryGetProperty("from", out var fromProp) ? fromProp.GetString() : null;
             var msgId = msg.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
             var (body, isMedia) = ExtractInboundBody(msg);
+            var (mediaKind, mediaId) = ExtractDownloadableMedia(msg);
 
             if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(msgId) || string.IsNullOrWhiteSpace(body))
                 continue;
@@ -137,7 +139,9 @@ public sealed class WhatsAppWebhookProcessor
                     ProfileName = profileName,
                     Body = body,
                     ExternalMessageId = msgId,
-                    IsMedia = isMedia
+                    IsMedia = isMedia,
+                    MediaKind = mediaKind,
+                    MediaId = mediaId
                 });
             }
             catch (Exception ex)
@@ -234,6 +238,26 @@ public sealed class WhatsAppWebhookProcessor
             null => (null, false),
             _ => ("⚠️ Mensaje que no se puede mostrar aquí; ábrelo en WhatsApp.", true)
         };
+    }
+
+    /// <summary>
+    /// The photo or audio the chat downloads and shows (Fase 31L, ADR 0092), with the id WhatsApp gave it; nothing for the
+    /// rest (a video, a document, a sticker...), which stays as its marker, nor for an id that is not one of theirs.
+    /// </summary>
+    internal static (WhatsAppMediaKind? Kind, string? MediaId) ExtractDownloadableMedia(JsonElement message)
+    {
+        var type = message.TryGetProperty("type", out var typeProp) && typeProp.ValueKind == JsonValueKind.String ? typeProp.GetString() : null;
+        WhatsAppMediaKind? kind = type switch
+        {
+            "image" => WhatsAppMediaKind.Image,
+            "audio" => WhatsAppMediaKind.Audio,
+            _ => null
+        };
+        if (kind is null || !message.TryGetProperty(type!, out var media))
+            return (null, null);
+
+        var mediaId = StringProperty(media, "id");
+        return WhatsAppMessage.IsMediaId(mediaId) ? (kind, mediaId) : (null, null);
     }
 
     private static string? StringProperty(JsonElement element, string name)

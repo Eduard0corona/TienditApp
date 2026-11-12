@@ -222,6 +222,8 @@ public static class DependencyInjection
         services.AddSingleton<IInvoicingGateway, SwSapienGateway>();
         services.AddScoped<WhatsAppService>();
         services.AddScoped<IWhatsAppService>(provider => provider.GetRequiredService<WhatsAppService>());
+        // Fase 31L: the photos and audios customers send, downloaded with the business's WhatsApp.
+        services.AddScoped<IWhatsAppMediaDownloader, WhatsAppMediaDownloader>();
         services.AddScoped<IWhatsAppDocumentSender>(provider => provider.GetRequiredService<WhatsAppService>());
         services.AddSingleton<ITwoFactorService, TwoFactorService>();
         var fileStorageProvider = configuration["FileStorage:Provider"];

@@ -22,6 +22,7 @@ internal static class BeforeOnlineOrderReminder
     {
         modelBuilder.Entity<Order>().Ignore(order => order.ConfirmReminderSentAt);
         modelBuilder.Entity<TenantUser>().Ignore(member => member.ReviewEmails);
+        BeforeWhatsAppMessageMedia.Ignore(modelBuilder);
     }
 
     private sealed class Context(

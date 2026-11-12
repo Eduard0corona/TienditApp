@@ -373,7 +373,8 @@ public class OutboxTests
             new OnlineOrderWaitingEvent(Guid.NewGuid(), TenantA),
             new OnlineOrderWaitingEmailEvent(Guid.NewGuid(), Guid.NewGuid()),
             new FoodParkDigital.Domain.Reviews.Events.BusinessReviewWrittenEvent(Guid.NewGuid(), TenantA),
-            new FoodParkDigital.Domain.Reviews.Events.BusinessReviewEmailEvent(Guid.NewGuid(), Guid.NewGuid())
+            new FoodParkDigital.Domain.Reviews.Events.BusinessReviewEmailEvent(Guid.NewGuid(), Guid.NewGuid()),
+            new FoodParkDigital.Domain.WhatsApp.Events.WhatsAppMediaReceivedEvent(Guid.NewGuid(), TenantA)
         };
 
         foreach (var domainEvent in events)

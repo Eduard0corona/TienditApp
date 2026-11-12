@@ -299,6 +299,35 @@ public class WhatsAppWebhookControllerTests
             ["📷 Foto: así lo quiero", "🎤 Nota de voz", "📍 Ubicación: Mi casa https://maps.google.com/?q=19.4326,-99.1332"],
             commands.Select(c => c.Body));
         Assert.All(commands, c => Assert.True(c.IsMedia));
+        // Fase 31L: the photo and the voice note bring what to download; the location stays a marker.
+        Assert.Equal(
+            [(WhatsAppMediaKind.Image, "m1"), (WhatsAppMediaKind.Audio, "m2"), ((WhatsAppMediaKind?)null, (string?)null)],
+            commands.Select(c => (c.MediaKind, c.MediaId)));
+    }
+
+    [Fact]
+    public async Task Process_ShouldDownloadOnlyPhotosAndAudios_WithAnIdOfWhatsApp()
+    {
+        // Fase 31L (ADR 0092).
+        await using var fixture = await TestFixture.CreateAsync();
+        var body = WebhookPayload(TenantBPhoneNumberId, """
+            "contacts": [{ "profile": { "name": "Cliente" }, "wa_id": "5215511112222" }],
+            "messages": [
+              { "from": "5215511112222", "id": "wamid.song", "type": "audio", "audio": { "id": "1029384756" } },
+              { "from": "5215511112222", "id": "wamid.odd", "type": "image", "image": { "id": "../otro" } },
+              { "from": "5215511112222", "id": "wamid.noid", "type": "image", "image": { "caption": "sin id" } },
+              { "from": "5215511112222", "id": "wamid.sticker", "type": "sticker", "sticker": { "id": "m3" } },
+              { "from": "5215511112222", "id": "wamid.video", "type": "video", "video": { "id": "m4" } }
+            ]
+            """);
+
+        await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
+
+        var commands = fixture.Mediator.Requests.OfType<ProcessInboundMessageCommand>().ToList();
+        Assert.Equal(["🎵 Audio", "📷 Foto", "📷 Foto: sin id", "🙂 Sticker", "🎬 Video"], commands.Select(c => c.Body));
+        Assert.Equal(
+            [(WhatsAppMediaKind.Audio, "1029384756"), (null, null), (null, null), (null, null), ((WhatsAppMediaKind?)null, (string?)null)],
+            commands.Select(c => (c.MediaKind, c.MediaId)));
     }
 
     [Fact]

@@ -24,7 +24,10 @@ public static class WhatsAppMappings
         Direction = message.Direction.ToString(),
         Body = message.Body,
         Status = message.Status.ToString(),
-        SentAt = message.SentAt
+        SentAt = message.SentAt,
+        MediaKind = message.MediaKind == null ? null : message.MediaKind.ToString(),
+        MediaState = message.MediaState == null ? null : message.MediaState.ToString(),
+        MediaPath = message.MediaPath
     };
 
     private static readonly Func<WhatsAppConversation, ConversationDto> ConversationCompiled = ConversationAsDto.Compile();

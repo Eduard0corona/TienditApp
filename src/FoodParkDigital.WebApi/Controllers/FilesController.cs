@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Application.WhatsApp.Media;
 using FoodParkDigital.WebApi.Errors;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -10,8 +11,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
-/// Private files of the business (transfer receipts, service photos and the photos of what happens customers send with
-/// their visits), streamed to members with the right permission. The client fetches them with its session; they are never
+/// Private files of the business (transfer receipts, service photos, the photos of what happens customers send with
+/// their visits and, since the Fase 31L, the photos and audios they send by WhatsApp), streamed to members with the right
+/// permission. The client fetches them with its session; they are never
 /// public links.
 /// </summary>
 [ApiController]
@@ -29,15 +31,19 @@ public class FilesController : ControllerBase
     [HttpGet("{**key}")]
     public async Task<IActionResult> Get(string key, CancellationToken cancellationToken)
     {
-        if (!OrderUploadRules.TryParsePrivateKey(key, out _, out var area))
+        IRequest<Result<PrivateFileDownload>> query;
+        if (WhatsAppMediaRules.TryParseKey(key, out _))
+            query = new GetWhatsAppMediaFileQuery(key);
+        else if (OrderUploadRules.TryParsePrivateKey(key, out _, out var area))
+            query = area switch
+            {
+                OrderUploadRules.PaymentEvidenceArea => new GetPaymentEvidenceFileQuery(key),
+                OrderUploadRules.VisitProblemArea => new GetVisitProblemPhotoFileQuery(key),
+                _ => new GetServicePhotoFileQuery(key)
+            };
+        else
             return this.ApiError(StatusCodes.Status404NotFound, GetPrivateOrderFileQueryHandler.NotFoundError);
 
-        IRequest<Result<PrivateFileDownload>> query = area switch
-        {
-            OrderUploadRules.PaymentEvidenceArea => new GetPaymentEvidenceFileQuery(key),
-            OrderUploadRules.VisitProblemArea => new GetVisitProblemPhotoFileQuery(key),
-            _ => new GetServicePhotoFileQuery(key)
-        };
         var result = await _mediator.Send(query, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status404NotFound, result.Error);

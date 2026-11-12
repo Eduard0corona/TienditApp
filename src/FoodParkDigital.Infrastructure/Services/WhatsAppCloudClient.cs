@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -161,6 +162,122 @@ public sealed class WhatsAppCloudClient
         {
             _logger.LogError("WhatsApp media upload from {PhoneNumberId} could not reach the API: {ErrorType}", account.PhoneNumberId, ex.GetType().Name);
             return MessageSendResult.Failed("Error de conexión con la API de WhatsApp.", isTransient: true);
+        }
+    }
+
+    /// <summary>
+    /// Downloads a file a customer sent to the business's number (Fase 31L, ADR 0092): first its address
+    /// (<c>GET /{media-id}</c>), then its content from Meta's servers, both with the business's token, never bigger than
+    /// <paramref name="maxBytes"/>. The token only goes to Meta's own hosts over https. What Meta refuses or no longer has
+    /// is <see cref="WhatsAppMediaDownloadOutcome.Unavailable"/>; a timeout, throttling or a failure of theirs,
+    /// <see cref="WhatsAppMediaDownloadOutcome.Transient"/>. Only the status and Meta's error code reach the logs, never the
+    /// file or its address.
+    /// </summary>
+    public async Task<WhatsAppMediaDownload> DownloadMediaAsync(
+        WhatsAppSenderAccount account,
+        string mediaId,
+        long maxBytes,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient(HttpClientName);
+            Uri address;
+            using (var request = new HttpRequestMessage(HttpMethod.Get, $"{GraphApiBaseUrl}/{Uri.EscapeDataString(mediaId)}"))
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
+                using var response = await client.SendAsync(request, cancellationToken);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                    return MediaFailure("address", response.StatusCode, body);
+
+                var (url, size) = ReadMediaAddress(body);
+                if (size > maxBytes)
+                    return WhatsAppMediaDownload.Unavailable;
+                if (url is null || !IsMetaMediaHost(url))
+                {
+                    _logger.LogWarning("WhatsApp media of {PhoneNumberId} came without an address of Meta's servers", account.PhoneNumberId);
+                    return WhatsAppMediaDownload.Unavailable;
+                }
+                address = url;
+            }
+
+            using var download = new HttpRequestMessage(HttpMethod.Get, address);
+            download.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
+            using var file = await client.SendAsync(download, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (!file.IsSuccessStatusCode)
+                return MediaFailure("file", file.StatusCode, null);
+            if (file.Content.Headers.ContentLength > maxBytes)
+                return WhatsAppMediaDownload.Unavailable;
+
+            await using var stream = await file.Content.ReadAsStreamAsync(cancellationToken);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81920];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
+            {
+                // Bigger than its size said: it is not kept, and the rest is not read.
+                if (buffer.Length + read > maxBytes)
+                    return WhatsAppMediaDownload.Unavailable;
+                buffer.Write(chunk, 0, read);
+            }
+
+            return new WhatsAppMediaDownload(WhatsAppMediaDownloadOutcome.Downloaded, buffer.ToArray());
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("WhatsApp media of {PhoneNumberId} could not be downloaded: {ErrorType}", account.PhoneNumberId, ex.GetType().Name);
+            return WhatsAppMediaDownload.Transient;
+        }
+    }
+
+    private WhatsAppMediaDownload MediaFailure(string step, System.Net.HttpStatusCode status, string? body)
+    {
+        _logger.LogWarning(
+            "WhatsApp media {Step} was not given. Status: {StatusCode}. Provider error code: {ProviderErrorCode}",
+            step,
+            status,
+            LogRedaction.GetProviderErrorCode(body));
+        return IsTransientStatus((int)status) ? WhatsAppMediaDownload.Transient : WhatsAppMediaDownload.Unavailable;
+    }
+
+    /// <summary>Meta's servers of WhatsApp's files: only there goes the token.</summary>
+    internal static bool IsMetaMediaHost(Uri url)
+        => url.Scheme == Uri.UriSchemeHttps
+            && url.IsDefaultPort
+            && (url.Host.Equals("lookaside.fbsbx.com", StringComparison.OrdinalIgnoreCase)
+                || url.Host.EndsWith(".fbsbx.com", StringComparison.OrdinalIgnoreCase)
+                || url.Host.EndsWith(".fbcdn.net", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Reads <c>{"url": "https://…", "file_size": 1234}</c>.</summary>
+    internal static (Uri? Url, long Size) ReadMediaAddress(string? responseBody)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody))
+            return (null, 0);
+
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return (null, 0);
+            Uri? url = root.TryGetProperty("url", out var urlProp) && urlProp.ValueKind == JsonValueKind.String
+                && Uri.TryCreate(urlProp.GetString(), UriKind.Absolute, out var parsed)
+                    ? parsed
+                    : null;
+            var size = root.TryGetProperty("file_size", out var sizeProp) && sizeProp.ValueKind == JsonValueKind.Number
+                && sizeProp.TryGetInt64(out var bytes)
+                    ? bytes
+                    : 0;
+            return (url, size);
+        }
+        catch (JsonException)
+        {
+            return (null, 0);
         }
     }
 
