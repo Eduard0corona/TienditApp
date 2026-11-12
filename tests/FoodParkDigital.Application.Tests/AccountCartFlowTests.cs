@@ -62,6 +62,7 @@ public class AccountCartFlowTests
         var (_, cafe) = await StoreAsync(fixture, "cafe");
         Assert.True((await SaveAsync(fixture, "cafe", [])).IsSuccess);
         Assert.Equal(1, await fixture.Context.AccountCarts.CountAsync());
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddHours(4);
         await SaveAsync(fixture, "cafe", [Line(cafe.Id, 1)]);
         Assert.Equal([("cafe", 1), ("demo", 0)], (await CartsAsync(fixture)).Select(c => (c.Slug, c.Lines.Count)));
     }
