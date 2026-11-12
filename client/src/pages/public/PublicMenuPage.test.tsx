@@ -674,8 +674,9 @@ describe('PublicMenuPage', () => {
     });
 
     it('brings back the cart the account left on another device when it changed later, and keeps there what changes', async () => {
-      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 1 }] }, new Date('2026-10-18T08:00:00Z'));
-      account.getCarts.mockResolvedValue([accountCart(3, '2026-10-18T09:00:00Z')]);
+      // Within the week a cart lasts: here two hours ago, on the other device an hour ago.
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 1 }] }, new Date(Date.now() - 2 * 3_600_000));
+      account.getCarts.mockResolvedValue([accountCart(3, new Date(Date.now() - 3_600_000).toISOString())]);
       account.getAddresses.mockResolvedValue([]);
       account.saveCart.mockResolvedValue({} as never);
       api.getMenu.mockResolvedValue(menu());
@@ -708,8 +709,9 @@ describe('PublicMenuPage', () => {
     });
 
     it('forgets the cart of the device when the account ordered or emptied it later on another device', async () => {
-      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 2 }] }, new Date('2026-10-18T08:00:00Z'));
-      account.getCarts.mockResolvedValue([{ ...accountCart(1, '2026-10-18T09:00:00Z'), lines: [] }]);
+      // Kept two hours ago here; ordered an hour ago on another device (both within the week a cart lasts).
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 2 }] }, new Date(Date.now() - 2 * 3_600_000));
+      account.getCarts.mockResolvedValue([{ ...accountCart(1, new Date(Date.now() - 3_600_000).toISOString()), lines: [] }]);
       account.getAddresses.mockResolvedValue([]);
       account.saveCart.mockResolvedValue({} as never);
       api.getMenu.mockResolvedValue(menu());
