@@ -20,6 +20,7 @@ import { phase24bRoutes } from './routes-p10.mjs';
 import { phase25Routes } from './routes-p11.mjs';
 import { phase24dRoutes } from './routes-p12.mjs';
 import { phase24fRoutes } from './routes-p13.mjs';
+import { phase31jRoutes } from './routes-p31j.mjs';
 import { phase24hRoutes } from './routes-p14.mjs';
 import { phase26aRoutes } from './routes-p15.mjs';
 import { phase26bRoutes } from './routes-p16.mjs';
@@ -242,6 +243,7 @@ function buildRoutes(data, token) {
     ...phase26aRoutes(data, { ok, notFound, paginate }),
     ...phase24hRoutes(data, { ok }),
     ...phase24fRoutes(data, { ok }),
+    ...phase31jRoutes(data, { ok }),
     ...phase24dRoutes(data, { ok, notFound }),
     ...phase25Routes(data, { ok, notFound }),
     ...phase24bRoutes(data, { ok, notFound }),

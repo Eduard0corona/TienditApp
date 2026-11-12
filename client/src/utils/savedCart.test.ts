@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cartLineKey, clearCart, latestCart, lineNotes, linesOfOrder, readCart, restoreLines, saveCart } from './savedCart';
+import {
+  cartLineKey,
+  clearCart,
+  fromAccountCart,
+  latestCart,
+  latestPendingCart,
+  lineNotes,
+  linesOfOrder,
+  newerCart,
+  readCart,
+  restoreLines,
+  saveCart,
+} from './savedCart';
 
 const now = new Date('2026-10-17T13:25:00Z');
 const later = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
@@ -31,7 +43,7 @@ describe('savedCart', () => {
       savedAt: now.toISOString(),
       lines: [{ productId: 'latte', optionIds: ['grande'], quantity: 2 }],
     });
-    expect(latestCart(later(1))).toEqual({ slug: 'el-guero', businessName: 'El Güero', itemCount: 3 });
+    expect(latestCart(later(1))).toEqual({ slug: 'el-guero', businessName: 'El Güero', itemCount: 3, savedAt: later(1).toISOString() });
 
     saveCart('el-guero', { businessName: 'El Güero', lines: [] }, later(1));
     expect(readCart('el-guero', later(1))).toBeNull();
@@ -140,5 +152,51 @@ describe('savedCart', () => {
     }));
 
     expect(readCart('cafe-luna', now)?.lines).toEqual([{ productId: 'concha', optionIds: [], quantity: 2 }]);
+  });
+
+  // Fase 31J (ADR 0090): the cart of a customer account, which may come from another device.
+  const accountCart = {
+    slug: 'cafe-luna',
+    businessName: 'Café Luna',
+    savedAt: later(1).toISOString(),
+    lines: [
+      { productId: 'latte', optionIds: ['grande'], quantity: 2, notes: 'sin azúcar' },
+      { productId: 'concha', optionIds: [], quantity: 1, notes: null },
+    ],
+    reorderOf: 3,
+    skipped: null,
+  };
+
+  it('takes the cart of the account as the device keeps it, and the one changed last', () => {
+    const fromAccount = fromAccountCart(accountCart);
+    expect(fromAccount).toEqual({
+      businessName: 'Café Luna',
+      savedAt: later(1).toISOString(),
+      lines: [
+        { productId: 'latte', optionIds: ['grande'], quantity: 2, notes: 'sin azúcar' },
+        { productId: 'concha', optionIds: [], quantity: 1 },
+      ],
+      reorderOf: 3,
+    });
+
+    saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'latte', optionIds: [], quantity: 1 }] }, now);
+    const device = readCart('cafe-luna', now);
+    expect(newerCart(device, fromAccount)).toBe(fromAccount);
+    expect(newerCart(device, { ...fromAccount, savedAt: now.toISOString() })).toBe(device);
+    expect(newerCart(device, null)).toBe(device);
+    expect(newerCart(null, fromAccount)).toBe(fromAccount);
+    expect(newerCart(null, null)).toBeNull();
+  });
+
+  it('says the cart left without sending most recently, on this device or in the account', () => {
+    saveCart('el-guero', { businessName: 'El Güero', lines: [{ productId: 'taco', optionIds: [], quantity: 3 }] }, now);
+    const device = latestCart(now);
+
+    expect(latestPendingCart(device, [accountCart])).toEqual({
+      slug: 'cafe-luna', businessName: 'Café Luna', itemCount: 3, savedAt: later(1).toISOString(),
+    });
+    expect(latestPendingCart(device, [{ ...accountCart, savedAt: later(-1).toISOString() }])).toEqual(device);
+    expect(latestPendingCart(null, [{ ...accountCart, lines: [] }])).toBeNull();
+    expect(latestPendingCart(device, [])).toEqual(device);
   });
 });

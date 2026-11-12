@@ -131,8 +131,17 @@ export function clearCart(slug: string): void {
   writeAll(carts);
 }
 
+/** A cart left without sending, for «Tienes un pedido sin enviar en…». */
+export interface PendingCart {
+  slug: string;
+  businessName: string;
+  itemCount: number;
+  /** When it last changed (ISO). */
+  savedAt: string;
+}
+
 /** The cart left the most recently in any store, for «Tienes un pedido sin enviar en…»; null without one. */
-export function latestCart(now = new Date()): { slug: string; businessName: string; itemCount: number } | null {
+export function latestCart(now = new Date()): PendingCart | null {
   const [latest] = Object.keys(readAll())
     .map((slug) => ({ slug, cart: readCart(slug, now) }))
     .filter((entry): entry is { slug: string; cart: SavedCart } => entry.cart !== null)
@@ -142,8 +151,55 @@ export function latestCart(now = new Date()): { slug: string; businessName: stri
       slug: latest.slug,
       businessName: latest.cart.businessName,
       itemCount: latest.cart.lines.reduce((sum, line) => sum + line.quantity, 0),
+      savedAt: latest.cart.savedAt,
     }
     : null;
+}
+
+/** A cart as a customer account keeps it (Fase 31J): its store, when it changed, its lines and «Pedir otra vez». */
+export interface AccountCartLike {
+  slug: string;
+  businessName: string;
+  savedAt: string;
+  lines: Array<{ productId: string; optionIds: string[]; quantity: number; notes?: string | null }>;
+  reorderOf?: number | null;
+  skipped?: number | null;
+}
+
+/** The account's cart as the device keeps it. */
+export function fromAccountCart(cart: AccountCartLike): SavedCart {
+  return {
+    businessName: cart.businessName,
+    savedAt: cart.savedAt,
+    lines: cart.lines.map((line) => ({
+      productId: line.productId,
+      optionIds: [...line.optionIds],
+      quantity: line.quantity,
+      ...(line.notes ? { notes: line.notes } : {}),
+    })).filter(isLine),
+    ...(cart.reorderOf ? { reorderOf: cart.reorderOf } : {}),
+    ...(cart.skipped ? { skipped: cart.skipped } : {}),
+  };
+}
+
+/** Of the cart of this device and the account's, the one changed last (the device's when both changed at once). */
+export function newerCart(device: SavedCart | null, account: SavedCart | null): SavedCart | null {
+  if (!device || !account) return device ?? account;
+  return Date.parse(account.savedAt) > Date.parse(device.savedAt) ? account : device;
+}
+
+/** Of the cart left on this device and the account's, the one changed last, for «Tienes un pedido sin enviar en…». */
+export function latestPendingCart(device: PendingCart | null, account: readonly AccountCartLike[]): PendingCart | null {
+  const candidates: PendingCart[] = account
+    .filter((cart) => cart.lines.length > 0)
+    .map((cart) => ({
+      slug: cart.slug,
+      businessName: cart.businessName,
+      itemCount: cart.lines.reduce((sum, line) => sum + line.quantity, 0),
+      savedAt: cart.savedAt,
+    }));
+  if (device) candidates.push(device);
+  return candidates.sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt))[0] ?? null;
 }
 
 /**

@@ -9,6 +9,10 @@ export type MyAppointmentsScope = Schemas['MyAppointmentsScope'];
 /** Its card is null when it does not show in Explorar now: the contract loses that a reference can be null. */
 export type MyFavoriteBusiness = Omit<Schemas['MyFavoriteBusinessDto'], 'card'> & { card?: Schemas['PublicDirectoryBusinessDto'] | null };
 
+/** A cart the account left in a store (Fase 31J): what was chosen, never a price. */
+export type MyCart = Schemas['MyCartDto'];
+export type MyCartInput = Schemas['SaveMyCartRequest'];
+
 /** The addresses a customer account keeps for its orders (Fase 24B): ten at most. */
 export const MAX_ACCOUNT_ADDRESSES = 10;
 
@@ -53,4 +57,19 @@ export const accountApi = {
 
   /** Takes it out; one that was not there changes nothing. */
   removeFavorite: (slug: string) => apiRequest('delete', '/api/v1/me/favorites/{slug}', { path: { slug } }),
+
+  /**
+   * The carts the account left in the stores (Fase 31J), the last one changed first: changed within a week, in stores
+   * that are published.
+   */
+  getCarts: (signal?: AbortSignal) => apiRequest('get', '/api/v1/me/carts', { signal }),
+
+  /** Keeps the account's cart in a store, all of it; an empty one is forgotten. A store not published is not found. */
+  saveCart: (slug: string, body: MyCartInput) => apiRequest('put', '/api/v1/me/carts/{slug}', { path: { slug }, body }),
+
+  /** The postal code the account gave in Explorar (Fase 31J); none without one. */
+  getPostalCode: (signal?: AbortSignal) => apiRequest('get', '/api/v1/me/postal-code', { signal }),
+
+  /** Keeps the postal code the account gives in Explorar; empty forgets it. */
+  savePostalCode: (postalCode: string) => apiRequest('put', '/api/v1/me/postal-code', { body: { postalCode: postalCode || null } }),
 };

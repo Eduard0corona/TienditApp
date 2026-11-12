@@ -36,6 +36,7 @@ vi.mock('../../api/accountApi', () => ({
   accountApi: {
     getAddresses: vi.fn(), saveAddress: vi.fn(), updateAddress: vi.fn(), deleteAddress: vi.fn(),
     getFavorites: vi.fn(), saveFavorite: vi.fn(), removeFavorite: vi.fn(),
+    getCarts: vi.fn(), saveCart: vi.fn(),
   },
 }));
 
@@ -662,6 +663,62 @@ describe('PublicMenuPage', () => {
       expect(readCart('cafe-luna')).toEqual(expect.objectContaining({ lines: [{ productId: 'p1', optionIds: [], quantity: 3 }] }));
       expect(readCart('cafe-luna')?.reorderOf).toBeUndefined();
       expect(readCart('cafe-luna')?.skipped).toBeUndefined();
+    });
+
+    // Fase 31J (ADR 0090): the cart of a customer account follows them to another device.
+    const accountCart = (quantity: number, savedAt: string) => ({
+      slug: 'cafe-luna', businessName: 'Café Luna', savedAt, lines: [{ productId: 'p1', optionIds: [], quantity, notes: null }],
+    });
+
+    it('brings back the cart the account left on another device when it changed later, and keeps there what changes', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 1 }] }, new Date('2026-10-18T08:00:00Z'));
+      account.getCarts.mockResolvedValue([accountCart(3, '2026-10-18T09:00:00Z')]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 3/ })).toBeInTheDocument();
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: [], quantity: 3 }]);
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 4 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+      // What came from the account is not sent back to it as it was.
+      expect(account.saveCart).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the cart of the device when it changed later, and gives it to the account', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 2 }] });
+      account.getCarts.mockResolvedValue([accountCart(5, '2020-01-01T00:00:00Z')]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toBeInTheDocument();
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 2 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+    });
+
+    it('waits for the session before bringing back a cart, and a business\'s team keeps it only on the device', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 2 }] });
+      api.getMenu.mockResolvedValue(menu());
+
+      const { unmount } = renderPage('/m/cafe-luna', { isAuthenticated: false, isLoading: true, user: null });
+      expect(await screen.findByRole('heading', { name: 'Café Luna', level: 1 })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Ver pedido/ })).not.toBeInTheDocument();
+      unmount();
+
+      renderPage('/m/cafe-luna', signedInAs('TenantAdmin'));
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: [], quantity: 3 }]);
+      expect(account.getCarts).not.toHaveBeenCalled();
+      expect(account.saveCart).not.toHaveBeenCalled();
     });
 
     it('keeps the cart open and what goes in it while the order is on its way', async () => {

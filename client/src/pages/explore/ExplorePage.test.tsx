@@ -17,7 +17,10 @@ vi.mock('../../api/publicDirectoryApi', () => ({
   publicDirectoryApi: { getDirectory: vi.fn(), getProfile: vi.fn(), updateProfile: vi.fn() },
 }));
 vi.mock('../../api/accountApi', () => ({
-  accountApi: { getFavorites: vi.fn(), saveFavorite: vi.fn(), removeFavorite: vi.fn() },
+  accountApi: {
+    getFavorites: vi.fn(), saveFavorite: vi.fn(), removeFavorite: vi.fn(),
+    getCarts: vi.fn(), getPostalCode: vi.fn(), savePostalCode: vi.fn(),
+  },
 }));
 vi.mock('../../hooks/useCustomerAccount', () => ({ useCustomerAccount: vi.fn() }));
 
@@ -26,7 +29,7 @@ const account = vi.mocked(accountApi);
 
 /** Signed in with a customer account: it keeps favorites (Fase 24F). */
 function signInAsCustomer() {
-  vi.mocked(useCustomerAccount).mockReturnValue({ customer: { id: 'u1', firstName: 'Mariana' } as UserProfileDto, signedIn: true });
+  vi.mocked(useCustomerAccount).mockReturnValue({ customer: { id: 'u1', firstName: 'Mariana' } as UserProfileDto, signedIn: true, checking: false });
 }
 
 function product(overrides: Partial<DirectoryProduct>): DirectoryProduct {
@@ -160,9 +163,13 @@ describe('ExplorePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // A visitor unless a test signs in.
-    vi.mocked(useCustomerAccount).mockReturnValue({ customer: null, signedIn: false });
+    vi.mocked(useCustomerAccount).mockReturnValue({ customer: null, signedIn: false, checking: false });
     // The postal code and the carts stay on the device (Fase 24B): each test starts without them.
     window.localStorage.clear();
+    // A customer account keeps neither until a test says so (Fase 31J).
+    account.getCarts.mockResolvedValue([]);
+    account.getPostalCode.mockResolvedValue({ postalCode: null });
+    account.savePostalCode.mockImplementation(async (postalCode) => ({ postalCode: postalCode || null }));
   });
 
   afterEach(() => {
@@ -221,6 +228,62 @@ describe('ExplorePage', () => {
 
     expect(await screen.findByText(/Tienes un pedido sin enviar en/)).toHaveTextContent('Tienes un pedido sin enviar en Taquería El Güero (3 productos).');
     expect(screen.getByRole('link', { name: 'Seguir con el pedido' })).toHaveAttribute('href', '/m/el-guero');
+  });
+
+  it('takes the postal code the customer account keeps, and keeps there the one the customer changes (Fase 31J)', async () => {
+    signInAsCustomer();
+    account.getFavorites.mockResolvedValue([]);
+    account.getPostalCode.mockResolvedValue({ postalCode: '72000' });
+    api.getDirectory.mockResolvedValue(directory([business({})]));
+
+    renderPage();
+
+    expect(await screen.findByText('72000')).toBeInTheDocument();
+    expect(window.localStorage.getItem('tienditapp.postalCode')).toBe('72000');
+    await waitFor(() => expect(api.getDirectory).toHaveBeenLastCalledWith(expect.objectContaining({ postalCode: '72000' }), expect.anything()));
+    expect(account.savePostalCode).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar' }));
+    await userEvent.clear(screen.getByLabelText('Código postal'));
+    await userEvent.type(screen.getByLabelText('Código postal'), '01000');
+    await userEvent.click(screen.getByRole('button', { name: 'Listo' }));
+    await waitFor(() => expect(account.savePostalCode).toHaveBeenCalledWith('01000'));
+    expect(window.localStorage.getItem('tienditapp.postalCode')).toBe('01000');
+  });
+
+  it('gives the customer account the postal code written only on this device, and asks a visitor\'s nothing (Fase 31J)', async () => {
+    window.localStorage.setItem('tienditapp.postalCode', '06600');
+    api.getDirectory.mockResolvedValue(directory([business({})]));
+
+    const { unmount } = renderPage();
+    expect(await screen.findByText('06600')).toBeInTheDocument();
+    expect(account.getPostalCode).not.toHaveBeenCalled();
+    expect(account.getCarts).not.toHaveBeenCalled();
+    unmount();
+
+    signInAsCustomer();
+    account.getFavorites.mockResolvedValue([]);
+    renderPage();
+    await waitFor(() => expect(account.savePostalCode).toHaveBeenCalledWith('06600'));
+    expect(screen.getByText('06600')).toBeInTheDocument();
+  });
+
+  it('reminds the cart the customer account left on another device when it changed later (Fase 31J)', async () => {
+    // The device's, a minute ago; the account's, later.
+    const minuteAgo = new Date(Date.now() - 60_000);
+    saveCart('el-guero', { businessName: 'Taquería El Güero', lines: [{ productId: 'p1', optionIds: [], quantity: 3 }] }, minuteAgo);
+    signInAsCustomer();
+    account.getFavorites.mockResolvedValue([]);
+    account.getCarts.mockResolvedValue([{
+      slug: 'cafe-luna', businessName: 'Café Luna', savedAt: new Date().toISOString(),
+      lines: [{ productId: 'latte', optionIds: [], quantity: 2, notes: null }, { productId: 'concha', optionIds: [], quantity: 1, notes: null }],
+    }]);
+    api.getDirectory.mockResolvedValue(directory([business({})]));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/Tienes un pedido sin enviar en/)).toHaveTextContent('Tienes un pedido sin enviar en Café Luna (3 productos).'));
+    expect(screen.getByRole('link', { name: 'Seguir con el pedido' })).toHaveAttribute('href', '/m/cafe-luna');
   });
 
   it('lists each business with what its menu answers, and opens its menu', async () => {

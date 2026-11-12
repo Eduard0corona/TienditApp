@@ -37,15 +37,18 @@ import { getOptionsLabel, getPriceWithOptions } from '../../utils/productOptions
 import { localPhone } from '../../utils/phones';
 import { readPostalCode } from '../../utils/postalCodePreference';
 import {
+  cartLineKey,
+  fromAccountCart,
+  lineNotes,
   MAX_CART_LINES,
   MAX_LINE_QUANTITY,
-  cartLineKey,
-  lineNotes,
+  newerCart,
   readCart,
   restoreLines,
   saveCart,
   type CartLine,
 } from '../../utils/savedCart';
+import { cartSignature, scheduleAccountCartSave } from '../../utils/accountCartSync';
 import { bookingPath } from '../../utils/onlineBooking';
 import { featuredProducts, mapsUrl, optionGroupsOf, searchMenu, storePageTitle } from '../../utils/storeMenu';
 import { previewBusinessTheme } from '../../utils/theme';
@@ -169,7 +172,7 @@ export default function PublicMenuPage() {
   const [toAddress, setToAddress] = useState(false);
   const [address, setAddress] = useState<PublicDeliveryAddress>(NO_ADDRESS);
   const queryClient = useQueryClient();
-  const { customer, signedIn } = useCustomerAccount();
+  const { customer, signedIn, checking } = useCustomerAccount();
   // At a table there is no heart: the favorites are not asked for.
   const favorites = useFavoriteBusinesses(undefined, { enabled: !atTable });
   // The product of the link, once its menu is fresh (a copy kept from a moment ago may not have it yet, or still have it).
@@ -226,10 +229,25 @@ export default function PublicMenuPage() {
     setPhone((current) => current || localPhone(customer.phoneNumber));
   }
 
-  // The cart this device kept for this store, with what its menu has now (and «Pedir otra vez»), once per store.
-  if (data && restoredFor !== slug) {
+  // The carts the customer account left (Fase 31J): its cart here may come from another device.
+  const accountCarts = useQuery({
+    queryKey: ['me', 'carts'],
+    queryFn: ({ signal }) => accountApi.getCarts(signal),
+    enabled: !!customer && !checking,
+  });
+  // What the account received last of this store's cart: the same cart is not sent again.
+  const accountCartSent = useRef<string | null>(null);
+  // Who the session is, and with an account its carts, are known (or could not be read: the device's then).
+  const accountKnown = !checking && (!customer || accountCarts.isSuccess || accountCarts.isError);
+
+  // The cart this device kept for this store, or the account's when it changed later, with what its menu has now (and
+  // «Pedir otra vez»), once per store.
+  if (data && restoredFor !== slug && accountKnown) {
     setRestoredFor(slug);
-    const saved = readCart(slug);
+    const kept = customer ? accountCarts.data?.find((cart) => cart.slug === slug) ?? null : null;
+    const fromAccount = kept ? fromAccountCart(kept) : null;
+    accountCartSent.current = fromAccount ? cartSignature(fromAccount) : cartSignature({ lines: [] });
+    const saved = newerCart(readCart(slug), fromAccount);
     if (saved) {
       const restored = restoreLines(saved.lines, data.categories.flatMap((item) => item.products));
       setLines(restored.lines);
@@ -313,20 +331,25 @@ export default function PublicMenuPage() {
     tabsRow.scrollTo?.({ left: tab.offsetLeft - (tabsRow.clientWidth - tab.offsetWidth) / 2 });
   }, [activeSection, tabsRow]);
 
-  // The cart stays on this device until it is sent or emptied.
+  // The cart stays on this device until it is sent or emptied, and with a customer account in the account too (Fase 31J),
+  // a moment after its last change: it follows the customer to another device.
   const businessName = data?.businessName;
+  const customerId = customer?.id;
   useEffect(() => {
     if (restoredFor !== slug || !businessName) return;
-    saveCart(slug, {
-      businessName,
-      lines: lines.map((line) => ({
-        productId: line.product.id,
-        optionIds: line.optionIds,
-        quantity: line.quantity,
-        ...(line.notes ? { notes: line.notes } : {}),
-      })),
-    });
-  }, [lines, restoredFor, slug, businessName]);
+    const kept = lines.map((line) => ({
+      productId: line.product.id,
+      optionIds: line.optionIds,
+      quantity: line.quantity,
+      ...(line.notes ? { notes: line.notes } : {}),
+    }));
+    saveCart(slug, { businessName, lines: kept });
+    if (!customerId) return;
+    const signature = cartSignature({ lines: kept });
+    if (signature === accountCartSent.current) return;
+    accountCartSent.current = signature;
+    scheduleAccountCartSave(slug, { lines: kept });
+  }, [lines, restoredFor, slug, businessName, customerId]);
 
   const add = (product: PublicMenuProduct, optionIds: string[], note?: string, quantity = 1) => {
     const lineNote = lineNotes(note);
