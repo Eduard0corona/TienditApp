@@ -67,7 +67,9 @@ public sealed class WhatsAppMediaDownloadHandler : IOutboxEventHandler<WhatsAppM
         {
             path = await KeepAsync(tenantId, kind, mediaId, context, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException && context.IsLastAttempt)
+        // On the last try anything gives it up, a timeout of the storage included; only the outbox stopping (its lease
+        // lost) does not, as another instance takes the message.
+        catch (Exception ex) when (context.IsLastAttempt && !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 "The {MediaKind} of WhatsApp message {MessageId} of tenant {TenantId} could not be kept after its last attempt: {ErrorType}",

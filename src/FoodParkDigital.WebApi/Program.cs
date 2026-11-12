@@ -160,6 +160,16 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(10),
                 QueueLimit = 0
             }));
+    // Writing, changing and deleting a customer's own review (Fase 31K): a new one emails the business's team.
+    options.AddPolicy(MeController.ReviewsRateLimitPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 200 : 10,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0
+            }));
     options.AddPolicy("public-order", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",

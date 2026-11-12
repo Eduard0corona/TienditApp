@@ -117,6 +117,27 @@ public sealed class CrossTenantOnlineOrderAndReviewEmailsSqlServerTests
         Assert.True((await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync(ReviewEmails))).GetProperty("enabled").GetBoolean());
     }
 
+    [SqlServerFact]
+    public async Task APhotoOrAudioOfWhatsApp_ShouldOpenOnlyForWhoRunsTheChatOfItsBusiness()
+    {
+        // Fase 31L (ADR 0092): kept by the outbox in the business's folder, opened through the files endpoint.
+        var mine = await _api.SignUpAsync("medios-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("medios-b", TwoBusinessesApi.FoodBusiness);
+        var key = $"whatsapp/{mine.TenantId}/202611/{Guid.NewGuid()}.ogg";
+        await _api.PrivateFiles.SaveAsync(key, new MemoryStream("OggS\0\u0002"u8.ToArray()), "audio/ogg");
+        var cashier = await CashierAsync(mine);
+
+        var opened = await mine.Client.GetAsync($"/api/v1/files/{key}");
+        Assert.Equal(HttpStatusCode.OK, opened.StatusCode);
+        Assert.Equal("audio/ogg", opened.Content.Headers.ContentType?.MediaType);
+        Assert.True(opened.Headers.CacheControl is { Private: true, NoStore: true }, opened.Headers.CacheControl?.ToString());
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1/files/{key}")).StatusCode);
+        // Whoever does not run the chat (a cashier without the WhatsApp permission) does not open it.
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync($"/api/v1/files/{key}")).StatusCode);
+        // A key the app never creates is like a missing one.
+        Assert.Equal(HttpStatusCode.NotFound, (await mine.Client.GetAsync($"/api/v1/files/whatsapp/{mine.TenantId}/202611/x.exe")).StatusCode);
+    }
+
     /// <summary>The owner's kitchen taking online orders, with its drawer open: its slug and a product.</summary>
     private static async Task<(SignedUp Owner, string Slug, Guid Product)> KitchenAsync(SignedUp owner)
     {

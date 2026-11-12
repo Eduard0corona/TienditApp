@@ -10,6 +10,7 @@ using FoodParkDigital.Application.Tenants.Commands;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
@@ -19,6 +20,12 @@ namespace FoodParkDigital.WebApi.Controllers;
 [Authorize]
 public class MeController : ControllerBase
 {
+    /// <summary>
+    /// Writing, changing and deleting the account's reviews (Fase 31K, ADR 0091): a new review emails the business's team, so
+    /// deleting and writing it again in a loop would flood them. Per address, as the other limits.
+    /// </summary>
+    public const string ReviewsRateLimitPolicy = "my-reviews";
+
     private readonly IMediator _mediator;
 
     public MeController(IMediator mediator)
@@ -141,14 +148,16 @@ public class MeController : ControllerBase
 
     /// <summary>
     /// The carts the customer account left in the stores (Fase 31J), the last one changed first: changed within a week, in
-    /// stores that are active and published. Each keeps what was chosen, never a price.
+    /// stores that are active and published. Each keeps what was chosen, never a price; one without lines was ordered or
+    /// emptied then, and a device that kept it from before forgets its own.
     /// </summary>
     [HttpGet("carts")]
     public async Task<ActionResult<List<MyCartDto>>> GetMyCarts(CancellationToken cancellationToken)
         => Ok(await _mediator.Send(new GetMyCartsQuery(), cancellationToken));
 
     /// <summary>
-    /// Keeps the account's cart in a store, by the slug of its store, all of it; an empty one is forgotten and answers 204.
+    /// Keeps the account's cart in a store, by the slug of its store, all of it; an empty one stays empty (with when, so
+    /// another device does not bring it back) and answers 204.
     /// </summary>
     [HttpPut("carts/{slug}")]
     public async Task<ActionResult<MyCartDto>> SaveMyCart(string slug, [FromBody] SaveMyCartRequest request, CancellationToken cancellationToken)
@@ -165,7 +174,7 @@ public class MeController : ControllerBase
         return result.Value is null ? NoContent() : Ok(result.Value);
     }
 
-    /// <summary>Forgets the account's cart in a store; one that was not there changes nothing.</summary>
+    /// <summary>Empties the account's cart in a store (it stays empty, with when); one that was not there changes nothing.</summary>
     [HttpDelete("carts/{slug}")]
     public async Task<IActionResult> DeleteMyCart(string slug, CancellationToken cancellationToken)
     {
@@ -204,6 +213,7 @@ public class MeController : ControllerBase
     /// the account (403 before).
     /// </summary>
     [HttpPut("reviews/{slug}")]
+    [EnableRateLimiting(ReviewsRateLimitPolicy)]
     public async Task<ActionResult<MyReviewDto>> SaveMyReview(string slug, [FromBody] MyReviewRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new SaveMyReviewCommand(slug, request.Rating, request.Comment), cancellationToken);
@@ -212,6 +222,7 @@ public class MeController : ControllerBase
 
     /// <summary>Deletes the account's review of a business; none there changes nothing.</summary>
     [HttpDelete("reviews/{slug}")]
+    [EnableRateLimiting(ReviewsRateLimitPolicy)]
     public async Task<IActionResult> DeleteMyReview(string slug, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new DeleteMyReviewCommand(slug), cancellationToken);

@@ -94,6 +94,27 @@ public class WhatsAppMediaDownloadClientTests
     }
 
     [Fact]
+    public async Task ADownloadThatStalls_ShouldBeTriedAgainAfterItsDeadline_AndTheLeaseLostStillStopsIt()
+    {
+        var stalled = new Routes()
+            .On("https://graph.facebook.com/v21.0/63", HttpStatusCode.OK, $$"""{"url":"{{FileUrl}}","file_size":3}""")
+            .Stalling(FileUrl);
+        var client = new WhatsAppCloudClient(stalled, new TestHostEnvironment(Environments.Production), NullLogger<WhatsAppCloudClient>.Instance)
+        {
+            MediaDownloadTimeout = TimeSpan.FromMilliseconds(300)
+        };
+
+        // The content stops coming: after its deadline it is tried again later, and whoever waits for it goes on.
+        var download = await client.DownloadMediaAsync(Account, "63", 1024, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal(WhatsAppMediaDownloadOutcome.Transient, download.Outcome);
+
+        // The outbox stopping it (its lease lost) is not a failure of Meta: it stops.
+        using var lease = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        var slow = new WhatsAppCloudClient(stalled, new TestHostEnvironment(Environments.Production), NullLogger<WhatsAppCloudClient>.Instance);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => slow.DownloadMediaAsync(Account, "63", 1024, lease.Token).WaitAsync(TimeSpan.FromSeconds(30)));
+    }
+
+    [Fact]
     public async Task TheDownloader_ShouldUseTheWhatsAppOfTheBusinessInScope_AndNothingWithoutIt()
     {
         var tenantId = Guid.NewGuid();
@@ -128,6 +149,7 @@ public class WhatsAppMediaDownloadClientTests
     private sealed class Routes : HttpMessageHandler, IHttpClientFactory
     {
         private readonly Dictionary<string, (HttpStatusCode Status, byte[] Body, bool WithLength)> _routes = new();
+        private readonly HashSet<string> _stalling = [];
 
         public bool Fail { get; init; }
 
@@ -141,6 +163,13 @@ public class WhatsAppMediaDownloadClientTests
             return this;
         }
 
+        /// <summary>Answers its headers, and then its content never comes.</summary>
+        public Routes Stalling(string url)
+        {
+            _stalling.Add(url);
+            return this;
+        }
+
         public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -148,6 +177,8 @@ public class WhatsAppMediaDownloadClientTests
             Requests.Add((request.RequestUri!, request.Headers.Authorization?.ToString()));
             if (Fail)
                 throw new HttpRequestException("Sin conexión");
+            if (_stalling.Contains(request.RequestUri!.ToString()))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new StallingStream()) });
             if (!_routes.TryGetValue(request.RequestUri!.ToString(), out var route))
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
 
@@ -156,6 +187,21 @@ public class WhatsAppMediaDownloadClientTests
                 : new StreamContent(new UnknownLengthStream(route.Body));
             return Task.FromResult(new HttpResponseMessage(route.Status) { Content = content });
         }
+    }
+
+    /// <summary>A stream whose content never comes, as a connection that stalls: it waits until it is stopped.</summary>
+    private sealed class StallingStream : MemoryStream
+    {
+        public override bool CanSeek => false;
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
     }
 
     /// <summary>A stream that does not say how long it is, as a response without Content-Length.</summary>

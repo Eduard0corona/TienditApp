@@ -128,6 +128,15 @@ public class WhatsAppMediaFlowTests
         await HandleAsync(fixture, tenantId, message, new Downloader(WhatsAppMediaDownload.Transient), storage, lastAttempt: true);
         Assert.Equal(WhatsAppMediaState.Unavailable, (await StoredAsync(fixture, message)).MediaState);
         Assert.Empty(storage.Saved);
+
+        // The storage timing out is tried again too, and on the last attempt it gives up as well: never «Descargando…» forever.
+        var slowStorage = new MemoryStorage { TimesOut = true };
+        var ogg = "OggS\0\u0002"u8.ToArray();
+        var (_, late) = await MediaMessageAsync(fixture, WhatsAppMediaKind.Audio, tenantId);
+        await Assert.ThrowsAsync<TaskCanceledException>(() => HandleAsync(fixture, tenantId, late, new Downloader(ogg), slowStorage));
+        Assert.Equal(WhatsAppMediaState.Pending, (await StoredAsync(fixture, late)).MediaState);
+        await HandleAsync(fixture, tenantId, late, new Downloader(ogg), slowStorage, lastAttempt: true);
+        Assert.Equal(WhatsAppMediaState.Unavailable, (await StoredAsync(fixture, late)).MediaState);
     }
 
     [Fact]
@@ -317,8 +326,13 @@ public class WhatsAppMediaFlowTests
 
         public List<(string Key, byte[] Bytes, string ContentType)> Saved { get; } = [];
 
+        /// <summary>Its SDK gives up waiting, as a storage that does not answer.</summary>
+        public bool TimesOut { get; init; }
+
         public async Task SaveAsync(string key, Stream content, string contentType, CancellationToken cancellationToken = default)
         {
+            if (TimesOut)
+                throw new TaskCanceledException("The storage did not answer in time.");
             using var buffer = new MemoryStream();
             await content.CopyToAsync(buffer, cancellationToken);
             _files[key] = buffer.ToArray();

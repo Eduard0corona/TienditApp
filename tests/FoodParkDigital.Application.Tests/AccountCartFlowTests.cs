@@ -20,12 +20,13 @@ namespace FoodParkDigital.Application.Tests;
 /// <summary>
 /// The cart and the postal code of a customer account (Fase 31J, ADR 0090): they follow the customer to another device. The
 /// account keeps a cart per store, only its own, the most recent ten of the last week, in stores that are published; an
-/// order of the account empties the cart of its store. Only a customer account keeps them.
+/// order of the account empties the cart of its store. An emptied cart stays, empty and with when, so a device that kept it
+/// from before forgets its own instead of sending it back. Only a customer account keeps them.
 /// </summary>
 public class AccountCartFlowTests
 {
     [Fact]
-    public async Task Cart_ShouldBeKept_Replaced_AndForgotten_WithWhatWasChosen()
+    public async Task Cart_ShouldBeKept_Replaced_AndEmptied_WithWhatWasChosen()
     {
         await using var fixture = SalesTestFixture.Create();
         var (_, tacos) = await StoreAsync(fixture, "demo");
@@ -48,12 +49,20 @@ public class AccountCartFlowTests
         cart = Assert.Single(await CartsAsync(fixture));
         Assert.Equal((5, (string?)null, SalesTestFixture.Now.AddHours(2), (int?)null), (cart.Lines.Single().Quantity, cart.Lines.Single().Notes, cart.SavedAt, cart.ReorderOf));
 
-        // Emptied, it is forgotten.
+        // Emptied, it stays empty with when: a device that kept it from before (older) forgets its own.
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddHours(3);
         var emptied = await SaveAsync(fixture, "demo", []);
         Assert.True(emptied.IsSuccess, emptied.Error);
         Assert.Null(emptied.Value);
-        Assert.Empty(await CartsAsync(fixture));
-        Assert.Empty(await fixture.Context.AccountCarts.ToListAsync());
+        cart = Assert.Single(await CartsAsync(fixture));
+        Assert.Equal(("demo", SalesTestFixture.Now.AddHours(3), 0, (int?)null), (cart.Slug, cart.SavedAt, cart.Lines.Count, cart.ReorderOf));
+        Assert.Empty((await fixture.Context.AccountCarts.SingleAsync()).Lines);
+
+        // An emptied store that had none keeps none.
+        var (_, cafe) = await StoreAsync(fixture, "cafe");
+        Assert.True((await SaveAsync(fixture, "cafe", [])).IsSuccess);
+        Assert.Equal(1, await fixture.Context.AccountCarts.CountAsync());
+        Assert.NotEqual(Guid.Empty, cafe.Id);
     }
 
     [Fact]
@@ -111,10 +120,18 @@ public class AccountCartFlowTests
         Assert.DoesNotContain("tienda-01", (await CartsAsync(fixture)).Select(c => c.Slug));
         await SaveAsync(fixture, "tienda-10", [Line(stores[10].Product.Id, 3)]);
         Assert.Equal(AccountCart.MaxPerAccount - 1, await fixture.Context.AccountCarts.CountAsync());
+
+        // An emptied one counts as the device's would, and goes too after a week.
+        await SaveAsync(fixture, "tienda-02", []);
+        Assert.Contains("tienda-02", (await CartsAsync(fixture)).Select(c => c.Slug));
+        fixture.Clock.UtcNow = fixture.Clock.UtcNow.AddDays(AccountCart.FreshDays);
+        Assert.Empty(await CartsAsync(fixture));
+        await SaveAsync(fixture, "tienda-03", [Line(stores[3].Product.Id, 1)]);
+        Assert.Equal([stores[3].Tenant.Id], await fixture.Context.AccountCarts.Select(c => c.BusinessId).ToListAsync());
     }
 
     [Fact]
-    public async Task Cart_OfAStoreSuspendedOrUnpublished_ShouldBeLeftOut_UntilItIsBack_AndStillBeForgotten()
+    public async Task Cart_OfAStoreSuspendedOrUnpublished_ShouldBeLeftOut_UntilItIsBack_AndStillBeEmptied()
     {
         await using var fixture = SalesTestFixture.Create();
         var (store, tacos) = await StoreAsync(fixture, "demo");
@@ -132,8 +149,10 @@ public class AccountCartFlowTests
 
         settings.UpdateOnlineMenu(OnlineMenuMode.Off);
         await fixture.Context.SaveChangesAsync();
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddMinutes(5);
         Assert.True((await DeleteAsync(fixture, " DEMO ")).IsSuccess);
-        Assert.Empty(await fixture.Context.AccountCarts.ToListAsync());
+        var emptied = await fixture.Context.AccountCarts.AsNoTracking().SingleAsync();
+        Assert.Equal((0, SalesTestFixture.Now.AddMinutes(5)), (emptied.Lines.Count, emptied.SavedAt));
     }
 
     [Fact]
@@ -150,17 +169,23 @@ public class AccountCartFlowTests
         await SaveAsync(fixture, "demo", [Line(tacos.Id, 2)]);
         await SaveAsync(fixture, "cafe", [Line(cafe.Id, 1)]);
 
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddMinutes(10);
         var receipt = await PlaceAsync(fixture, tacos);
 
         Assert.True(receipt.IsSuccess, receipt.Error);
-        Assert.Equal(["cafe"], (await CartsAsync(fixture)).Select(c => c.Slug));
+        // Ordered, it stays empty with when: the device that kept it from before forgets its own.
+        var carts = await CartsAsync(fixture);
+        Assert.Equal([("cafe", 1), ("demo", 0)], carts.Select(c => (c.Slug, c.Lines.Count)).OrderBy(c => c.Item1));
+        Assert.Equal(SalesTestFixture.Now.AddMinutes(10), carts.Single(c => c.Slug == "demo").SavedAt);
         // Beto's cart in the same store is his.
-        Assert.Equal(2, await fixture.Context.AccountCarts.CountAsync());
+        SignIn(fixture, beto);
+        Assert.Equal(1, Assert.Single(await CartsAsync(fixture)).Lines.Single().Quantity);
 
         // A guest order empties no account's cart.
         fixture.CurrentUser.UserId = null;
         Assert.True((await PlaceAsync(fixture, tacos, phone: "55 8765 4321")).IsSuccess);
-        Assert.Equal(2, await fixture.Context.AccountCarts.CountAsync());
+        SignIn(fixture, beto);
+        Assert.Single(Assert.Single(await CartsAsync(fixture)).Lines);
     }
 
     [Fact]
@@ -190,7 +215,7 @@ public class AccountCartFlowTests
     }
 
     [Fact]
-    public void Validator_ShouldRefuse_ALineThatCannotBe_AndMoreThanFiftyLines()
+    public void Validator_ShouldRefuse_ALineThatCannotBe_MoreThanFiftyLines_AndMoreThanItsOptions()
     {
         var validator = new SaveMyCartCommandValidator();
         SaveMyCartCommand With(params MyCartLineDto[] lines) => new() { Slug = "demo", Lines = [.. lines] };
@@ -199,11 +224,20 @@ public class AccountCartFlowTests
         foreach (var bad in new[]
         {
             Line(Guid.Empty, 1), Line(Guid.NewGuid(), 0), Line(Guid.NewGuid(), 100), Line(Guid.NewGuid(), 1, new string('a', 301)),
-            new MyCartLineDto { ProductId = Guid.NewGuid(), Quantity = 1, OptionIds = null! }
+            new MyCartLineDto { ProductId = Guid.NewGuid(), Quantity = 1, OptionIds = null! },
+            // {"lines":[null]}: a 400, not a failure of the server.
+            null!
         })
             Assert.Contains(AccountCart.BadLineMessage, validator.Validate(With(bad)).Errors.Select(e => e.ErrorMessage));
         var fiftyOne = Enumerable.Range(0, AccountCart.MaxLines + 1).Select(_ => Line(Guid.NewGuid(), 1)).ToArray();
         Assert.Contains(AccountCart.TooManyLinesMessage, validator.Validate(With(fiftyOne)).Errors.Select(e => e.ErrorMessage));
+
+        // The options of all its lines: up to 500, however they are spread.
+        MyCartLineDto WithOptions(int count) => Line(Guid.NewGuid(), 1, null, [.. Enumerable.Range(0, count).Select(_ => Guid.NewGuid())]);
+        var full = Enumerable.Range(0, 2).Select(_ => WithOptions(AccountCart.MaxOptionsPerCart / 2)).ToArray();
+        Assert.True(validator.Validate(With(full)).IsValid);
+        var over = full.Append(WithOptions(1)).ToArray();
+        Assert.Equal([AccountCart.TooManyOptionsMessage], validator.Validate(With(over)).Errors.Select(e => e.ErrorMessage));
     }
 
     private static MyCartLineDto Line(Guid productId, int quantity, string? notes = null, params Guid[] options)

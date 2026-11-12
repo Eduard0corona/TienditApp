@@ -85,6 +85,34 @@ public class AccountCartTests
     }
 
     [Fact]
+    public void Replace_ShouldTake_UpTo500Options_AmongAllItsLines()
+    {
+        List<Guid> Options(int count) => Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
+        var full = Enumerable.Range(0, 5).Select(_ => new AccountCartLine(Guid.NewGuid(), Options(AccountCart.MaxOptionsPerCart / 5), 1, null)).ToList();
+        var cart = AccountCart.Create(Account, Store, full, null, null, Now);
+
+        var refused = Assert.Throws<DomainException>(() => cart.Replace([.. full, new AccountCartLine(Taco, Options(1), 1, null)], null, null, Now.AddHours(1)));
+
+        Assert.Equal(AccountCart.TooManyOptionsMessage, refused.Message);
+        Assert.Equal((5, Now), (cart.Lines.Count, cart.SavedAt));
+    }
+
+    [Fact]
+    public void Empty_ShouldKeep_TheCartEmpty_WithWhenItWasEmptied_ForAWeek()
+    {
+        var cart = AccountCart.Create(Account, Store, [Line(Taco, 2)], 3, 1, Now);
+
+        cart.Empty(Now.AddHours(2));
+
+        Assert.Empty(cart.Lines);
+        Assert.Equal(((int?)null, (int?)null, Now.AddHours(2)), (cart.ReorderOf, cart.Skipped, cart.SavedAt));
+        // Not offered, but a device still compares its own with it for a week.
+        Assert.False(cart.IsFresh(Now.AddHours(2)));
+        Assert.True(cart.IsRecent(Now.AddHours(2).AddDays(AccountCart.FreshDays).AddTicks(-1)));
+        Assert.False(cart.IsRecent(Now.AddHours(2).AddDays(AccountCart.FreshDays)));
+    }
+
+    [Fact]
     public void Create_ShouldNeed_AnAccountAndAStore()
     {
         Assert.Equal(AccountCart.AccountRequiredMessage,

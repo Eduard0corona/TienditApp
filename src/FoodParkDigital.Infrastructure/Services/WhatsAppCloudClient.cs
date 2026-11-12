@@ -171,7 +171,8 @@ public sealed class WhatsAppCloudClient
     /// <paramref name="maxBytes"/>. The token only goes to Meta's own hosts over https. What Meta refuses or no longer has
     /// is <see cref="WhatsAppMediaDownloadOutcome.Unavailable"/>; a timeout, throttling or a failure of theirs,
     /// <see cref="WhatsAppMediaDownloadOutcome.Transient"/>. Only the status and Meta's error code reach the logs, never the
-    /// file or its address.
+    /// file or its address. All of it takes <see cref="MediaDownloadTimeout"/> at most, the content read included (the
+    /// client's timeouts stop at the headers): a download that stalls is tried again later, and the outbox goes on.
     /// </summary>
     public async Task<WhatsAppMediaDownload> DownloadMediaAsync(
         WhatsAppSenderAccount account,
@@ -179,6 +180,8 @@ public sealed class WhatsAppCloudClient
         long maxBytes,
         CancellationToken cancellationToken)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(MediaDownloadTimeout);
         try
         {
             var client = _httpClientFactory.CreateClient(HttpClientName);
@@ -186,8 +189,8 @@ public sealed class WhatsAppCloudClient
             using (var request = new HttpRequestMessage(HttpMethod.Get, $"{GraphApiBaseUrl}/{Uri.EscapeDataString(mediaId)}"))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
-                using var response = await client.SendAsync(request, cancellationToken);
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                using var response = await client.SendAsync(request, deadline.Token);
+                var body = await response.Content.ReadAsStringAsync(deadline.Token);
                 if (!response.IsSuccessStatusCode)
                     return MediaFailure("address", response.StatusCode, body);
 
@@ -204,17 +207,17 @@ public sealed class WhatsAppCloudClient
 
             using var download = new HttpRequestMessage(HttpMethod.Get, address);
             download.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
-            using var file = await client.SendAsync(download, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var file = await client.SendAsync(download, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             if (!file.IsSuccessStatusCode)
                 return MediaFailure("file", file.StatusCode, null);
             if (file.Content.Headers.ContentLength > maxBytes)
                 return WhatsAppMediaDownload.Unavailable;
 
-            await using var stream = await file.Content.ReadAsStreamAsync(cancellationToken);
+            await using var stream = await file.Content.ReadAsStreamAsync(deadline.Token);
             using var buffer = new MemoryStream();
             var chunk = new byte[81920];
             int read;
-            while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
+            while ((read = await stream.ReadAsync(chunk, deadline.Token)) > 0)
             {
                 // Bigger than its size said: it is not kept, and the rest is not read.
                 if (buffer.Length + read > maxBytes)
@@ -244,6 +247,9 @@ public sealed class WhatsAppCloudClient
             LogRedaction.GetProviderErrorCode(body));
         return IsTransientStatus((int)status) ? WhatsAppMediaDownload.Transient : WhatsAppMediaDownload.Unavailable;
     }
+
+    /// <summary>The most a download of a file of a customer takes, its address and its content.</summary>
+    internal TimeSpan MediaDownloadTimeout { get; init; } = TimeSpan.FromMinutes(2);
 
     /// <summary>Meta's servers of WhatsApp's files: only there goes the token.</summary>
     internal static bool IsMetaMediaHost(Uri url)

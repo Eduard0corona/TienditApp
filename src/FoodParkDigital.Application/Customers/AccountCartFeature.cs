@@ -22,8 +22,9 @@ public class MyCartDto
     /// <summary>Its store: /m/{slug}.</summary>
     public string Slug { get; set; } = null!;
     public string BusinessName { get; set; } = null!;
-    /// <summary>When the customer last changed it, on whatever device.</summary>
+    /// <summary>When the customer last changed it, on whatever device (or ordered or emptied it).</summary>
     public DateTimeOffset SavedAt { get; set; }
+    /// <summary>None when it was ordered or emptied: a device that kept it from before forgets its own.</summary>
     public List<MyCartLineDto> Lines { get; set; } = [];
     /// <summary>Filled by «Pedir otra vez»: how many products the order had.</summary>
     public int? ReorderOf { get; set; }
@@ -47,16 +48,18 @@ public class MyPostalCodeDto
 }
 
 /// <summary>
-/// The carts the signed-in customer account left in the stores, the last one changed first: changed within a week, with
-/// something in them, in stores that are active and published (one suspended or unpublished is left out until it is back).
-/// None for an account of a business's team.
+/// The carts the signed-in customer account left in the stores, the last one changed first: changed within a week, in stores
+/// that are active and published (one suspended or unpublished is left out until it is back). One without lines was ordered
+/// or emptied then, on whatever device: a device that kept it from before forgets its own. None for an account of a
+/// business's team.
 /// </summary>
 [RequiresAuthentication]
 public record GetMyCartsQuery : IRequest<List<MyCartDto>>;
 
 /// <summary>
-/// Keeps the cart of the signed-in customer account in a store, all of it: what it had is replaced, and an empty one is
-/// forgotten (the answer is then none). The account keeps its <see cref="AccountCart.MaxPerAccount"/> most recent carts.
+/// Keeps the cart of the signed-in customer account in a store, all of it: what it had is replaced, and an empty one stays
+/// empty, with when (the answer is then none). The account keeps its <see cref="AccountCart.MaxPerAccount"/> most recent
+/// carts.
 /// </summary>
 [RequiresAuthentication]
 public record SaveMyCartCommand : IRequest<Result<MyCartDto?>>
@@ -67,7 +70,10 @@ public record SaveMyCartCommand : IRequest<Result<MyCartDto?>>
     public int? Skipped { get; init; }
 }
 
-/// <summary>Forgets the cart of the signed-in customer account in a store; one that was not there changes nothing.</summary>
+/// <summary>
+/// Empties the cart of the signed-in customer account in a store (it stays, empty, with when); one that was not there changes
+/// nothing.
+/// </summary>
 [RequiresAuthentication]
 public record DeleteMyCartCommand(string Slug) : IRequest<Result>;
 
@@ -85,8 +91,13 @@ public class SaveMyCartCommandValidator : AbstractValidator<SaveMyCartCommand>
     {
         RuleFor(x => x.Slug).NotEmpty().MaximumLength(FavoriteBusinessRules.MaxSlugLength);
         RuleFor(x => x.Lines).NotNull();
-        RuleFor(x => x.Lines.Count).LessThanOrEqualTo(AccountCart.MaxLines).WithMessage(AccountCart.TooManyLinesMessage);
-        RuleForEach(x => x.Lines).ChildRules(line =>
+        RuleFor(x => x.Lines.Count).LessThanOrEqualTo(AccountCart.MaxLines).WithMessage(AccountCart.TooManyLinesMessage)
+            .When(x => x.Lines is not null);
+        RuleFor(x => x.Lines.Sum(line => line == null || line.OptionIds == null ? 0 : line.OptionIds.Count))
+            .LessThanOrEqualTo(AccountCart.MaxOptionsPerCart).WithMessage(AccountCart.TooManyOptionsMessage)
+            .OverridePropertyName(nameof(SaveMyCartCommand.Lines))
+            .When(x => x.Lines is not null);
+        RuleForEach(x => x.Lines).NotNull().WithMessage(AccountCart.BadLineMessage).ChildRules(line =>
         {
             line.RuleFor(l => l.ProductId).NotEmpty().WithMessage(AccountCart.BadLineMessage);
             line.RuleFor(l => l.Quantity).InclusiveBetween(1, AccountCart.MaxLineQuantity).WithMessage(AccountCart.BadLineMessage);
@@ -151,13 +162,14 @@ public class AccountCartHandlers :
 
         var now = _clock.UtcNow;
         var since = now.AddDays(-AccountCart.FreshDays);
+        // The emptied ones too: a device compares its own with them.
         var carts = (await _context.AccountCarts
                 .AsNoTracking()
                 .Where(c => c.UserId == account.Id && c.SavedAt > since)
                 .OrderByDescending(c => c.SavedAt).ThenBy(c => c.Id)
                 .Take(AccountCart.MaxPerAccount)
                 .ToListAsync(cancellationToken))
-            .Where(c => c.IsFresh(now))
+            .Where(c => c.IsRecent(now))
             .ToList();
         if (carts.Count == 0)
             return [];
@@ -221,9 +233,10 @@ public class AccountCartHandlers :
         var cart = carts.FirstOrDefault(c => c.BusinessId == businessId);
         if (lines.Count == 0)
         {
+            // It stays, empty, with when: another device that kept it from before forgets its own instead of sending it back.
             if (cart is not null)
             {
-                _context.AccountCarts.Remove(cart);
+                cart.Empty(now);
                 await _context.SaveChangesAsync(cancellationToken);
             }
             return null;
@@ -239,11 +252,12 @@ public class AccountCartHandlers :
             cart.Replace(lines, request.ReorderOf, request.Skipped, now);
         }
 
-        // The account keeps its most recent carts, as a device: the ones over a week old and the oldest past the most go.
+        // The account keeps its most recent carts, as a device: the ones over a week old (emptied or not) and the oldest past
+        // the most go.
         var others = carts.Where(c => c != cart).OrderByDescending(c => c.SavedAt).ThenBy(c => c.Id).ToList();
         foreach (var (old, index) in others.Select((old, index) => (old, index)))
         {
-            if (!old.IsFresh(now) || index >= AccountCart.MaxPerAccount - 1)
+            if (!old.IsRecent(now) || index >= AccountCart.MaxPerAccount - 1)
                 _context.AccountCarts.Remove(old);
         }
         await _context.SaveChangesAsync(cancellationToken);
@@ -264,7 +278,8 @@ public class AccountCartHandlers :
         if (cart is null)
             return Result.Success();
 
-        _context.AccountCarts.Remove(cart);
+        // It stays, empty, with when (as a save of nothing): another device does not bring it back.
+        cart.Empty(_clock.UtcNow);
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

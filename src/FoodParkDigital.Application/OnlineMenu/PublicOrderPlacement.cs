@@ -183,20 +183,21 @@ internal sealed class PublicOrderPlacement
         if (accountId is { } account && request.Delivery is not null)
             await RememberAddressAsync(account, request, now, cancellationToken);
         if (accountId is { } owner)
-            await ForgetCartAsync(owner, tenant.Id, cancellationToken);
+            await ForgetCartAsync(owner, tenant.Id, now, cancellationToken);
         order.IssueTrackingToken(OrderTracking.NewToken());
         return accepted;
     }
 
     /// <summary>
-    /// The cart the account left in this store is ordered now (Fase 31J, ADR 0090): it goes with the order, whatever device
-    /// it was left on, as the store forgets the one of the device. Saved with the order.
+    /// The cart the account left in this store is ordered now (Fase 31J, ADR 0090): it is emptied, whatever device it was
+    /// left on, as the store forgets the one of the device; it stays, empty and with when, so another device that kept it
+    /// from before forgets its own instead of sending it back. Saved with the order. Only one already there: a new row could
+    /// meet one another device saves at the same time, and the order would fail for it.
     /// </summary>
-    private async Task ForgetCartAsync(Guid accountId, Guid businessId, CancellationToken cancellationToken)
+    private async Task ForgetCartAsync(Guid accountId, Guid businessId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var cart = await _context.AccountCarts.FirstOrDefaultAsync(c => c.UserId == accountId && c.BusinessId == businessId, cancellationToken);
-        if (cart is not null)
-            _context.AccountCarts.Remove(cart);
+        cart?.Empty(now);
     }
 
     /// <summary>

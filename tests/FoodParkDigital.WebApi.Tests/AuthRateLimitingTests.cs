@@ -39,6 +39,16 @@ public class AuthRateLimitingTests
         Assert.Null(PolicyOf(controller, action));
     }
 
+    [Theory]
+    [InlineData(nameof(MeController.SaveMyReview))]
+    [InlineData(nameof(MeController.DeleteMyReview))]
+    public void ReviewsOfTheAccount_ShouldBeRateLimited_AsANewOneEmailsTheBusiness(string action)
+    {
+        // Deleting and writing again in a loop would flood the team's inbox (Fase 31K, ADR 0091).
+        Assert.Equal(MeController.ReviewsRateLimitPolicy, PolicyOf(typeof(MeController), action));
+        Assert.Null(PolicyOf(typeof(MeController), nameof(MeController.GetMyReviews)));
+    }
+
     private static string? PolicyOf(Type controller, string action)
     {
         var method = controller.GetMethod(action)

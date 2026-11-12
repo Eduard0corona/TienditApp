@@ -43,9 +43,11 @@ SELECT cc.[name] AS [Restriccion], cc.[definition] AS [Regla]
 FROM sys.check_constraints cc
 WHERE cc.[name] = N'CK_WhatsAppMessages_Media';
 
--- 3. Antes de rollback.sql (detiene la 31J): cuántos carritos guardaron las cuentas de cliente y
---    cuántas guardaron su código postal. Justo después de aplicar los dos son 0. rollback.sql se
---    detiene con el error 50060, sin cambiar nada de la 31J, mientras alguno no sea 0: se perderían.
+-- 3. Antes de rollback.sql (detiene la 31J): cuántos carritos guardaron las cuentas de cliente
+--    (CarritosVaciados: de ellos, los que ya se pidieron o vaciaron; quedan vacíos una semana para que
+--    otro dispositivo no los vuelva a llenar) y cuántas guardaron su código postal. Justo después de
+--    aplicar son 0. rollback.sql se detiene con el error 50060, sin cambiar nada de la 31J, mientras
+--    Carritos o CodigosPostales no sea 0: se perderían.
 --    Para revertir de todos modos, guarda esta salida y solo entonces bórralos:
 --        DELETE FROM [AccountCarts];
 --        UPDATE [AspNetUsers] SET [PostalCode] = NULL WHERE [PostalCode] IS NOT NULL;
@@ -53,6 +55,7 @@ WHERE cc.[name] = N'CK_WhatsAppMessages_Media';
 IF OBJECT_ID(N'dbo.AccountCarts', N'U') IS NOT NULL
     EXEC(N'SELECT
         (SELECT COUNT(*) FROM [AccountCarts]) AS [Carritos],
+        (SELECT COUNT(*) FROM [AccountCarts] WHERE [Lines] = N''[]'') AS [CarritosVaciados],
         (SELECT COUNT(DISTINCT [UserId]) FROM [AccountCarts]) AS [CuentasConCarrito],
         (SELECT COUNT(*) FROM [AspNetUsers] WHERE [PostalCode] IS NOT NULL) AS [CodigosPostales];');
 

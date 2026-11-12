@@ -22,7 +22,7 @@ El dueño del producto pidió avanzar los puntos de la lista sin esperar su resp
    - Un correo por persona en el outbox, que antes de mandarse revisa que el pedido siga esperando y que la persona siga recibiéndolos y pueda confirmar pedidos.
    - Dice quién pidió, el folio y el total, que lleva más de 15 minutos y lo de la media hora, con el enlace a Pedidos. Nunca el teléfono, la dirección ni lo que pidió.
 2. **Correo de cada reseña nueva:**
-   - La primera reseña de una cuenta en un negocio (`BusinessReview.Write`) lo avisa; editarla o responderla no.
+   - Escribir una reseña (`BusinessReview.Write`) lo avisa; editarla o responderla no. Una cuenta tiene una reseña por negocio, pero puede borrarla y escribirla otra vez, y cada vez que la escribe es nueva: por eso escribir, editar y borrar la reseña propia tiene un límite (`PUT` y `DELETE /api/v1/me/reviews/{slug}`, política `my-reviews`: 10 por hora desde una misma dirección), y borrar y escribir en bucle no llena el correo del equipo.
    - **Le llega a sus dueños y administradores,** que son quienes leen y responden las reseñas, con una opción propia (`TenantUser.ReviewEmails`): los dueños hasta que eligen. Se elige en Mi perfil (`GET` y `PUT /api/v1/reviews/emails`) y quien administra el equipo la elige por los demás, menos por el dueño, con el aviso de la 30A.
    - Un correo por persona en el outbox, que revisa que la reseña siga publicada (ni borrada ni oculta), que se escribió hace un día o menos, y que la persona siga recibiéndolos y sea dueña o administradora.
    - Dice las estrellas, el comentario como lo escribió (en una línea y codificado) y el nombre corto con que la tienda muestra al autor, con el enlace a Reseñas. Nunca su cuenta ni su correo.
@@ -38,5 +38,6 @@ El dueño del producto pidió avanzar los puntos de la lista sin esperar su resp
   - **La lectura de qué negocios tienen alguno** recorre los pedidos sin un índice por estado: se lee con el índice de `TenantId` y `Status`, cada pasada. Un índice filtrado pide otra migración y la 30B lo midió más lento para otras lecturas.
   - **Quien quiere los cancelados pero no el recordatorio** no lo puede separar: es una sola opción.
   - **Una reseña editada** (de 5 a 1 estrella, por ejemplo) no se avisa otra vez; tampoco los reportes, que esperan la decisión del dueño.
+  - **Borrar y escribir de nuevo** avisa otra vez, hasta el límite por dirección: el borrado no deja rastro con qué reconocer que es la misma cuenta. Un límite por cuenta pide leer la sesión antes que los límites o guardar el borrado (deuda técnica).
   - **Sin WhatsApp ni notificaciones del navegador:** solo correo, como los demás avisos.
-- **Decisiones por omisión** (sin preferencia expresa del dueño): reutilizar la opción de los pedidos en línea en lugar de una nueva; recordar solo hasta la media hora; avisar solo la primera reseña; los dueños reciben los dos hasta que eligen.
+- **Decisiones por omisión** (sin preferencia expresa del dueño): reutilizar la opción de los pedidos en línea en lugar de una nueva; recordar solo hasta la media hora; avisar cada reseña escrita (no las ediciones); los dueños reciben los dos hasta que eligen.
