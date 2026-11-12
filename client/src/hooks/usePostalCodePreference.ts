@@ -10,7 +10,7 @@ const ACCOUNT_POSTAL_CODE_KEY = ['me', 'postal-code'];
  * The postal code Explorar answers for («Entregar en…», Fase 24B), remembered on this device and, with a customer account,
  * in the account (Fase 31J), so it follows the customer to another device. Once per account the two agree: the account's
  * is the device's too, and one given only on this device goes to the account. A change goes to both; one the account
- * could not keep (offline) stays on the device.
+ * could not keep (offline) stays on the device. One chosen before the account's is read wins over that answer.
  */
 export function usePostalCodePreference(): [string, (postalCode: string) => void] {
   const { customer, checking } = useCustomerAccount();
@@ -45,7 +45,13 @@ export function usePostalCodePreference(): [string, (postalCode: string) => void
   const change = (code: string) => {
     savePostalCode(code);
     setPostalCode(code);
-    if (customer) setToAccount(code);
+    if (!customer) return;
+    // Chosen before the account's was read: that answer is older than this, and neither the page nor its copy takes it.
+    if (agreedFor !== customer.id) {
+      setAgreedFor(customer.id);
+      void client.cancelQueries({ queryKey: ACCOUNT_POSTAL_CODE_KEY });
+    }
+    setToAccount(code);
   };
   return [postalCode, change];
 }

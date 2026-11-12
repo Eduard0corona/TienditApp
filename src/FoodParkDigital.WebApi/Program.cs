@@ -72,6 +72,8 @@ builder.Services.AddSingleton<WhatsAppWebhookSignatureVerifier>();
 builder.Services.AddSingleton<MercadoPagoWebhookSignatureVerifier>();
 
 // Rate Limiting
+// One customer account's review writes (Fase 31K), counted once its session is read: one per instance.
+builder.Services.AddSingleton<FoodParkDigital.WebApi.Http.MyReviewsAccountLimit>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -160,13 +162,14 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(10),
                 QueueLimit = 0
             }));
-    // Writing, changing and deleting a customer's own review (Fase 31K): a new one emails the business's team.
+    // Writing, changing and deleting a customer's own review (Fase 31K): a new one emails the business's team. Per address,
+    // high enough for the customers who share one; each account has its own lower limit (MyReviewsAccountLimit).
     options.AddPolicy(MeController.ReviewsRateLimitPolicy, httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = isDev ? 200 : 10,
+                PermitLimit = isDev ? 200 : 60,
                 Window = TimeSpan.FromHours(1),
                 QueueLimit = 0
             }));

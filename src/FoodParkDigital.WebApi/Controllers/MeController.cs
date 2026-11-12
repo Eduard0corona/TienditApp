@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using FoodParkDigital.WebApi.Errors;
+using FoodParkDigital.WebApi.Http;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -21,8 +22,8 @@ namespace FoodParkDigital.WebApi.Controllers;
 public class MeController : ControllerBase
 {
     /// <summary>
-    /// Writing, changing and deleting the account's reviews (Fase 31K, ADR 0091): a new review emails the business's team, so
-    /// deleting and writing it again in a loop would flood them. Per address, as the other limits.
+    /// Writing, changing and deleting the account's reviews (Fase 31K, ADR 0091), per address: high enough for the customers
+    /// who share one (a food park's Wi-Fi). Each account has its own, lower limit too (<see cref="MyReviewsAccountLimit"/>).
     /// </summary>
     public const string ReviewsRateLimitPolicy = "my-reviews";
 
@@ -214,6 +215,7 @@ public class MeController : ControllerBase
     /// </summary>
     [HttpPut("reviews/{slug}")]
     [EnableRateLimiting(ReviewsRateLimitPolicy)]
+    [ServiceFilter(typeof(MyReviewsAccountLimit))]
     public async Task<ActionResult<MyReviewDto>> SaveMyReview(string slug, [FromBody] MyReviewRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new SaveMyReviewCommand(slug, request.Rating, request.Comment), cancellationToken);
@@ -223,6 +225,7 @@ public class MeController : ControllerBase
     /// <summary>Deletes the account's review of a business; none there changes nothing.</summary>
     [HttpDelete("reviews/{slug}")]
     [EnableRateLimiting(ReviewsRateLimitPolicy)]
+    [ServiceFilter(typeof(MyReviewsAccountLimit))]
     public async Task<IActionResult> DeleteMyReview(string slug, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new DeleteMyReviewCommand(slug), cancellationToken);

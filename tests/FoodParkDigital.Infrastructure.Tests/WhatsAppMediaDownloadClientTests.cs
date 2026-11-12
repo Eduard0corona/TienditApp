@@ -118,13 +118,22 @@ public class WhatsAppMediaDownloadClientTests
     public async Task TheDownloader_ShouldUseTheWhatsAppOfTheBusinessInScope_AndNothingWithoutIt()
     {
         var tenantId = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
         var scope = new InMemoryApplicationDbContext.TestCurrentTenantService();
-        scope.SetTenant(tenantId);
         await using var context = InMemoryApplicationDbContext.Create(scope);
         var http = new Routes()
             .On("https://graph.facebook.com/v21.0/62", HttpStatusCode.OK, $$"""{"url":"{{FileUrl}}","file_size":3}""")
             .On(FileUrl, HttpStatusCode.OK, new byte[] { 1, 2, 3 });
         var downloader = new WhatsAppMediaDownloader(context, Client(http));
+
+        // Another business connected its WhatsApp first: its token never goes for this one's files.
+        scope.SetTenant(otherId);
+        var theirs = new WhatsAppConfig(otherId);
+        theirs.Update(isEnabled: true, accessToken: "token-de-otro-negocio", phoneNumberId: "9988776655", wabaId: null, displayPhoneNumber: null);
+        context.WhatsAppConfigs.Add(theirs);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+        scope.SetTenant(tenantId);
 
         // Not connected yet: nothing goes to Meta.
         Assert.Equal(WhatsAppMediaDownloadOutcome.Unavailable, (await downloader.DownloadAsync("62", 1024, CancellationToken.None)).Outcome);
