@@ -33,7 +33,7 @@ public class OrderCancellationEmailsMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = BeforeAccountCarts.CreateContext(database, tenant.Id);
         var stored = await context.TenantUsers.AsNoTracking().SingleAsync(m => m.Id == member.Id);
         Assert.Equal(((bool?)null, false), (stored.OrderCancellationEmails, stored.GetsOrderCancellationEmails));
         Assert.Equal(60, (await context.TenantSettings.AsNoTracking().SingleAsync()).AnswerReminderMinutes);
@@ -44,7 +44,7 @@ public class OrderCancellationEmailsMigrationSqlServerTests
         (await context.TenantUsers.SingleAsync(m => m.Id == member.Id)).ChooseOrderCancellationEmails(true);
         (await context.TenantSettings.SingleAsync()).SetAnswerReminder(120);
         await context.SaveChangesAsync();
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeAccountCarts.CreateContext(database, tenant.Id);
         Assert.True((await check.TenantUsers.AsNoTracking().SingleAsync(m => m.Id == member.Id)).OrderCancellationEmails);
         Assert.Equal(120, (await check.TenantSettings.AsNoTracking().SingleAsync()).AnswerReminderMinutes);
 
@@ -63,7 +63,7 @@ public class OrderCancellationEmailsMigrationSqlServerTests
         // The app as deployed before this version saves a business and a member, unaware of the columns.
         var (tenant, member) = await SeedAsync(database, BeforeOrderCancellationEmails.CreateContext(database));
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = BeforeAccountCarts.CreateContext(database, tenant.Id);
         Assert.Null((await context.TenantUsers.AsNoTracking().SingleAsync(m => m.Id == member.Id)).OrderCancellationEmails);
         Assert.Equal(60, (await context.TenantSettings.AsNoTracking().SingleAsync()).AnswerReminderMinutes);
     }
@@ -73,8 +73,8 @@ public class OrderCancellationEmailsMigrationSqlServerTests
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
-        var (tenant, member) = await SeedAsync(database, database.CreateContext());
-        await using (var choose = database.CreateContext(tenant.Id))
+        var (tenant, member) = await SeedAsync(database, BeforeAccountCarts.CreateContext(database));
+        await using (var choose = BeforeAccountCarts.CreateContext(database, tenant.Id))
         {
             (await choose.TenantUsers.SingleAsync(m => m.Id == member.Id)).ChooseOrderCancellationEmails(true);
             (await choose.TenantSettings.SingleAsync()).SetAnswerReminder(0);
@@ -96,7 +96,7 @@ public class OrderCancellationEmailsMigrationSqlServerTests
         // Rolling back again does nothing; forward again, nobody has chosen and the business has the hour.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeAccountCarts.CreateContext(database, tenant.Id);
         Assert.Null((await forward.TenantUsers.AsNoTracking().SingleAsync(m => m.Id == member.Id)).OrderCancellationEmails);
         Assert.Equal(60, (await forward.TenantSettings.AsNoTracking().SingleAsync()).AnswerReminderMinutes);
     }

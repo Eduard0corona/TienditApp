@@ -36,7 +36,7 @@ public class AppointmentStaffForeignKeyMigrationSqlServerTests
         await MigrateAsync(database, BeforeMigration);
         var shop = await SeedAsync(database);
         Guid stranger;
-        await using (var context = database.CreateContext(shop.TenantId))
+        await using (var context = BeforeAccountCarts.CreateContext(database, shop.TenantId))
         {
             var appointment = Appointment(shop.TenantId, staffUserId: Guid.NewGuid());
             context.Appointments.Add(appointment);
@@ -46,7 +46,7 @@ public class AppointmentStaffForeignKeyMigrationSqlServerTests
 
         var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, Migration));
         Assert.True(stopped is SqlException { Number: 50058 }, stopped?.Message ?? "it was not stopped");
-        await using (var context = database.CreateContext(shop.TenantId))
+        await using (var context = BeforeAccountCarts.CreateContext(database, shop.TenantId))
         {
             Assert.Equal(BeforeMigration, await LatestMigrationAsync(context));
             Assert.Empty(await KeysAsync(context));
@@ -59,7 +59,7 @@ public class AppointmentStaffForeignKeyMigrationSqlServerTests
         }
 
         await MigrateAsync(database, Migration);
-        await using var migrated = database.CreateContext(shop.TenantId);
+        await using var migrated = BeforeAccountCarts.CreateContext(database, shop.TenantId);
         Assert.Equal(Migration, await LatestMigrationAsync(migrated));
         Assert.Equal(new[] { (Key, "NO_ACTION") }, await KeysAsync(migrated));
         Assert.Equal(1, await IndexesAsync(migrated));
@@ -76,7 +76,7 @@ public class AppointmentStaffForeignKeyMigrationSqlServerTests
         var shop = await SeedAsync(database);
         await MigrateAsync(database, Migration);
 
-        await using (var context = database.CreateContext(shop.TenantId))
+        await using (var context = BeforeAccountCarts.CreateContext(database, shop.TenantId))
         {
             context.Appointments.Add(Appointment(shop.TenantId, staffUserId: Guid.NewGuid()));
             var noAccount = await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
@@ -84,7 +84,7 @@ public class AppointmentStaffForeignKeyMigrationSqlServerTests
         }
 
         // The account stays while an appointment points to it, as the customer's does.
-        await using (var context = database.CreateContext(shop.TenantId))
+        await using (var context = BeforeAccountCarts.CreateContext(database, shop.TenantId))
         {
             var deleteAccount = await Record.ExceptionAsync(() => context.Database.ExecuteSqlAsync(
                 $"DELETE FROM [AspNetUsers] WHERE [Id] = {shop.StaffId}"));
@@ -93,13 +93,13 @@ public class AppointmentStaffForeignKeyMigrationSqlServerTests
 
         // Deleting the product, as DeleteProductCommand does, leaves the appointment pointing to its Id: the sale of a visit
         // and the credit of its quote match their lines on it.
-        await using (var context = database.CreateContext(shop.TenantId))
+        await using (var context = BeforeAccountCarts.CreateContext(database, shop.TenantId))
         {
             context.Products.Remove(await context.Products.SingleAsync(p => p.Id == shop.ProductId));
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(shop.TenantId);
+        await using var check = BeforeAccountCarts.CreateContext(database, shop.TenantId);
         var appointment = await check.Appointments.AsNoTracking().SingleAsync(a => a.Id == shop.AppointmentId);
         Assert.Equal((shop.ProductId, shop.StaffId), (appointment.ServiceProductId, appointment.StaffUserId));
         Assert.Equal(0, await check.Products.CountAsync());
@@ -114,7 +114,7 @@ public class AppointmentStaffForeignKeyMigrationSqlServerTests
         await MigrateAsync(database, Migration);
 
         await MigrateAsync(database, BeforeMigration);
-        await using (var context = database.CreateContext(shop.TenantId))
+        await using (var context = BeforeAccountCarts.CreateContext(database, shop.TenantId))
         {
             Assert.Equal(BeforeMigration, await LatestMigrationAsync(context));
             Assert.Empty(await KeysAsync(context));
@@ -155,7 +155,7 @@ public class AppointmentStaffForeignKeyMigrationSqlServerTests
         };
         var appointment = Appointment(tenant.Id, product.Id, barber.Id);
 
-        await using var seed = database.CreateContext(tenant.Id);
+        await using var seed = BeforeAccountCarts.CreateContext(database, tenant.Id);
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Service | TenantCapability.Appointments), category, product);
         seed.Users.Add(barber);
         seed.Appointments.Add(appointment);

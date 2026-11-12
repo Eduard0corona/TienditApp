@@ -34,8 +34,13 @@ public class EmployeeNoticeEmailsDto
     public bool Requests { get; set; }
     /// <summary>One each time a customer accepts or rejects a quote from its link.</summary>
     public bool QuoteReplies { get; set; }
-    /// <summary>One each time a customer cancels an online order before it was accepted (Fase 30B).</summary>
+    /// <summary>
+    /// One each time a customer cancels an online order before it was accepted (Fase 30B) or asks to cancel one (Fase 31B), and
+    /// the reminder of the one still waiting to be accepted 15 minutes after it arrived (Fase 31K).
+    /// </summary>
     public bool OrderCancellations { get; set; }
+    /// <summary>One each time a customer writes a new review of the business (Fase 31K, ADR 0091).</summary>
+    public bool Reviews { get; set; }
     /// <summary>Whether the email of their account is confirmed: until it is, none reaches them.</summary>
     public bool EmailConfirmed { get; set; }
 
@@ -44,6 +49,7 @@ public class EmployeeNoticeEmailsDto
         Requests = member.GetsRequestEmails,
         QuoteReplies = member.GetsQuoteReplyEmails,
         OrderCancellations = member.GetsOrderCancellationEmails,
+        Reviews = member.GetsReviewEmails,
         EmailConfirmed = emailConfirmed
     };
 }

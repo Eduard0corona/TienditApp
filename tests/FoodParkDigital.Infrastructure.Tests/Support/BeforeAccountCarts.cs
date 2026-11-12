@@ -21,6 +21,7 @@ internal static class BeforeAccountCarts
     {
         modelBuilder.Ignore<AccountCart>();
         modelBuilder.Entity<ApplicationUser>().Ignore(user => user.PostalCode);
+        BeforeOnlineOrderReminder.Ignore(modelBuilder);
     }
 
     private sealed class Context(

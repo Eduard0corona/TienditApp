@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Notices;
 using FoodParkDigital.Application.Orders.CancellationNotices;
 using FoodParkDigital.Application.Quotes.ReplyNotices;
+using FoodParkDigital.Application.Reviews.Notices;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.Tenants.Events;
@@ -19,7 +20,7 @@ internal static class NoticeEmailsChangedEmail
 {
     public static (string Subject, string HtmlBody) Compose(
         string changedByName, string businessName, bool? requestEmails, bool? quoteReplyEmails, string? appUrl,
-        bool? orderCancellationEmails = null)
+        bool? orderCancellationEmails = null, bool? reviewEmails = null)
     {
         // Typed by people: one line each, and encoded in the body.
         var who = NoticeEmailText.OneLine(changedByName);
@@ -37,8 +38,12 @@ internal static class NoticeEmailsChangedEmail
                 : "Ya no te llegan las respuestas de los clientes a las cotizaciones.");
         if (orderCancellationEmails is { } orders)
             changes.Add(orders
-                ? "Ahora te llegan los pedidos en línea que sus clientes cancelan o piden cancelar."
-                : "Ya no te llegan los pedidos en línea que sus clientes cancelan o piden cancelar.");
+                ? "Ahora te llegan los pedidos en línea que llevan 15 minutos sin confirmar y los que sus clientes cancelan o piden cancelar."
+                : "Ya no te llegan los pedidos en línea que llevan 15 minutos sin confirmar ni los que sus clientes cancelan o piden cancelar.");
+        if (reviewEmails is { } reviews)
+            changes.Add(reviews
+                ? "Ahora te llegan las reseñas nuevas de sus clientes."
+                : "Ya no te llegan las reseñas nuevas de sus clientes.");
 
         var subject = $"{who} cambió tus avisos por correo en {business}";
         var profile = app is null ? "Mi perfil de TienditApp" : $"<a href='{app}/profile'>Mi perfil</a>";
@@ -61,7 +66,7 @@ internal static class NoticeEmailsChangedEmail
 /// confirmed email, as the other notices, and only while what they get is still what the change said (a later change sends
 /// its own). It speaks only of the notices that may reach them now, as the API would send them (the agenda's to whoever may
 /// answer the requests, the answers to quotes to whoever works the quotes, the online orders their customers cancel to whoever
-/// may confirm the orders, Fase 30B): one they may not get is not theirs to change in
+/// may confirm the orders, Fase 30B, and the new reviews to whoever answers them, Fase 31K): one they may not get is not theirs to change in
 /// Mi perfil either, and with none left nothing is sent. It says who changed them by the name of their account when they are of the team; the platform's admin acting
 /// on the business is «El soporte de TienditApp», and an account that no longer exists, «Alguien de tu equipo». A failure
 /// of the provider throws, and the outbox retries it.
@@ -90,7 +95,8 @@ public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<Tenant
         CancellationToken cancellationToken)
     {
         if (context.TenantId is not { } tenantId
-            || (domainEvent.RequestEmails is null && domainEvent.QuoteReplyEmails is null && domainEvent.OrderCancellationEmails is null))
+            || (domainEvent.RequestEmails is null && domainEvent.QuoteReplyEmails is null && domainEvent.OrderCancellationEmails is null
+                && domainEvent.ReviewEmails is null))
             return;
 
         var business = await _context.Tenants
@@ -114,7 +120,8 @@ public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<Tenant
         if (member is null
             || (domainEvent.RequestEmails is { } requests && member.Membership.GetsRequestEmails != requests)
             || (domainEvent.QuoteReplyEmails is { } quoteReplies && member.Membership.GetsQuoteReplyEmails != quoteReplies)
-            || (domainEvent.OrderCancellationEmails is { } orders && member.Membership.GetsOrderCancellationEmails != orders))
+            || (domainEvent.OrderCancellationEmails is { } orders && member.Membership.GetsOrderCancellationEmails != orders)
+            || (domainEvent.ReviewEmails is { } reviews && member.Membership.GetsReviewEmails != reviews))
             return;
 
         // Only what may reach them now: a notice turned on without the permission it needs would not arrive.
@@ -122,7 +129,8 @@ public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<Tenant
         var requestEmails = RequestEmailRecipients.MayAnswer(access) ? domainEvent.RequestEmails : null;
         var quoteReplyEmails = QuoteReplyEmailRecipients.MayWorkQuotes(access) ? domainEvent.QuoteReplyEmails : null;
         var orderCancellationEmails = OrderCancellationEmailRecipients.MayConfirmOrders(access) ? domainEvent.OrderCancellationEmails : null;
-        if (requestEmails is null && quoteReplyEmails is null && orderCancellationEmails is null)
+        var reviewEmails = ReviewEmailRecipients.MayAnswerReviews(access) ? domainEvent.ReviewEmails : null;
+        if (requestEmails is null && quoteReplyEmails is null && orderCancellationEmails is null && reviewEmails is null)
             return;
 
         var (subject, body) = NoticeEmailsChangedEmail.Compose(
@@ -131,7 +139,8 @@ public sealed class NoticeEmailsChangedEmailHandler : IOutboxEventHandler<Tenant
             requestEmails,
             quoteReplyEmails,
             _links.BaseUrl,
-            orderCancellationEmails);
+            orderCancellationEmails,
+            reviewEmails);
         await _email.SendEmailAsync(member.Email!, subject, body);
     }
 

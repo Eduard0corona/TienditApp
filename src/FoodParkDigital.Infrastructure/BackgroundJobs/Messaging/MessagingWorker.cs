@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Appointments.RequestNotices;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Messaging;
+using FoodParkDigital.Application.Orders.WaitingNotices;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Messaging.Entities;
@@ -250,6 +251,64 @@ public sealed class MessagingWorker
                 _logger.LogError(
                     LogRedaction.RedactDatabaseMessages(ex),
                     "Answer reminders of tenant {TenantId} could not be queued",
+                    tenantId);
+            }
+        }
+
+        return reminded;
+    }
+
+    /// <summary>
+    /// Reminds each business by email of the orders of its online menu still waiting to be accepted 15 minutes after they
+    /// arrived (Fase 31K, ADR 0091), until they have waited half an hour. Which businesses have any is read across all of them
+    /// (only the business of each order, among those active that sell); each is then reminded in its own scope, where its orders
+    /// decide whether they are due, and saved on its own: the outbox sends the emails. Another instance that reminded the same
+    /// order first, or the business that answered it at the same time, wins (its version), and this pass skips that business.
+    /// </summary>
+    /// <returns>Orders reminded.</returns>
+    public async Task<int> QueueOnlineOrderRemindersAsync(CancellationToken cancellationToken)
+    {
+        List<Guid> tenants;
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            const TenantCapability sells = TenantCapability.Food | TenantCapability.Retail | TenantCapability.Service;
+            tenants = await OnlineOrderWaitingPlanner.Due(context.Orders.IgnoreQueryFilters().AsNoTracking(), _clock.UtcNow)
+                .Where(o => context.Tenants.Any(t => t.Id == o.TenantId && t.Status == TenantStatus.Active)
+                    // Only where someone may confirm it: a business that stopped selling takes no orders.
+                    && context.TenantSettings.Any(s => s.TenantId == o.TenantId && (s.Capabilities & sells) != 0))
+                .Select(o => o.TenantId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+        }
+
+        var reminded = 0;
+        foreach (var tenantId in tenants)
+        {
+            try
+            {
+                await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
+                var services = scope.ServiceProvider;
+                var count = await services.GetRequiredService<OnlineOrderWaitingPlanner>().RemindDueAsync(cancellationToken);
+                if (count == 0)
+                    continue;
+
+                await services.GetRequiredService<ApplicationDbContext>().SaveChangesAsync(cancellationToken);
+                reminded += count;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                // Another instance reminded one of them, or the business answered it, at the same time: the next pass sees it.
+                _logger.LogInformation(
+                    LogRedaction.RedactDatabaseMessages(ex),
+                    "Online order reminders of tenant {TenantId} were not saved in this pass",
+                    tenantId);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(
+                    LogRedaction.RedactDatabaseMessages(ex),
+                    "Online order reminders of tenant {TenantId} could not be queued",
                     tenantId);
             }
         }

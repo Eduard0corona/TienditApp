@@ -4616,6 +4616,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ClientRequestId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("ConfirmReminderSentAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -7152,6 +7155,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("bit");
 
                     b.Property<bool?>("RequestEmails")
+                        .HasColumnType("bit");
+
+                    b.Property<bool?>("ReviewEmails")
                         .HasColumnType("bit");
 
                     b.Property<int>("Role")

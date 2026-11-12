@@ -233,6 +233,33 @@ public class EmployeeAccessRulesTests
     }
 
     [Fact]
+    public async Task WhoeverRunsTheTeam_ShouldChooseTheNewReviews_TellingThePerson_ButNeverTheOwners()
+    {
+        // Fase 31K (ADR 0091).
+        await using var fixture = await Fixture.CreateAsync();
+        var owner = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Owner);
+        var admin = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Admin);
+        var manager = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Admin);
+
+        var turnedOn = await fixture.UpdateAsync(admin, manager, UserRole.TenantAdmin, TenantUserRole.Admin, reviewEmails: true);
+        // The owner's: refused when it changes, saved as it is when it does not (the owner gets them until they choose).
+        var refused = await fixture.UpdateAsync(admin, owner, UserRole.TenantAdmin, TenantUserRole.Owner, reviewEmails: false);
+        var asTheyAre = await fixture.UpdateAsync(admin, owner, UserRole.TenantAdmin, TenantUserRole.Owner, reviewEmails: true);
+
+        Assert.True(turnedOn.IsSuccess, turnedOn.Error);
+        Assert.Equal((true, false), (turnedOn.Value!.NoticeEmails.Reviews, turnedOn.Value.NoticeEmails.OrderCancellations));
+        Assert.True((await fixture.MembershipAsync(manager)).ReviewEmails);
+        Assert.Equal(EmployeeNoticeEmails.OwnerChoosesMessage, refused.Error);
+        Assert.True(asTheyAre.IsSuccess, asTheyAre.Error);
+        Assert.Null((await fixture.MembershipAsync(owner)).ReviewEmails);
+        Assert.True((await fixture.DetailAsync(owner)).NoticeEmails.Reviews);
+        Assert.False((await fixture.DetailAsync(admin)).NoticeEmails.Reviews);
+        Assert.Equal(
+            [(new TenantUserNoticeEmailsChangedEvent(manager.TenantUserId, admin.UserId, null, null, null, true) { EventId = Guid.Empty, OccurredOn = default }, (Guid?)TenantA)],
+            fixture.Outbox.Added.Select(m => (m.Event with { EventId = Guid.Empty, OccurredOn = default }, m.TenantId)));
+    }
+
+    [Fact]
     public async Task TheOwnersNotices_ShouldOnlyChangeFromTheirProfile_NeverFromTheTeam()
     {
         await using var fixture = await Fixture.CreateAsync();
@@ -349,7 +376,8 @@ public class EmployeeAccessRulesTests
 
         public Task<Result<EmployeeDto>> UpdateAsync(
             Member actor, Member employee, UserRole appRole, TenantUserRole tenantRole, string firstName = "Persona",
-            bool? requestEmails = null, bool? quoteReplyEmails = null, bool? orderCancellationEmails = null)
+            bool? requestEmails = null, bool? quoteReplyEmails = null, bool? orderCancellationEmails = null,
+            bool? reviewEmails = null)
         {
             _tenantService.SetTenant(employee.TenantId);
             var handler = new UpdateEmployeeCommandHandler(
@@ -363,7 +391,8 @@ public class EmployeeAccessRulesTests
                 TenantRole = tenantRole,
                 RequestEmails = requestEmails,
                 QuoteReplyEmails = quoteReplyEmails,
-                OrderCancellationEmails = orderCancellationEmails
+                OrderCancellationEmails = orderCancellationEmails,
+                ReviewEmails = reviewEmails
             }, CancellationToken.None);
         }
 

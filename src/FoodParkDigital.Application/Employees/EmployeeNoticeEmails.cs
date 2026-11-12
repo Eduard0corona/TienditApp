@@ -5,7 +5,8 @@ namespace FoodParkDigital.Application.Employees;
 
 /// <summary>
 /// The notices by email that whoever runs the team chooses for each person (Fase 29Q, ADR 0071): the agenda's (each request
-/// online and each appointment its customer cancels) and the answers to quotes. The person still changes them in Mi perfil, and
+/// online and each appointment its customer cancels), the answers to quotes, the online orders (Fase 30B) and the new reviews
+/// (Fase 31K). The person still changes them in Mi perfil, and
 /// the last choice holds. Nobody chooses the owner's from the team: the owner does, in Mi perfil.
 /// </summary>
 public static class EmployeeNoticeEmails
@@ -30,20 +31,26 @@ public static class EmployeeNoticeEmails
             member.ChooseQuoteReplyEmails(quoteReplies);
         if (changed.OrderCancellationEmails is { } orderCancellations)
             member.ChooseOrderCancellationEmails(orderCancellations);
+        if (changed.ReviewEmails is { } reviews)
+            member.ChooseReviewEmails(reviews);
         return changed;
     }
 
     private static NoticeChoices Changes(TenantUser member, NoticeChoices asked) => new(
         asked.RequestEmails is { } requests && requests != member.GetsRequestEmails ? requests : null,
         asked.QuoteReplyEmails is { } quoteReplies && quoteReplies != member.GetsQuoteReplyEmails ? quoteReplies : null,
-        asked.OrderCancellationEmails is { } orders && orders != member.GetsOrderCancellationEmails ? orders : null);
+        asked.OrderCancellationEmails is { } orders && orders != member.GetsOrderCancellationEmails ? orders : null,
+        asked.ReviewEmails is { } reviews && reviews != member.GetsReviewEmails ? reviews : null);
 }
 
 /// <summary>
-/// The notices by email chosen for a person, each null when left as it is: the agenda's, the answers to quotes and, since the
-/// Fase 30B (ADR 0082), the online orders their customers cancel.
+/// The notices by email chosen for a person, each null when left as it is: the agenda's, the answers to quotes, since the Fase
+/// 30B (ADR 0082) the online orders their customers cancel (and, since the Fase 31K, those still waiting to be accepted) and,
+/// since the Fase 31K (ADR 0091), the new reviews.
 /// </summary>
-public sealed record NoticeChoices(bool? RequestEmails, bool? QuoteReplyEmails, bool? OrderCancellationEmails = null)
+public sealed record NoticeChoices(
+    bool? RequestEmails, bool? QuoteReplyEmails, bool? OrderCancellationEmails = null, bool? ReviewEmails = null)
 {
-    public bool Any => RequestEmails is not null || QuoteReplyEmails is not null || OrderCancellationEmails is not null;
+    public bool Any => RequestEmails is not null || QuoteReplyEmails is not null || OrderCancellationEmails is not null
+        || ReviewEmails is not null;
 }

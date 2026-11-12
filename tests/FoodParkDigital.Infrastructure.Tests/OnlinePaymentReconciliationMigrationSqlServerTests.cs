@@ -48,7 +48,7 @@ public class OnlinePaymentReconciliationMigrationSqlServerTests
             laterCheckout = checkout.Id;
         }
 
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeAccountCarts.CreateContext(database, seed.TenantId))
         {
             Assert.All(await context.OnlineCheckouts.ToListAsync(), checkout =>
                 Assert.Equal((OnlinePaymentDispute.None, (DateTimeOffset?)null), (checkout.Dispute, checkout.DisputeUpdatedAt)));
@@ -65,7 +65,7 @@ public class OnlinePaymentReconciliationMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(seed.TenantId);
+        await using var check = BeforeAccountCarts.CreateContext(database, seed.TenantId);
         var stored = await check.OnlineCheckouts.SingleAsync(c => c.Id == seed.CheckoutId);
         Assert.Equal(OnlinePaymentDispute.Open, stored.Dispute);
         Assert.NotNull(stored.DisputeUpdatedAt);
@@ -138,7 +138,7 @@ public class OnlinePaymentReconciliationMigrationSqlServerTests
         var duplicate = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, Migration));
 
         Assert.Equal(50036, duplicate.Number);
-        await using var context = database.CreateContext();
+        await using var context = BeforeAccountCarts.CreateContext(database);
         Assert.Equal(BeforeReconciliation, await LatestMigrationAsync(context));
         Assert.Equal(0, await CountAsync(context,
             $"SELECT COUNT(*) AS [Value] FROM sys.columns WHERE [object_id] = OBJECT_ID(N'dbo.OnlineCheckouts') AND [name] = N'Dispute'"));
@@ -163,7 +163,7 @@ public class OnlinePaymentReconciliationMigrationSqlServerTests
         ];
         foreach (var trace in traces)
         {
-            await using (var context = database.CreateContext())
+            await using (var context = BeforeAccountCarts.CreateContext(database))
             {
                 Assert.Equal(Migration, await LatestMigrationAsync(context));
                 await context.Database.ExecuteSqlRawAsync(
@@ -178,7 +178,7 @@ public class OnlinePaymentReconciliationMigrationSqlServerTests
         }
 
         // A review of the account is not one of them: it does not stop it.
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             await context.Database.ExecuteSqlRawAsync(
@@ -188,7 +188,7 @@ public class OnlinePaymentReconciliationMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeReconciliation);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             Assert.Equal(BeforeReconciliation, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 0, 1, 2), (
@@ -216,7 +216,7 @@ public class OnlinePaymentReconciliationMigrationSqlServerTests
         // Rolling back again does nothing, and forward again every checkout has no dispute.
         await MigrateAsync(database, BeforeReconciliation);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeAccountCarts.CreateContext(database, seed.TenantId);
         Assert.All(await forward.OnlineCheckouts.ToListAsync(), checkout => Assert.Equal(OnlinePaymentDispute.None, checkout.Dispute));
     }
 
@@ -278,7 +278,7 @@ public class OnlinePaymentReconciliationMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, FormattableString sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeAccountCarts.CreateContext(database);
         await context.Database.ExecuteSqlInterpolatedAsync(sql);
     }
 

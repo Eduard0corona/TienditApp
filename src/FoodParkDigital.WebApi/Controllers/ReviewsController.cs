@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Reviews;
+using FoodParkDigital.Application.Reviews.Notices;
 using FoodParkDigital.Domain.Reviews.Enums;
 using FoodParkDigital.WebApi.Errors;
 using MediatR;
@@ -33,6 +34,19 @@ public class ReviewsController : ControllerBase
         CancellationToken cancellationToken = default)
         => Ok(await _mediator.Send(new GetBusinessReviewsQuery(filter, page, pageSize), cancellationToken));
 
+    /// <summary>
+    /// Whether the person gets an email each time a customer writes a new review of this business, and where it arrives (Fase
+    /// 31K). Only for its owners and admins: the platform's admin acting in it gets 404.
+    /// </summary>
+    [HttpGet("emails")]
+    public async Task<ActionResult<ReviewEmailsDto>> GetEmails(CancellationToken cancellationToken)
+        => Emails(await _mediator.Send(new GetReviewEmailsQuery(), cancellationToken));
+
+    /// <summary>Turns those emails on or off for the person, in this business only (Fase 31K).</summary>
+    [HttpPut("emails")]
+    public async Task<ActionResult<ReviewEmailsDto>> UpdateEmails([FromBody] UpdateReviewEmailsCommand command, CancellationToken cancellationToken)
+        => Emails(await _mediator.Send(command, cancellationToken));
+
     /// <summary>Answers a review, or changes the answer.</summary>
     [HttpPut("{id:guid}/reply")]
     public async Task<ActionResult<BusinessReviewDto>> Reply(Guid id, [FromBody] ReviewReplyRequest request, CancellationToken cancellationToken)
@@ -47,6 +61,9 @@ public class ReviewsController : ControllerBase
     [HttpPost("{id:guid}/report")]
     public async Task<ActionResult<BusinessReviewDto>> Report(Guid id, [FromBody] ReviewReportRequest request, CancellationToken cancellationToken)
         => Answer(await _mediator.Send(new ReportReviewCommand(id, request.Reason), cancellationToken));
+
+    private ActionResult<ReviewEmailsDto> Emails(Result<ReviewEmailsDto> result)
+        => result.IsSuccess ? Ok(result.Value) : this.ApiError(StatusCodes.Status404NotFound, result.Error!);
 
     // Another business's review, or one deleted by its author, is not found.
     private ActionResult<BusinessReviewDto> Answer(Result<BusinessReviewDto> result)

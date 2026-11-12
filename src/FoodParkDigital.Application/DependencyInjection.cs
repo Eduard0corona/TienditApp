@@ -61,6 +61,8 @@ public static class DependencyInjection
         services.AddScoped<AppointmentReminderPlanner>();
         // Fase 29U: the reminder to answer a request online in time, from the same worker, in the business's scope.
         services.AddScoped<Appointments.RequestNotices.AnswerReminderPlanner>();
+        // Fase 31K: the reminder of an online order still waiting to be accepted, from the same worker, in the business's scope.
+        services.AddScoped<Orders.WaitingNotices.OnlineOrderWaitingPlanner>();
         services.AddScoped<CreditReminderPlanner>();
         services.AddScoped<CreditDueSoonPlanner>();
         services.AddScoped<OutgoingMessageSender>();
