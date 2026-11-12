@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { onSessionEvent } from '../api/axios';
+import { CUSTOMER_LEFT_EVENT } from '../utils/customerDevice';
 
 const CHANNEL_NAME = 'fpd-session';
 
@@ -29,7 +30,8 @@ export function reloadForTenantChange() {
 
 /**
  * Keeps the UI in sync with the session: a rejected refresh logs out (instead of leaving a UI that
- * looks logged in while every call fails) and a tenant change in this or another tab reloads.
+ * looks logged in while every call fails) and a tenant change in this or another tab reloads. A logout in another tab
+ * also stops the cart saves of this one (Fase 31J): that tab already forgot the carts of the device.
  */
 export function useSessionSync(clearSession: () => void) {
   useEffect(() => {
@@ -41,7 +43,10 @@ export function useSessionSync(clearSession: () => void) {
     const channel = openChannel();
     if (channel) {
       channel.onmessage = (message: MessageEvent<SessionMessage>) => {
-        if (message.data?.type === 'logout') clearSession();
+        if (message.data?.type === 'logout') {
+          window.dispatchEvent(new Event(CUSTOMER_LEFT_EVENT));
+          clearSession();
+        }
         if (message.data?.type === 'tenant-switched') reloadForTenantChange();
       };
     }

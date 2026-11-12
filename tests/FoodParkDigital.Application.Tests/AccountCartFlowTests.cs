@@ -148,9 +148,22 @@ public class AccountCartFlowTests
         settings.UpdateOnlineMenu(OnlineMenuMode.Orders);
         await fixture.Context.SaveChangesAsync();
         Assert.Single(await CartsAsync(fixture));
+        fixture.Context.ChangeTracker.Clear();
 
+        // Suspended (for billing) with its menu published, the same: left out, and a save there is refused; active again,
+        // it is back as it was.
+        await SetStatusAsync(fixture, store.Id, TenantStatus.Suspended);
+        Assert.Empty(await CartsAsync(fixture));
+        Assert.Equal(AccountCartRules.NotFoundMessage, (await SaveAsync(fixture, "demo", [Line(tacos.Id, 2)])).Error);
+        await SetStatusAsync(fixture, store.Id, TenantStatus.Active);
+        Assert.Equal(1, Assert.Single(await CartsAsync(fixture)).Lines.Single().Quantity);
+
+        // Suspended and unpublished, it is still emptied by its slug.
+        await SetStatusAsync(fixture, store.Id, TenantStatus.Suspended);
+        settings = await fixture.Context.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == store.Id);
         settings.UpdateOnlineMenu(OnlineMenuMode.Off);
         await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
         fixture.Clock.UtcNow = SalesTestFixture.Now.AddMinutes(5);
         Assert.True((await DeleteAsync(fixture, " DEMO ")).IsSuccess);
         var emptied = await fixture.Context.AccountCarts.AsNoTracking().SingleAsync();
@@ -266,6 +279,14 @@ public class AccountCartFlowTests
         fixture.Context.Users.Add(account);
         await fixture.Context.SaveChangesAsync();
         return account;
+    }
+
+    private static async Task SetStatusAsync(SalesTestFixture fixture, Guid businessId, TenantStatus status)
+    {
+        var business = await fixture.Context.Tenants.SingleAsync(t => t.Id == businessId);
+        business.SetStatus(status);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
     }
 
     private static void SignIn(SalesTestFixture fixture, ApplicationUser account)

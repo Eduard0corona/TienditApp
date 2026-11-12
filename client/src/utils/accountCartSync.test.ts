@@ -75,6 +75,21 @@ describe('accountCartSync', () => {
     expect(readCart('reloj', new Date('2026-11-12T18:20:00Z'))?.savedAt).toBe('2026-11-12T18:00:30.000Z');
   });
 
+  it('tells what the account kept: its cart, or nothing when it was emptied', async () => {
+    const kept = { slug: 'avisa', businessName: 'Avisa', savedAt: '2026-11-12T18:00:30+00:00', lines: [line(2)] };
+    const onSaved = vi.fn();
+    api.saveCart.mockResolvedValueOnce(kept as never).mockResolvedValueOnce(undefined as never);
+
+    scheduleAccountCartSave('avisa', { lines: [line(2)] }, onSaved);
+    await vi.advanceTimersByTimeAsync(ACCOUNT_CART_DELAY_MS);
+    await settle();
+    scheduleAccountCartSave('avisa', { lines: [] }, onSaved);
+    await vi.advanceTimersByTimeAsync(ACCOUNT_CART_DELAY_MS);
+    await settle();
+
+    expect(onSaved.mock.calls).toEqual([[kept], [null]]);
+  });
+
   it('sends nothing of what was waiting once the account leaves the device', async () => {
     api.saveCart.mockResolvedValue({} as never);
 

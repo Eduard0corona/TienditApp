@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Offcanvas } from 'react-bootstrap';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress } from '../../api/accountApi';
+import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress, type MyCart } from '../../api/accountApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicMenuApi, type PlacePublicOrder, type PublicMenuProduct, type PublicOrderReceipt } from '../../api/publicMenuApi';
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
@@ -216,6 +216,8 @@ export default function PublicMenuPage() {
   const [restoredFor, setRestoredFor] = useState<string | null>(null);
   const [restoredNotice, setRestoredNotice] = useState('');
   const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
+  // The customer account whose cart this page holds, while its session lasts.
+  const [cartOwner, setCartOwner] = useState<string | null>(null);
   // The key of the order being sent: the same order sent again (an answer lost) keeps it, and the server places it once.
   const attempt = useRef<{ signature: string; key: string } | null>(null);
 
@@ -238,6 +240,14 @@ export default function PublicMenuPage() {
     setPrefilledFor(customer.id);
     setName((current) => current || `${customer.firstName} ${customer.lastName}`.trim());
     setPhone((current) => current || localPhone(customer.phoneNumber));
+  }
+  // A customer who leaves, here or in another tab of this browser (Fase 31J), takes the cart: the device already forgot
+  // it, and it is not kept again on it for whoever comes next.
+  if (customer && cartOwner !== customer.id) setCartOwner(customer.id);
+  if (!customer && !checking && cartOwner !== null) {
+    setCartOwner(null);
+    setLines([]);
+    setRestoredNotice('');
   }
 
   // The carts the customer account left (Fase 31J): its cart here may come from another device.
@@ -364,8 +374,14 @@ export default function PublicMenuPage() {
     const signature = cartSignature({ lines: kept });
     if (signature === accountCartSent.current) return;
     accountCartSent.current = signature;
-    scheduleAccountCartSave(slug, { lines: kept });
-  }, [lines, restoredFor, slug, businessName, customerId]);
+    scheduleAccountCartSave(slug, { lines: kept }, (saved) => {
+      // Explorar reads the same carts: it offers what the account keeps now, not what it had when this store opened.
+      queryClient.setQueryData<MyCart[]>(['me', 'carts'], (carts) => carts && [
+        ...(saved ? [saved] : []),
+        ...carts.filter((cart) => cart.slug !== slug),
+      ]);
+    });
+  }, [lines, restoredFor, slug, businessName, customerId, queryClient]);
 
   const add = (product: PublicMenuProduct, optionIds: string[], note?: string, quantity = 1) => {
     const lineNote = lineNotes(note);

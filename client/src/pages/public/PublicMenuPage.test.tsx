@@ -130,11 +130,14 @@ function renderPage(path = '/m/cafe-luna', auth?: Partial<AuthContextType>, from
       </Routes>
     </MemoryRouter>
   );
-  return render(
+  const tree = (session?: Partial<AuthContextType>) => (
     <QueryClientProvider client={queryClient}>
-      {auth ? <AuthContext.Provider value={auth as AuthContextType}>{page}</AuthContext.Provider> : page}
-    </QueryClientProvider>,
+      {session ? <AuthContext.Provider value={session as AuthContextType}>{page}</AuthContext.Provider> : page}
+    </QueryClientProvider>
   );
+  const view = render(tree(auth));
+  // The same page with another session (a sign-out here or in another tab), and the cache it shares with Explorar.
+  return { ...view, queryClient, withSession: (session: Partial<AuthContextType>) => view.rerender(tree(session)) };
 }
 
 /** Signed in with a customer account (Fase 24B), or with one of a business's team. */
@@ -743,6 +746,37 @@ describe('PublicMenuPage', () => {
       await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
         'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 3 }], reorderOf: null, skipped: null },
       ), { timeout: 3000 });
+    });
+
+    it('lets a customer who signs out (here or in another tab) take the cart, without keeping it again on the device', async () => {
+      account.getCarts.mockResolvedValue([]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+      const page = renderPage('/m/cafe-luna', signedInAs('Customer'));
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: [], quantity: 1 }]);
+
+      // The other tab signed out: it forgot the carts of this device, and this tab hears of it.
+      window.localStorage.removeItem('tienditapp.carts');
+      page.withSession({ isAuthenticated: false, isLoading: false, user: null });
+
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Ver pedido/ })).not.toBeInTheDocument());
+      expect(readCart('cafe-luna')).toBeNull();
+    });
+
+    it('tells Explorar what the account keeps once a save arrives, an emptied cart included', async () => {
+      account.getCarts.mockResolvedValue([accountCart(1, new Date(Date.now() - 3_600_000).toISOString())]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue(undefined as never);
+      api.getMenu.mockResolvedValue(menu());
+      const page = renderPage('/m/cafe-luna', signedInAs('Customer'));
+      await userEvent.click(await screen.findByRole('button', { name: /^Ver pedido · 1/ }));
+
+      // Emptied here: the account keeps it empty (204), and the carts Explorar reads no longer offer it.
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Tu pedido' })).getByRole('button', { name: 'Quitar Latte' }));
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith('cafe-luna', { lines: [], reorderOf: null, skipped: null }), { timeout: 3000 });
+      await waitFor(() => expect(page.queryClient.getQueryData(['me', 'carts'])).toEqual([]));
     });
 
     it('waits for the session before bringing back a cart, and a business\'s team keeps it only on the device', async () => {

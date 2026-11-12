@@ -89,7 +89,8 @@ public class WhatsAppMediaFlowTests
         {
             "pdf" => new Downloader("%PDF-1.7 no es una foto"u8.ToArray()),
             "empty" => new Downloader([]),
-            "too-big" => new Downloader(new byte[WhatsAppMediaRules.MaxImageBytes + 1]),
+            // A photo that is one, a byte past what WhatsApp takes: refused for its size, before it is read.
+            "too-big" => new Downloader(Padded(Jpeg(10, 10), WhatsAppMediaRules.MaxImageBytes + 1)),
             // A JPEG header with nothing after it: it does not decode.
             "broken" => new Downloader([0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10]),
             _ => new Downloader(WhatsAppMediaDownload.Unavailable)
@@ -103,6 +104,21 @@ public class WhatsAppMediaFlowTests
         Assert.Equal("Unavailable", Assert.Single(notifications.Media).State);
         // A photo is never asked bigger than WhatsApp takes.
         Assert.Equal(WhatsAppMediaRules.MaxImageBytes, downloader.AskedMax);
+    }
+
+    [Fact]
+    public async Task AVoiceNoteBiggerThanWhatsAppTakes_ShouldLeaveOnlyItsMarker()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenantId, message) = await MediaMessageAsync(fixture, WhatsAppMediaKind.Audio);
+        var storage = new MemoryStorage();
+        var downloader = new Downloader(Padded("OggS\0\u0002"u8.ToArray(), WhatsAppMediaRules.MaxAudioBytes + 1));
+
+        await HandleAsync(fixture, tenantId, message, downloader, storage);
+
+        Assert.Empty(storage.Saved);
+        Assert.Equal(WhatsAppMediaState.Unavailable, (await StoredAsync(fixture, message)).MediaState);
+        Assert.Equal(WhatsAppMediaRules.MaxAudioBytes, downloader.AskedMax);
     }
 
     [Fact]
@@ -293,6 +309,14 @@ public class WhatsAppMediaFlowTests
             }, CancellationToken.None);
         Assert.True(result.IsSuccess, result.Error);
         return result.Value!;
+    }
+
+    /// <summary>A file that starts as <paramref name="head"/> and is <paramref name="size"/> bytes long.</summary>
+    private static byte[] Padded(byte[] head, long size)
+    {
+        var file = new byte[size];
+        head.CopyTo(file, 0);
+        return file;
     }
 
     private static byte[] Jpeg(int width, int height)

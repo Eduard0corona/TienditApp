@@ -1,4 +1,4 @@
-import { accountApi } from '../api/accountApi';
+import { accountApi, type MyCart } from '../api/accountApi';
 import { CUSTOMER_LEFT_EVENT } from './customerDevice';
 import { adoptAccountSavedAt, type SavedCartLine } from './savedCart';
 
@@ -12,8 +12,12 @@ export interface AccountCartPayload {
 /** A moment after the last change: a cart that changes with each tap goes once. */
 export const ACCOUNT_CART_DELAY_MS = 800;
 
+/** Told what the account kept: its cart now, or null when it was emptied. */
+export type AccountCartSaved = (saved: MyCart | null) => void;
+
 interface Pending {
   payload: AccountCartPayload | null;
+  onSaved: AccountCartSaved | null;
   timer: number | null;
   running: Promise<void> | null;
 }
@@ -29,12 +33,18 @@ export function cartSignature(payload: AccountCartPayload): string {
  * Keeps the cart of a store in the customer account, a moment after its last change, one save at a time and the last one
  * last: a save sent while another goes waits for it, so the account never ends with an older cart. A save that fails
  * (offline, the session ended) is dropped: the device keeps the cart and the next change sends it again. One kept gives
- * the device the account's time for it.
+ * the device the account's time for it, and `onSaved` what the account kept.
  */
-export function scheduleAccountCartSave(slug: string, payload: AccountCartPayload, delay = ACCOUNT_CART_DELAY_MS): void {
-  const entry = pending.get(slug) ?? { payload: null, timer: null, running: null };
+export function scheduleAccountCartSave(
+  slug: string,
+  payload: AccountCartPayload,
+  onSaved: AccountCartSaved | null = null,
+  delay = ACCOUNT_CART_DELAY_MS,
+): void {
+  const entry = pending.get(slug) ?? { payload: null, onSaved: null, timer: null, running: null };
   pending.set(slug, entry);
   entry.payload = payload;
+  entry.onSaved = onSaved;
   if (entry.timer !== null) window.clearTimeout(entry.timer);
   entry.timer = window.setTimeout(() => {
     entry.timer = null;
@@ -48,6 +58,7 @@ export function cancelAccountCartSaves(): void {
     if (entry.timer !== null) window.clearTimeout(entry.timer);
     entry.timer = null;
     entry.payload = null;
+    entry.onSaved = null;
   }
   pending.clear();
 }
@@ -60,12 +71,17 @@ async function send(slug: string, entry: Pending): Promise<void> {
     if (entry.timer !== null) return;
   }
   const payload = entry.payload;
+  const onSaved = entry.onSaved;
   if (!payload) return;
   entry.payload = null;
+  entry.onSaved = null;
   entry.running = Promise.resolve()
     .then(() => accountApi.saveCart(slug, { lines: payload.lines, reorderOf: payload.reorderOf ?? null, skipped: payload.skipped ?? null }))
     .then((saved) => {
-      if (saved && typeof saved.savedAt === 'string') adoptAccountSavedAt(slug, payload.lines, saved.savedAt);
+      // A cart kept answers it; an emptied one answers nothing (204).
+      const kept = saved && typeof saved.savedAt === 'string' ? saved : null;
+      if (kept) adoptAccountSavedAt(slug, payload.lines, kept.savedAt);
+      onSaved?.(kept);
     }, () => undefined);
   await entry.running;
   entry.running = null;
