@@ -54,14 +54,16 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
   const initialRequestEmails = employee?.noticeEmails?.requests ?? false;
   const initialQuoteReplyEmails = employee?.noticeEmails?.quoteReplies ?? false;
   const initialOrderCancellationEmails = employee?.noticeEmails?.orderCancellations ?? false;
+  const initialReviewEmails = employee?.noticeEmails?.reviews ?? false;
   const [requestEmails, setRequestEmails] = useState(initialRequestEmails);
   const [quoteReplyEmails, setQuoteReplyEmails] = useState(initialQuoteReplyEmails);
   const [orderCancellationEmails, setOrderCancellationEmails] = useState(initialOrderCancellationEmails);
+  const [reviewEmails, setReviewEmails] = useState(initialReviewEmails);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const { capabilities } = useTenant();
-  // The notices the business has: the agenda's with appointments, the answers to quotes with services or appointments, and
-  // the online orders their customers cancel in a business that sells (Fase 30B).
+  // The notices the business has: the agenda's with appointments, the answers to quotes with services or appointments, the
+  // online orders in a business that sells (Fase 30B) and the new reviews in any (Fase 31K).
   const offersRequests = hasCapability(capabilities, TenantCapability.Appointments);
   const offersQuoteReplies = hasAnyCapability(capabilities, TenantCapability.Service | TenantCapability.Appointments);
   const offersOrderCancellations = hasAnyCapability(capabilities, COMMERCE_CAPABILITIES);
@@ -92,6 +94,7 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
     quoteReplyEmails: offersQuoteReplies && quoteReplyEmails !== initialQuoteReplyEmails ? quoteReplyEmails : null,
     orderCancellationEmails:
       offersOrderCancellations && orderCancellationEmails !== initialOrderCancellationEmails ? orderCancellationEmails : null,
+    reviewEmails: reviewEmails !== initialReviewEmails ? reviewEmails : null,
   });
   // The permission a notice still needs, by its name; nothing while the names have not loaded.
   const missingPermission = (code: string) =>
@@ -254,45 +257,52 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
               )}
             </fieldset>
 
-            {(offersRequests || offersQuoteReplies || offersOrderCancellations) && (
-              <fieldset className="mt-3">
-                <legend className="form-label fs-6 fw-semibold">Avisos por correo</legend>
-                <p className="small text-muted mb-2">
-                  Le llegan a {employee?.email || email.trim() || 'su correo'}
-                  {!employee
-                    ? ' en cuanto su correo esté confirmado'
-                    : !employee.noticeEmails?.emailConfirmed ? ' cuando confirme su correo' : ''}. También los puede cambiar en
-                  Mi perfil.
-                </p>
-                {offersRequests && (
-                  <NoticeSwitch
-                    label="Citas en línea"
-                    description="Cada solicitud de cita o de visita, su recordatorio si sigue sin respuesta y cada cita que un cliente cancela."
-                    checked={requestEmails}
-                    onChange={setRequestEmails}
-                    missing={missingPermission('ManageAppointments')}
-                  />
-                )}
-                {offersQuoteReplies && (
-                  <NoticeSwitch
-                    label="Cotizaciones"
-                    description="Cada vez que un cliente acepta o rechaza una cotización desde su enlace."
-                    checked={quoteReplyEmails}
-                    onChange={setQuoteReplyEmails}
-                    missing={missingPermission('ManageOrders')}
-                  />
-                )}
-                {offersOrderCancellations && (
-                  <NoticeSwitch
-                    label="Pedidos cancelados"
-                    description="Cada pedido en línea que su cliente cancela antes de que lo acepten, o que alguien más del equipo cancela porque el cliente lo pidió."
-                    checked={orderCancellationEmails}
-                    onChange={setOrderCancellationEmails}
-                    missing={missingPermission('ManageOrders')}
-                  />
-                )}
-              </fieldset>
-            )}
+            <fieldset className="mt-3">
+              <legend className="form-label fs-6 fw-semibold">Avisos por correo</legend>
+              <p className="small text-muted mb-2">
+                Le llegan a {employee?.email || email.trim() || 'su correo'}
+                {!employee
+                  ? ' en cuanto su correo esté confirmado'
+                  : !employee.noticeEmails?.emailConfirmed ? ' cuando confirme su correo' : ''}. También los puede cambiar en
+                Mi perfil.
+              </p>
+              {offersRequests && (
+                <NoticeSwitch
+                  label="Citas en línea"
+                  description="Cada solicitud de cita o de visita, su recordatorio si sigue sin respuesta y cada cita que un cliente cancela."
+                  checked={requestEmails}
+                  onChange={setRequestEmails}
+                  missing={missingPermission('ManageAppointments')}
+                />
+              )}
+              {offersQuoteReplies && (
+                <NoticeSwitch
+                  label="Cotizaciones"
+                  description="Cada vez que un cliente acepta o rechaza una cotización desde su enlace."
+                  checked={quoteReplyEmails}
+                  onChange={setQuoteReplyEmails}
+                  missing={missingPermission('ManageOrders')}
+                />
+              )}
+              {offersOrderCancellations && (
+                <NoticeSwitch
+                  label="Pedidos en línea"
+                  description="Cada pedido en línea que lleva 15 minutos sin que nadie lo acepte o lo rechace, que su cliente cancela antes de que lo acepten, o que alguien más del equipo cancela porque el cliente lo pidió."
+                  checked={orderCancellationEmails}
+                  onChange={setOrderCancellationEmails}
+                  missing={missingPermission('ManageOrders')}
+                />
+              )}
+              <NoticeSwitch
+                label="Reseñas"
+                description="Cada reseña nueva que un cliente escribe, con sus estrellas y su comentario."
+                checked={reviewEmails}
+                onChange={setReviewEmails}
+                missing={null}
+                // Only owners and admins read and answer the reviews.
+                warning={isManager ? null : 'Solo les llegan a quienes administran el negocio.'}
+              />
+            </fieldset>
           </>
         )}
       </Modal.Body>
@@ -313,6 +323,7 @@ function NoticeSwitch({
   checked,
   onChange,
   missing,
+  warning = null,
 }: {
   label: string;
   description: string;
@@ -320,6 +331,8 @@ function NoticeSwitch({
   onChange: (checked: boolean) => void;
   /** The name of the permission without which this notice does not reach them. */
   missing: string | null;
+  /** Why it would not reach them, when it is not a permission (Fase 31K: the reviews, only to owners and admins). */
+  warning?: string | null;
 }) {
   const switchId = useId();
   const descriptionId = useId();
@@ -339,7 +352,7 @@ function NoticeSwitch({
         {description}
         {/* Always there, so a screen reader hears the warning when the switch turns on. */}
         <span className="d-block text-warning-emphasis" aria-live="polite">
-          {checked && missing ? `Sin el permiso «${missing}» no le llegan.` : ''}
+          {checked ? (warning ?? (missing ? `Sin el permiso «${missing}» no le llegan.` : '')) : ''}
         </span>
       </div>
     </div>

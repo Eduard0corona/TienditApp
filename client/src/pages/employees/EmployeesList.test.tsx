@@ -51,7 +51,7 @@ function employee(patch: Partial<EmployeeRecord>): EmployeeRecord {
   return {
     tenantUserId: 't', userId: 'u', email: 'x@cafe.mx', firstName: 'X', lastName: 'Y', appRole: 'Staff', tenantRole: 'Staff',
     status: 'Active', isActive: true, createdAt: '2026-10-01T12:00:00Z', permissions: [],
-    noticeEmails: { requests: false, quoteReplies: false, orderCancellations: false, emailConfirmed: true },
+    noticeEmails: { requests: false, quoteReplies: false, orderCancellations: false, reviews: false, emailConfirmed: true },
     ...patch,
   };
 }

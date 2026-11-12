@@ -47,8 +47,10 @@ export default function Profile() {
   const onTheTeam = !!tenant && !access.platform;
   const answersRequests = onTheTeam && access.appointments;
   const worksQuotes = onTheTeam && access.quotes;
-  // Fase 30B: whoever confirms the orders, the online orders their customers cancel.
+  // Fase 30B: whoever confirms the orders, the online orders their customers cancel (and, since the Fase 31K, those waiting).
   const confirmsOrders = onTheTeam && access.orders;
+  // Fase 31K: whoever reads and answers the reviews (owners and admins), the new ones.
+  const answersReviews = onTheTeam && access.reviews;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   // Saved, the form it was in goes away: the focus goes back to what opened it, once it is enabled again.
@@ -386,12 +388,13 @@ export default function Profile() {
 
           <PhoneChangeCard />
 
-          {(answersRequests || worksQuotes || confirmsOrders) && (
+          {(answersRequests || worksQuotes || confirmsOrders || answersReviews) && (
             <NoticeEmailsCard
               businessName={tenant?.name}
               agenda={answersRequests}
               quotes={worksQuotes}
               orders={confirmsOrders}
+              reviews={answersReviews}
               ownsBusiness={isOwnerRole(user?.tenantRole)}
             />
           )}

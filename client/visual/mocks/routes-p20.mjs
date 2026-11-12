@@ -3,7 +3,8 @@
 // has not chosen, so she gets them, at the email of her account (confirmed). Since the Fase 29O (ADR 0069), also whether she
 // gets one with each answer to a quote (GET and PUT /quotes/reply-emails, from `data.quoteReplyEmails`), on as well. Since
 // the Fase 30B (ADR 0082), also with each online order its customer cancels (GET and PUT /orders/cancellation-emails, from
-// `data.orderCancellationEmails`), on as well.
+// `data.orderCancellationEmails`), on as well; since the Fase 31K (ADR 0091) they also bring the order still waiting, and
+// she gets one with each new review (GET and PUT /reviews/emails, from `data.reviewEmails`), on as well.
 
 /** The owner's choice, as the API answers it before she makes one. */
 export function demoRequestEmails(data) {
@@ -14,6 +15,7 @@ export function phase29nRoutes(data, { ok }) {
   data.requestEmails ??= demoRequestEmails(data);
   data.quoteReplyEmails ??= demoRequestEmails(data);
   data.orderCancellationEmails ??= demoRequestEmails(data);
+  data.reviewEmails ??= demoRequestEmails(data);
 
   return [
     ['GET', /^\/appointments\/request-emails$/, () => ok(data.requestEmails)],
@@ -30,6 +32,11 @@ export function phase29nRoutes(data, { ok }) {
     ['PUT', /^\/orders\/cancellation-emails$/, (m, q, body) => {
       data.orderCancellationEmails = { ...data.orderCancellationEmails, enabled: !!body?.enabled };
       return ok(data.orderCancellationEmails);
+    }],
+    ['GET', /^\/reviews\/emails$/, () => ok(data.reviewEmails)],
+    ['PUT', /^\/reviews\/emails$/, (m, q, body) => {
+      data.reviewEmails = { ...data.reviewEmails, enabled: !!body?.enabled };
+      return ok(data.reviewEmails);
     }],
   ];
 }

@@ -14682,6 +14682,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviews/emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewEmailsDto"];
+                        "application/json": components["schemas"]["ReviewEmailsDto"];
+                        "text/json": components["schemas"]["ReviewEmailsDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateReviewEmailsCommand"];
+                    "text/json": components["schemas"]["UpdateReviewEmailsCommand"];
+                    "application/*+json": components["schemas"]["UpdateReviewEmailsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewEmailsDto"];
+                        "application/json": components["schemas"]["ReviewEmailsDto"];
+                        "text/json": components["schemas"]["ReviewEmailsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{id}/reply": {
         parameters: {
             query?: never;
@@ -17369,6 +17433,7 @@ export interface components {
             requestEmails?: boolean | null;
             quoteReplyEmails?: boolean | null;
             orderCancellationEmails?: boolean | null;
+            reviewEmails?: boolean | null;
         };
         CreateInventoryLocationCommand: {
             name: string;
@@ -18305,6 +18370,7 @@ export interface components {
             requests: boolean;
             quoteReplies: boolean;
             orderCancellations: boolean;
+            reviews: boolean;
             emailConfirmed: boolean;
         };
         EmployeePermissionOptionDto: {
@@ -21998,6 +22064,11 @@ export interface components {
          * @enum {integer}
          */
         ReviewConcern: 1 | 2 | 3 | 4 | 5;
+        ReviewEmailsDto: {
+            enabled: boolean;
+            email?: string | null;
+            emailConfirmed: boolean;
+        };
         ReviewReplyRequest: {
             text?: string | null;
         };
@@ -22876,6 +22947,7 @@ export interface components {
             requestEmails?: boolean | null;
             quoteReplyEmails?: boolean | null;
             orderCancellationEmails?: boolean | null;
+            reviewEmails?: boolean | null;
         };
         UpdateHomeVisitRequestsSettingsCommand: {
             enabled: boolean;
@@ -23065,6 +23137,9 @@ export interface components {
             onlineReplies?: boolean | null;
         };
         UpdateRequestEmailsCommand: {
+            enabled: boolean;
+        };
+        UpdateReviewEmailsCommand: {
             enabled: boolean;
         };
         UpdateSalesPolicyCommand: {
