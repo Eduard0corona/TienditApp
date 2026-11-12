@@ -81,7 +81,7 @@ public class AccountCartFlowTests
         var beto = await AccountAsync(fixture, "beto@demo.com");
 
         SignIn(fixture, ana);
-        await SaveAsync(fixture, "demo", [Line(tacos.Id, 1)]);
+        var anas = (await SaveAsync(fixture, "demo", [Line(tacos.Id, 1)])).Value!;
         Assert.Equal(AccountCartRules.NotFoundMessage, (await SaveAsync(fixture, "sin-menu", [Line(tacos.Id, 1)])).Error);
         Assert.Equal(AccountCartRules.NotFoundMessage, (await SaveAsync(fixture, "no-existe", [Line(tacos.Id, 1)])).Error);
 
@@ -90,7 +90,10 @@ public class AccountCartFlowTests
         Assert.Empty(await CartsAsync(fixture));
         Assert.True((await DeleteAsync(fixture, "demo")).IsSuccess);
         SignIn(fixture, ana);
-        Assert.Single(await CartsAsync(fixture));
+        // Still with its line: an emptied one would be listed too (as when it was forgotten).
+        var kept = Assert.Single(await CartsAsync(fixture));
+        Assert.Equal(1, kept.Lines.Single().Quantity);
+        Assert.Equal(anas.SavedAt, kept.SavedAt);
 
         // A team account and a request without a session buy as guests: their carts stay on the device.
         SignIn(fixture, await AccountAsync(fixture, "dueno@demo.com", UserRole.TenantAdmin));
