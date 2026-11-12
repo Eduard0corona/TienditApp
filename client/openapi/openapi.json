@@ -22320,6 +22320,18 @@
           "sentAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "mediaKind": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaState": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaPath": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

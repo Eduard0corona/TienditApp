@@ -14,7 +14,12 @@ vi.mock('../../api/chatApi', () => ({ chatApi: { getConversations: vi.fn(), getM
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useChatSignalR', () => ({
-  useChatSignalR: () => ({ onNewMessage: () => () => undefined, onConversationUpdated: () => () => undefined, onMessageStatus: () => () => undefined }),
+  useChatSignalR: () => ({
+    onNewMessage: () => () => undefined,
+    onConversationUpdated: () => () => undefined,
+    onMessageStatus: () => () => undefined,
+    onMessageMedia: () => () => undefined,
+  }),
 }));
 
 const conversation = (overrides: Partial<ConversationDto>): ConversationDto => ({

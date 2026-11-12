@@ -21,6 +21,7 @@ import { phase25Routes } from './routes-p11.mjs';
 import { phase24dRoutes } from './routes-p12.mjs';
 import { phase24fRoutes } from './routes-p13.mjs';
 import { phase31jRoutes } from './routes-p31j.mjs';
+import { phase31lRoutes } from './routes-p31l.mjs';
 import { phase24hRoutes } from './routes-p14.mjs';
 import { phase26aRoutes } from './routes-p15.mjs';
 import { phase26bRoutes } from './routes-p16.mjs';
@@ -253,6 +254,8 @@ function buildRoutes(data, token) {
     ...phase5aRoutes(data, { ok, notFound }),
     ...phase4eRoutes(Object.assign(data, { token }), { ok }),
     ...phase4Routes(data, { ok, notFound, paginate, createMockOrder }),
+    // After phase 4, which seeds the photo of the chat that this one keeps.
+    ...phase31lRoutes(data),
     ...phase2Routes(data, { ok, notFound, paginate }),
     ...phase3Routes(data, { ok, notFound }),
     // ------------------------------------------------------------- auth / session

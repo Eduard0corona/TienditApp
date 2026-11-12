@@ -17149,6 +17149,9 @@ export interface components {
             status: string;
             /** Format: date-time */
             sentAt: string;
+            mediaKind?: string | null;
+            mediaState?: string | null;
+            mediaPath?: string | null;
         };
         ChatMessageDtoPaginatedList: {
             items: components["schemas"]["ChatMessageDto"][];

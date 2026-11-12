@@ -15,6 +15,14 @@ export interface MessageStatusPayload {
   status: string;
 }
 
+/** The photo or audio of a message was kept, with where it is, or given up (Fase 31L). */
+export interface MessageMediaPayload {
+  conversationId: string;
+  messageId: string;
+  mediaState: string;
+  mediaPath?: string | null;
+}
+
 export function useChatSignalR() {
   const connectionRef = useRef<HubConnection | null>(null);
 
@@ -63,5 +71,16 @@ export function useChatSignalR() {
     []
   );
 
-  return { onNewMessage, onConversationUpdated, onMessageStatus };
+  const onMessageMedia = useCallback(
+    (callback: (data: MessageMediaPayload) => void) => {
+      const conn = connectionRef.current;
+      if (!conn) return () => {};
+
+      conn.on('MessageMedia', callback);
+      return () => conn.off('MessageMedia', callback);
+    },
+    []
+  );
+
+  return { onNewMessage, onConversationUpdated, onMessageStatus, onMessageMedia };
 }
