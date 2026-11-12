@@ -58,11 +58,12 @@ public class AccountCartFlowTests
         Assert.Equal(("demo", SalesTestFixture.Now.AddHours(3), 0, (int?)null), (cart.Slug, cart.SavedAt, cart.Lines.Count, cart.ReorderOf));
         Assert.Empty((await fixture.Context.AccountCarts.SingleAsync()).Lines);
 
-        // An emptied store that had none keeps none.
+        // An emptied store that had none keeps none; saving another store keeps the emptied one (a week, as a device).
         var (_, cafe) = await StoreAsync(fixture, "cafe");
         Assert.True((await SaveAsync(fixture, "cafe", [])).IsSuccess);
         Assert.Equal(1, await fixture.Context.AccountCarts.CountAsync());
-        Assert.NotEqual(Guid.Empty, cafe.Id);
+        await SaveAsync(fixture, "cafe", [Line(cafe.Id, 1)]);
+        Assert.Equal([("cafe", 1), ("demo", 0)], (await CartsAsync(fixture)).Select(c => (c.Slug, c.Lines.Count)));
     }
 
     [Fact]

@@ -45,6 +45,15 @@ public class OnlineOrderWaitingEmailTests
         Assert.Null(await RemindedAtAsync(fixture, tooOld));
         Assert.Null(await RemindedAtAsync(fixture, theirs));
 
+        // The worker reads the same across businesses: only what is still due, never one reminded already or one the
+        // business itself took down (an order it entered for a customer).
+        var byBusiness = await PlaceAsync(fixture, tacos, kitchen.Slug);
+        await ChangeAsync(fixture, byBusiness.Id, o => fixture.Context.Entry(o).Property(x => x.CreatedByBusiness).CurrentValue = true);
+        var due = await OnlineOrderWaitingPlanner.Due(fixture.Context.Orders.IgnoreQueryFilters().AsNoTracking(), arrived.AddMinutes(20))
+            .Select(o => o.Id)
+            .ToListAsync();
+        Assert.Equal([theirs.Id], due);
+
         // Once: a later pass reminds nothing more; and the other business's, in its own pass.
         Assert.Equal(0, await RemindAsync(fixture, kitchen, arrived.AddMinutes(20)));
         Assert.Equal(1, await RemindAsync(fixture, other, arrived.AddMinutes(20)));

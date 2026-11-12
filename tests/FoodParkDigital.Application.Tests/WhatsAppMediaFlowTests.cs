@@ -173,6 +173,11 @@ public class WhatsAppMediaFlowTests
         Assert.True(opened.IsSuccess, opened.Error);
         Assert.Equal(("audio/ogg", Path.GetFileName(key)), (opened.Value!.ContentType, opened.Value.FileName));
 
+        // Kept, but in another business's folder: this one does not open it.
+        var theirs = $"whatsapp/{Guid.NewGuid()}/202611/{Guid.NewGuid()}.ogg";
+        await storage.SaveAsync(theirs, new MemoryStream("OggS"u8.ToArray()), "audio/ogg");
+        Assert.Equal(GetPrivateOrderFileQueryHandler.NotFoundError, (await Query(tenantId, storage).Handle(new GetWhatsAppMediaFileQuery(theirs), CancellationToken.None)).Error);
+
         // Another business's, a key the app never creates, or one that is gone: like a missing one.
         foreach (var other in new[]
                  {
