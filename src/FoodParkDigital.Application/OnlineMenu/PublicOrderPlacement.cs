@@ -182,8 +182,21 @@ internal sealed class PublicOrderPlacement
         await orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, StockShortageHandling.Allow);
         if (accountId is { } account && request.Delivery is not null)
             await RememberAddressAsync(account, request, now, cancellationToken);
+        if (accountId is { } owner)
+            await ForgetCartAsync(owner, tenant.Id, cancellationToken);
         order.IssueTrackingToken(OrderTracking.NewToken());
         return accepted;
+    }
+
+    /// <summary>
+    /// The cart the account left in this store is ordered now (Fase 31J, ADR 0090): it goes with the order, whatever device
+    /// it was left on, as the store forgets the one of the device. Saved with the order.
+    /// </summary>
+    private async Task ForgetCartAsync(Guid accountId, Guid businessId, CancellationToken cancellationToken)
+    {
+        var cart = await _context.AccountCarts.FirstOrDefaultAsync(c => c.UserId == accountId && c.BusinessId == businessId, cancellationToken);
+        if (cart is not null)
+            _context.AccountCarts.Remove(cart);
     }
 
     /// <summary>

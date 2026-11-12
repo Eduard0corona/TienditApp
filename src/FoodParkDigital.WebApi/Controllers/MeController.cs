@@ -139,6 +139,53 @@ public class MeController : ControllerBase
     public async Task<IActionResult> RemoveMyFavorite(string slug, CancellationToken cancellationToken)
         => FavoriteResult(await _mediator.Send(new RemoveMyFavoriteCommand(slug), cancellationToken));
 
+    /// <summary>
+    /// The carts the customer account left in the stores (Fase 31J), the last one changed first: changed within a week, in
+    /// stores that are active and published. Each keeps what was chosen, never a price.
+    /// </summary>
+    [HttpGet("carts")]
+    public async Task<ActionResult<List<MyCartDto>>> GetMyCarts(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetMyCartsQuery(), cancellationToken));
+
+    /// <summary>
+    /// Keeps the account's cart in a store, by the slug of its store, all of it; an empty one is forgotten and answers 204.
+    /// </summary>
+    [HttpPut("carts/{slug}")]
+    public async Task<ActionResult<MyCartDto>> SaveMyCart(string slug, [FromBody] SaveMyCartRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SaveMyCartCommand
+        {
+            Slug = slug,
+            Lines = request.Lines ?? [],
+            ReorderOf = request.ReorderOf,
+            Skipped = request.Skipped
+        }, cancellationToken);
+        if (result.IsFailure)
+            return CartError(result.Error!);
+        return result.Value is null ? NoContent() : Ok(result.Value);
+    }
+
+    /// <summary>Forgets the account's cart in a store; one that was not there changes nothing.</summary>
+    [HttpDelete("carts/{slug}")]
+    public async Task<IActionResult> DeleteMyCart(string slug, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeleteMyCartCommand(slug), cancellationToken);
+        return result.IsFailure ? CartError(result.Error!) : NoContent();
+    }
+
+    /// <summary>The postal code the customer account gave in Explorar (Fase 31J); none without one.</summary>
+    [HttpGet("postal-code")]
+    public async Task<ActionResult<MyPostalCodeDto>> GetMyPostalCode(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetMyPostalCodeQuery(), cancellationToken));
+
+    /// <summary>Keeps the postal code the customer account gives in Explorar; empty forgets it.</summary>
+    [HttpPut("postal-code")]
+    public async Task<ActionResult<MyPostalCodeDto>> SaveMyPostalCode([FromBody] MyPostalCodeRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SaveMyPostalCodeCommand(request.PostalCode), cancellationToken);
+        return result.IsFailure ? CartError(result.Error!) : Ok(result.Value);
+    }
+
     /// <summary>The reviews the customer account wrote (Fase 24H), the latest first, hidden ones too with why.</summary>
     [HttpGet("reviews")]
     public async Task<ActionResult<List<MyReviewDto>>> GetMyReviews(CancellationToken cancellationToken)
@@ -200,10 +247,24 @@ public class MeController : ControllerBase
     }, error);
 
     // Another account's address, or one already deleted, is not found.
+    // A store that is not published is not found.
+    private ObjectResult CartError(string error)
+        => this.ApiError(error == AccountCartRules.NotFoundMessage ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest, error);
+
     private ObjectResult AddressError(string error)
         => this.ApiError(error == AccountAddressRules.NotFoundMessage ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest, error);
 }
 
 public record MyReviewRequest(int Rating, string? Comment = null);
+
+/// <summary>The account's cart in a store (Fase 31J): its lines, all of them; none or empty forgets it.</summary>
+public class SaveMyCartRequest
+{
+    public List<MyCartLineDto>? Lines { get; init; }
+    public int? ReorderOf { get; init; }
+    public int? Skipped { get; init; }
+}
+
+public record MyPostalCodeRequest(string? PostalCode = null);
 
 public record AccountAddressRequest(string PostalCode, string AddressLine, string? Label = null, string? References = null);
