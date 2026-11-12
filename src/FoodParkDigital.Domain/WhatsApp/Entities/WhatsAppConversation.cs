@@ -1,5 +1,7 @@
 using FoodParkDigital.Domain.Common;
+using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.WhatsApp.Enums;
+using FoodParkDigital.Domain.WhatsApp.Events;
 
 namespace FoodParkDigital.Domain.WhatsApp.Entities;
 
@@ -43,6 +45,22 @@ public class WhatsAppConversation : AuditableEntity, ITenantScoped
         if (direction == MessageDirection.Inbound)
             UnreadCount++;
 
+        return message;
+    }
+
+    /// <summary>
+    /// A photo or an audio the customer sent, with its marker as its text (Fase 31L, ADR 0092): it is downloaded in the
+    /// background (<see cref="WhatsAppMediaReceivedEvent"/>), and until then the chat shows the marker.
+    /// </summary>
+    public WhatsAppMessage AddInboundMedia(string body, string externalMessageId, WhatsAppMediaKind kind, string mediaId)
+    {
+        // Refused before anything changes: the conversation never keeps a message without what it brought.
+        if (!Enum.IsDefined(kind) || !WhatsAppMessage.IsMediaId(mediaId))
+            throw new DomainException("La foto o el audio de WhatsApp no es válido.");
+
+        var message = AddMessage(MessageDirection.Inbound, body, externalMessageId);
+        message.AttachMedia(kind, mediaId);
+        AddDomainEvent(new WhatsAppMediaReceivedEvent(message.Id, TenantId));
         return message;
     }
 
