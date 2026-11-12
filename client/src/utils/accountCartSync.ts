@@ -1,5 +1,6 @@
 import { accountApi } from '../api/accountApi';
-import type { SavedCartLine } from './savedCart';
+import { CUSTOMER_LEFT_EVENT } from './customerDevice';
+import { adoptAccountSavedAt, type SavedCartLine } from './savedCart';
 
 /** What the account keeps of a cart (Fase 31J): its lines and «Pedir otra vez». */
 export interface AccountCartPayload {
@@ -27,7 +28,8 @@ export function cartSignature(payload: AccountCartPayload): string {
 /**
  * Keeps the cart of a store in the customer account, a moment after its last change, one save at a time and the last one
  * last: a save sent while another goes waits for it, so the account never ends with an older cart. A save that fails
- * (offline, the session ended) is dropped: the device keeps the cart and the next change sends it again.
+ * (offline, the session ended) is dropped: the device keeps the cart and the next change sends it again. One kept gives
+ * the device the account's time for it.
  */
 export function scheduleAccountCartSave(slug: string, payload: AccountCartPayload, delay = ACCOUNT_CART_DELAY_MS): void {
   const entry = pending.get(slug) ?? { payload: null, timer: null, running: null };
@@ -40,6 +42,17 @@ export function scheduleAccountCartSave(slug: string, payload: AccountCartPayloa
   }, delay);
 }
 
+/** The account leaves this device: what was waiting to go to it does not go (what is on its way finishes or fails). */
+export function cancelAccountCartSaves(): void {
+  for (const entry of pending.values()) {
+    if (entry.timer !== null) window.clearTimeout(entry.timer);
+    entry.timer = null;
+    entry.payload = null;
+  }
+  pending.clear();
+}
+window.addEventListener(CUSTOMER_LEFT_EVENT, cancelAccountCartSaves);
+
 async function send(slug: string, entry: Pending): Promise<void> {
   if (entry.running) {
     await entry.running;
@@ -49,9 +62,11 @@ async function send(slug: string, entry: Pending): Promise<void> {
   const payload = entry.payload;
   if (!payload) return;
   entry.payload = null;
-  entry.running = accountApi
-    .saveCart(slug, { lines: payload.lines, reorderOf: payload.reorderOf ?? null, skipped: payload.skipped ?? null })
-    .then(() => undefined, () => undefined);
+  entry.running = Promise.resolve()
+    .then(() => accountApi.saveCart(slug, { lines: payload.lines, reorderOf: payload.reorderOf ?? null, skipped: payload.skipped ?? null }))
+    .then((saved) => {
+      if (saved && typeof saved.savedAt === 'string') adoptAccountSavedAt(slug, payload.lines, saved.savedAt);
+    }, () => undefined);
   await entry.running;
   entry.running = null;
   // Changed while it went, and its moment already passed: the last one goes now.

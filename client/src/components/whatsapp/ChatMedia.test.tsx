@@ -51,13 +51,37 @@ describe('ChatMedia (Fase 31L)', () => {
   });
 
   it('says what is on its way while it downloads, and nothing more when only its marker stays', () => {
-    const { rerender, container } = render(<ChatMedia message={message({ mediaKind: 'Image', mediaState: 'Pending' })} />);
+    const sentAt = new Date().toISOString();
+    const { rerender, container } = render(<ChatMedia message={message({ mediaKind: 'Image', mediaState: 'Pending', sentAt })} />);
     expect(screen.getByRole('status')).toHaveTextContent('Descargando la foto…');
 
-    rerender(<ChatMedia message={message({ body: '🎤 Nota de voz', mediaKind: 'Audio', mediaState: 'Pending' })} />);
+    rerender(<ChatMedia message={message({ body: '🎤 Nota de voz', mediaKind: 'Audio', mediaState: 'Pending', sentAt })} />);
     expect(screen.getByRole('status')).toHaveTextContent('Descargando el audio…');
 
-    rerender(<ChatMedia message={message({ mediaKind: 'Image', mediaState: 'Unavailable' })} />);
+    rerender(<ChatMedia message={message({ mediaKind: 'Image', mediaState: 'Unavailable', sentAt })} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('stops saying it downloads a day after the message came: the outbox gave up on it', () => {
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000 - 1000).toISOString();
+
+    const { container } = render(<ChatMedia message={message({ mediaKind: 'Image', mediaState: 'Pending', sentAt: dayAgo })} />);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('fetches nothing from a path the app does not create, nor a photo where an audio should be', () => {
+    const { rerender, container } = render(
+      <ChatMedia message={message({ mediaKind: 'Image', mediaState: 'Saved', mediaPath: '/api/v1/auth/my-tenant/whatsapp' })} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+
+    rerender(<ChatMedia message={message({ mediaKind: 'Image', mediaState: 'Saved', mediaPath: 'https://otro.example/foto.webp' })} />);
+    expect(container).toBeEmptyDOMElement();
+    rerender(<ChatMedia message={message({ mediaKind: 'Audio', mediaState: 'Saved', mediaPath: photoPath })} />);
+    expect(container).toBeEmptyDOMElement();
+    rerender(<ChatMedia message={message({ mediaKind: 'Image', mediaState: 'Saved', mediaPath: `${photoPath}/../../x.webp` })} />);
     expect(container).toBeEmptyDOMElement();
     expect(api.get).not.toHaveBeenCalled();
   });

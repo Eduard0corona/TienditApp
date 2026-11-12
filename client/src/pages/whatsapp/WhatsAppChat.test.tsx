@@ -114,7 +114,7 @@ describe('WhatsAppChat photos and audios of the customer (Fase 31L)', () => {
     } as never);
     vi.mocked(chatApi.getMessages).mockResolvedValue({
       data: {
-        items: [{ id: 'm1', conversationId: 'c1', direction: 'Inbound', body: '📷 Foto: así lo quiero', status: 'Delivered', sentAt: '2026-11-12T18:00:00Z', mediaKind: 'Image', mediaState: 'Pending', mediaPath: null }],
+        items: [{ id: 'm1', conversationId: 'c1', direction: 'Inbound', body: '📷 Foto: así lo quiero', status: 'Delivered', sentAt: new Date().toISOString(), mediaKind: 'Image', mediaState: 'Pending', mediaPath: null }],
         pageNumber: 1, totalPages: 1, totalCount: 1, hasPreviousPage: false, hasNextPage: false,
       },
     } as never);

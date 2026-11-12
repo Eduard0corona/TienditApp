@@ -6,6 +6,7 @@ import { queryKeys } from '../api/queries';
 import { queryClient } from '../api/queryClient';
 import { apiRequest } from '../api/typedClient';
 import type { LoginRequest, TwoFactorLoginRequest, UserProfileDto } from '../types';
+import { forgetCustomerDevice } from '../utils/customerDevice';
 import { AuthContext, type AcceptInvitationRequest, type LoginResult } from './AuthContextDefinition';
 import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
@@ -122,6 +123,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // A customer account keeps its carts and postal code (Fase 31J): this device forgets them, so whoever signs in next on
+    // it does not take them into their own account.
+    if (user) forgetCustomerDevice(user);
     try {
       await authApi.logout();
     } finally {

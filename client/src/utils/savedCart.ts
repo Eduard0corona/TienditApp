@@ -1,4 +1,5 @@
 import type { ProductOptionGroupDto } from '../types';
+import { CARTS_STORAGE_KEY } from './customerDevice';
 import { getLineKey, getOptionsLabel, getPriceWithOptions, getSelectionError } from './productOptions';
 
 /** A line of a cart as the device keeps it: what was chosen, never a price (the menu says it when opened). */
@@ -42,7 +43,7 @@ export interface CartLine<P extends CartMenuProduct> {
   notes?: string;
 }
 
-const STORAGE_KEY = 'tienditapp.carts';
+const STORAGE_KEY = CARTS_STORAGE_KEY;
 /** A cart left longer than this is not offered again. */
 export const CART_DAYS = 7;
 /** The carts one device keeps, the most recent ones. */
@@ -131,6 +132,19 @@ export function clearCart(slug: string): void {
   writeAll(carts);
 }
 
+/**
+ * The account kept this cart (Fase 31J): the device takes the account's time for it, so «the one changed last» compares the
+ * server's clock with the server's, never this device's (which may run ahead). Only while the cart is still the one sent.
+ */
+export function adoptAccountSavedAt(slug: string, lines: readonly SavedCartLine[], savedAt: string): void {
+  const time = Date.parse(savedAt);
+  const carts = readAll();
+  const cart = carts[slug];
+  if (!cart || !Number.isFinite(time) || JSON.stringify(cart.lines) !== JSON.stringify(lines)) return;
+  carts[slug] = { ...cart, savedAt: new Date(time).toISOString() };
+  writeAll(carts);
+}
+
 /** A cart left without sending, for «Tienes un pedido sin enviar en…». */
 export interface PendingCart {
   slug: string;
@@ -182,13 +196,19 @@ export function fromAccountCart(cart: AccountCartLike): SavedCart {
   };
 }
 
-/** Of the cart of this device and the account's, the one changed last (the device's when both changed at once). */
+/**
+ * Of the cart of this device and the account's, the one changed last (the device's when both changed at once). The
+ * account's may be empty: ordered or emptied on another device after this one kept its cart, which then goes too.
+ */
 export function newerCart(device: SavedCart | null, account: SavedCart | null): SavedCart | null {
   if (!device || !account) return device ?? account;
   return Date.parse(account.savedAt) > Date.parse(device.savedAt) ? account : device;
 }
 
-/** Of the cart left on this device and the account's, the one changed last, for «Tienes un pedido sin enviar en…». */
+/**
+ * Of the cart left on this device and the account's, the one changed last, for «Tienes un pedido sin enviar en…». The
+ * device's does not count when the account changed the same store's later (ordered or emptied on another device).
+ */
 export function latestPendingCart(device: PendingCart | null, account: readonly AccountCartLike[]): PendingCart | null {
   const candidates: PendingCart[] = account
     .filter((cart) => cart.lines.length > 0)
@@ -198,7 +218,9 @@ export function latestPendingCart(device: PendingCart | null, account: readonly 
       itemCount: cart.lines.reduce((sum, line) => sum + line.quantity, 0),
       savedAt: cart.savedAt,
     }));
-  if (device) candidates.push(device);
+  const replaced = device !== null && account.some((cart) => cart.slug === device.slug
+    && Date.parse(cart.savedAt) > Date.parse(device.savedAt));
+  if (device && !replaced) candidates.push(device);
   return candidates.sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt))[0] ?? null;
 }
 

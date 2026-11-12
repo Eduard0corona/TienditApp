@@ -47,6 +47,7 @@ import {
   restoreLines,
   saveCart,
   type CartLine,
+  type SavedCartLine,
 } from '../../utils/savedCart';
 import { cartSignature, scheduleAccountCartSave } from '../../utils/accountCartSync';
 import { bookingPath } from '../../utils/onlineBooking';
@@ -62,6 +63,16 @@ import PublicDeliveryFields, { type PublicDeliveryAddress } from './PublicDelive
 import './PublicMenuPage.css';
 
 type MenuLine = CartLine<PublicMenuProduct>;
+
+/** The lines as this device and the account keep them: what was chosen, never a price. */
+function savedLinesOf(lines: readonly MenuLine[]): SavedCartLine[] {
+  return lines.map((line) => ({
+    productId: line.product.id,
+    optionIds: line.optionIds,
+    quantity: line.quantity,
+    ...(line.notes ? { notes: line.notes } : {}),
+  }));
+}
 
 /** The element of a category's section, for its tab. */
 const sectionId = (categoryId: string) => `pm-cat-${categoryId}`;
@@ -234,25 +245,35 @@ export default function PublicMenuPage() {
     queryKey: ['me', 'carts'],
     queryFn: ({ signal }) => accountApi.getCarts(signal),
     enabled: !!customer && !checking,
+    // Read each time the store opens: one remembered from a moment ago may miss what another device changed since.
+    staleTime: 0,
   });
   // What the account received last of this store's cart: the same cart is not sent again.
   const accountCartSent = useRef<string | null>(null);
-  // Who the session is, and with an account its carts, are known (or could not be read: the device's then).
-  const accountKnown = !checking && (!customer || accountCarts.isSuccess || accountCarts.isError);
+  // Who the session is, and with an account its carts read now, are known (or could not be read: the device's then).
+  const accountKnown = !checking && (!customer || accountCarts.isFetchedAfterMount);
 
   // The cart this device kept for this store, or the account's when it changed later, with what its menu has now (and
-  // «Pedir otra vez»), once per store.
+  // «Pedir otra vez»), once per store. The account's may be empty (ordered or emptied on another device later): this
+  // device's then goes too.
   if (data && restoredFor !== slug && accountKnown) {
     setRestoredFor(slug);
-    const kept = customer ? accountCarts.data?.find((cart) => cart.slug === slug) ?? null : null;
+    const accountRead = !!customer && accountCarts.isSuccess;
+    const kept = accountRead ? accountCarts.data?.find((cart) => cart.slug === slug) ?? null : null;
     const fromAccount = kept ? fromAccountCart(kept) : null;
-    accountCartSent.current = fromAccount ? cartSignature(fromAccount) : cartSignature({ lines: [] });
     const saved = newerCart(readCart(slug), fromAccount);
-    if (saved) {
-      const restored = restoreLines(saved.lines, data.categories.flatMap((item) => item.products));
+    const restored = saved && saved.lines.length > 0
+      ? restoreLines(saved.lines, data.categories.flatMap((item) => item.products))
+      : null;
+    if (saved && restored) {
       setLines(restored.lines);
       setRestoredNotice(restoredMessage(restored.lines.length, restored.dropped, saved.skipped ?? 0, saved.reorderOf !== undefined));
     }
+    // What the account has: the same cart is not sent again. When it could not be read, what this device restores: only
+    // a change made here goes then, never this device's cart over a newer one of the account.
+    accountCartSent.current = accountRead
+      ? cartSignature(fromAccount ?? { lines: [] })
+      : cartSignature({ lines: savedLinesOf(restored?.lines ?? []) });
   }
 
   // The first time the order goes to an address: the account's last one used, or the postal code given in Explorar.
@@ -337,12 +358,7 @@ export default function PublicMenuPage() {
   const customerId = customer?.id;
   useEffect(() => {
     if (restoredFor !== slug || !businessName) return;
-    const kept = lines.map((line) => ({
-      productId: line.product.id,
-      optionIds: line.optionIds,
-      quantity: line.quantity,
-      ...(line.notes ? { notes: line.notes } : {}),
-    }));
+    const kept = savedLinesOf(lines);
     saveCart(slug, { businessName, lines: kept });
     if (!customerId) return;
     const signature = cartSignature({ lines: kept });
@@ -441,6 +457,8 @@ export default function PublicMenuPage() {
       setCartOpen(false);
       setRestoredNotice('');
       if (customer && delivering) void queryClient.invalidateQueries({ queryKey: ['me', 'addresses'] });
+      // Its cart was emptied in the account too: Explorar no longer offers it.
+      if (customer) void queryClient.invalidateQueries({ queryKey: ['me', 'carts'] });
       if (result.linkedToAccount) void queryClient.invalidateQueries({ queryKey: ['me', 'orders'] });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo enviar el pedido. Intenta de nuevo.'));

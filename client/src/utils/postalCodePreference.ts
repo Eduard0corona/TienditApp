@@ -1,6 +1,7 @@
+import { POSTAL_CODE_STORAGE_KEY } from './customerDevice';
 import { isPostalCode } from './postalCodes';
 
-const STORAGE_KEY = 'tienditapp.postalCode';
+const STORAGE_KEY = POSTAL_CODE_STORAGE_KEY;
 
 /** The postal code the customer gave on this device («Entregar en…»), or '' without one. */
 export function readPostalCode(): string {

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountApi } from '../api/accountApi';
 import { ACCOUNT_CART_DELAY_MS, cartSignature, scheduleAccountCartSave } from './accountCartSync';
+import { CUSTOMER_LEFT_EVENT } from './customerDevice';
+import { readCart, saveCart } from './savedCart';
 
 vi.mock('../api/accountApi', () => ({ accountApi: { saveCart: vi.fn() } }));
 
@@ -59,6 +61,28 @@ describe('accountCartSync', () => {
 
     expect(api.saveCart).toHaveBeenCalledTimes(2);
     expect(api.saveCart).toHaveBeenLastCalledWith('demo', { lines: [line(3)], reorderOf: null, skipped: null });
+  });
+
+  it('gives the device the time the account kept the cart', async () => {
+    const lines = [line(2)];
+    saveCart('reloj', { businessName: 'Reloj', lines }, new Date('2026-11-12T18:10:00Z'));
+    api.saveCart.mockResolvedValue({ slug: 'reloj', businessName: 'Reloj', savedAt: '2026-11-12T18:00:30+00:00', lines } as never);
+
+    scheduleAccountCartSave('reloj', { lines });
+    await vi.advanceTimersByTimeAsync(ACCOUNT_CART_DELAY_MS);
+    await settle();
+
+    expect(readCart('reloj', new Date('2026-11-12T18:20:00Z'))?.savedAt).toBe('2026-11-12T18:00:30.000Z');
+  });
+
+  it('sends nothing of what was waiting once the account leaves the device', async () => {
+    api.saveCart.mockResolvedValue({} as never);
+
+    scheduleAccountCartSave('salida', { lines: [line(1)] });
+    window.dispatchEvent(new Event(CUSTOMER_LEFT_EVENT));
+    await vi.advanceTimersByTimeAsync(ACCOUNT_CART_DELAY_MS * 2);
+
+    expect(api.saveCart).not.toHaveBeenCalled();
   });
 
   it('keeps each store apart, and says when a cart is the same', async () => {
