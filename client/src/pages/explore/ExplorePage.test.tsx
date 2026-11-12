@@ -124,7 +124,7 @@ function later<T>() {
 
 function renderPage(path = '/explorar', { auth, toast }: { auth?: Partial<AuthContextType>; toast?: ToastApi } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const page = (
+  const page = () => (
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/explorar" element={<><ExplorePage /><Address /></>} />
@@ -132,13 +132,20 @@ function renderPage(path = '/explorar', { auth, toast }: { auth?: Partial<AuthCo
       </Routes>
     </MemoryRouter>
   );
-  return render(
+  const tree = () => (
     <QueryClientProvider client={queryClient}>
       <ToastContext.Provider value={toast ?? null}>
-        {auth ? <AuthContext.Provider value={auth as AuthContextType}>{page}</AuthContext.Provider> : page}
+        {auth ? <AuthContext.Provider value={auth as AuthContextType}>{page()}</AuthContext.Provider> : page()}
       </ToastContext.Provider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const rendered = render(tree());
+  // The same page again, once the session changed (as the app does, its cache leaves with the session).
+  const rerenderPage = () => {
+    queryClient.clear();
+    rendered.rerender(tree());
+  };
+  return { ...rendered, rerenderPage };
 }
 
 /** The browser's geolocation: answers with that position, or fails with that code (1 is «denied»). */
@@ -284,6 +291,28 @@ describe('ExplorePage', () => {
 
     await waitFor(() => expect(screen.getByText(/Tienes un pedido sin enviar en/)).toHaveTextContent('Tienes un pedido sin enviar en Café Luna (3 productos).'));
     expect(screen.getByRole('link', { name: 'Seguir con el pedido' })).toHaveAttribute('href', '/m/cafe-luna');
+  });
+
+  it('forgets the cart and the postal code of the customer account once the customer leaves, here or in another tab (Fase 31J)', async () => {
+    saveCart('el-guero', { businessName: 'Taquería El Güero', lines: [{ productId: 'p1', optionIds: [], quantity: 3 }] });
+    signInAsCustomer();
+    account.getFavorites.mockResolvedValue([]);
+    account.getPostalCode.mockResolvedValue({ postalCode: '72000' });
+    api.getDirectory.mockResolvedValue(directory([business({})]));
+
+    const { rerenderPage } = renderPage();
+    expect(await screen.findByText('72000')).toBeInTheDocument();
+    expect(screen.getByText(/Tienes un pedido sin enviar en/)).toBeInTheDocument();
+
+    // The customer leaves: the device forgets what was theirs, and so does the page.
+    window.localStorage.clear();
+    vi.mocked(useCustomerAccount).mockReturnValue({ customer: null, signedIn: false, checking: false });
+    rerenderPage();
+
+    expect(await screen.findByRole('button', { name: 'Escribe tu código postal' })).toBeInTheDocument();
+    expect(screen.queryByText('72000')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tienes un pedido sin enviar en/)).not.toBeInTheDocument();
+    await waitFor(() => expect(api.getDirectory).toHaveBeenLastCalledWith(expect.objectContaining({ postalCode: undefined }), expect.anything()));
   });
 
   it('lists each business with what its menu answers, and opens its menu', async () => {

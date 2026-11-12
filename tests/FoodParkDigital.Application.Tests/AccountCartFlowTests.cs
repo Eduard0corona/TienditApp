@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Customers.Services;
@@ -11,8 +12,11 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
@@ -95,6 +99,27 @@ public class AccountCartFlowTests
         fixture.CurrentUser.UserId = null;
         Assert.Equal(AccountCartRules.CustomersOnlyMessage, (await DeleteAsync(fixture, "demo")).Error);
         Assert.Equal(1, await fixture.Context.AccountCarts.CountAsync());
+    }
+
+    [Fact]
+    public async Task Cart_CreatedMeanwhileOnAnotherDevice_ShouldBeReplacedByThisSave_LeavingOne()
+    {
+        var meanwhile = new CartSavedMeanwhile();
+        await using var fixture = SalesTestFixture.Create(null, meanwhile);
+        meanwhile.Tenant = fixture.TenantService;
+        var (_, tacos) = await StoreAsync(fixture, "demo");
+        SignIn(fixture, await AccountAsync(fixture, "mariana@demo.com"));
+
+        // The other device creates the cart of this store between this one's read and its save: the index refuses this
+        // one, which reads again and replaces it.
+        meanwhile.Armed = true;
+        var saved = await SaveAsync(fixture, "demo", [Line(tacos.Id, 2)]);
+
+        Assert.True(saved.IsSuccess, saved.Error);
+        Assert.False(meanwhile.Armed);
+        Assert.Equal(2, saved.Value!.Lines.Single().Quantity);
+        var cart = await fixture.Context.AccountCarts.AsNoTracking().SingleAsync();
+        Assert.Equal(2, cart.Lines.Single().Quantity);
     }
 
     [Fact]
@@ -279,6 +304,33 @@ public class AccountCartFlowTests
         fixture.Context.Users.Add(account);
         await fixture.Context.SaveChangesAsync();
         return account;
+    }
+
+    /// <summary>
+    /// Once armed, the next save that creates a cart finds the same store's created meanwhile by another device of the
+    /// account, and the database refusing it, as SQL Server's unique index does.
+    /// </summary>
+    private sealed class CartSavedMeanwhile : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+        public ICurrentTenantService? Tenant { get; set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var creating = eventData.Context!.ChangeTracker.Entries<AccountCart>()
+                .FirstOrDefault(entry => entry.State == EntityState.Added)?.Entity;
+            if (!Armed || creating is null)
+                return result;
+
+            Armed = false;
+            var options = (DbContextOptions<ApplicationDbContext>)eventData.Context.GetService<IDbContextOptions>();
+            await using var other = new SalesDbContext(options, Tenant!);
+            other.AccountCarts.Add(AccountCart.Create(
+                creating.UserId, creating.BusinessId, [new AccountCartLine(creating.Lines[0].ProductId, [], 7, null)], null, null, SalesTestFixture.Now));
+            await other.SaveChangesAsync(cancellationToken);
+            throw new DbUpdateException("The cart of this store was created meanwhile on another device.");
+        }
     }
 
     private static async Task SetStatusAsync(SalesTestFixture fixture, Guid businessId, TenantStatus status)

@@ -201,8 +201,14 @@ export default function ExplorePage() {
   const [postalCode, setPostalCode] = usePostalCodePreference();
   const favorites = useFavoriteBusinesses(postalCode || undefined);
   // A cart left without sending, on this device or, with a customer account, on another one (Fase 31J).
-  const [devicePending] = useState(() => latestCart());
+  const [devicePending, setDevicePending] = useState(() => latestCart());
   const { customer, checking } = useCustomerAccount();
+  // A customer left (here or in another tab) and the device forgot their carts: neither does the page keep one.
+  const [cartsOf, setCartsOf] = useState(customer?.id ?? null);
+  if ((customer?.id ?? null) !== cartsOf) {
+    setCartsOf(customer?.id ?? null);
+    setDevicePending(latestCart());
+  }
   const accountCarts = useQuery({
     queryKey: ['me', 'carts'],
     queryFn: ({ signal }) => accountApi.getCarts(signal),
