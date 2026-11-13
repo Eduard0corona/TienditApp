@@ -662,11 +662,12 @@ public class QuoteDeliveryFlowTests
 
         Assert.Null(pdf);
         Assert.Contains(quote.Id.ToString(), Assert.Single(logger.Messages));
-        // The worker that stops still stops.
+        // The worker that stops while the PDF renders (its logo still coming from the storage) still stops: the message is
+        // retried with its PDF, never sent without it.
         using var stopped = new CancellationTokenSource();
-        await stopped.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => QuotePdfs.RenderForMessageAsync(
-            new HangingRenderer(), shop.Context, version, shop.Clock.UtcNow, logger, stopped.Token));
+            new HangingRenderer(onStart: stopped.Cancel), shop.Context, version, shop.Clock.UtcNow, logger, stopped.Token));
+        Assert.Single(logger.Messages);
     }
 
     private sealed class MessagesLogger : Microsoft.Extensions.Logging.ILogger
@@ -678,10 +679,12 @@ public class QuoteDeliveryFlowTests
             Exception? exception, Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
     }
 
-    private sealed class HangingRenderer : IQuotePdfRenderer
+    /// <summary>Never ends until it is cancelled; <paramref name="onStart"/> runs once it started.</summary>
+    private sealed class HangingRenderer(Action? onStart = null) : IQuotePdfRenderer
     {
         public async Task<byte[]> RenderAsync(QuotePdfModel quote, CancellationToken cancellationToken)
         {
+            onStart?.Invoke();
             await Task.Delay(Timeout.Infinite, cancellationToken);
             return [];
         }
