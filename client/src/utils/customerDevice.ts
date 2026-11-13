@@ -5,6 +5,8 @@ import { getAccess } from './access';
 export const CARTS_STORAGE_KEY = 'tienditapp.carts';
 /** Where this device keeps the postal code given in Explorar or a store. */
 export const POSTAL_CODE_STORAGE_KEY = 'tienditapp.postalCode';
+/** The postal code a customer account could not keep yet (offline): this device's is newer than the account's. */
+export const POSTAL_CODE_PENDING_KEY = 'tienditapp.postalCodePending';
 /** Said to the window when the session ends on this device: a cart waiting to go to the account does not go. */
 export const CUSTOMER_LEFT_EVENT = 'tienditapp:customer-left';
 
@@ -40,7 +42,9 @@ export function rememberCustomerDevice(user: UserProfileDto): void {
 export function forgetCustomerDevice(): void {
   try {
     if (window.localStorage.getItem(CUSTOMER_STORAGE_KEY)) {
-      for (const key of [CARTS_STORAGE_KEY, POSTAL_CODE_STORAGE_KEY, CUSTOMER_STORAGE_KEY]) window.localStorage.removeItem(key);
+      for (const key of [CARTS_STORAGE_KEY, POSTAL_CODE_STORAGE_KEY, POSTAL_CODE_PENDING_KEY, CUSTOMER_STORAGE_KEY]) {
+        window.localStorage.removeItem(key);
+      }
     }
   } catch {
     // Storage blocked: there was nothing kept.

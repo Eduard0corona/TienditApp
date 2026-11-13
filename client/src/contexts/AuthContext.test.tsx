@@ -6,7 +6,7 @@ import { authApi } from '../api/authApi';
 import { refreshAccessToken } from '../api/axios';
 import { profileApi } from '../api/profileApi';
 import { apiRequest } from '../api/typedClient';
-import { readPostalCode, savePostalCode } from '../utils/postalCodePreference';
+import { markPostalCodePending, pendingPostalCode, readPostalCode, savePostalCode } from '../utils/postalCodePreference';
 import { cancelAccountCartSaves } from '../utils/accountCartSync';
 import { CUSTOMER_LEFT_EVENT, CUSTOMER_STORAGE_KEY } from '../utils/customerDevice';
 import { latestCart, saveCart } from '../utils/savedCart';
@@ -62,6 +62,7 @@ describe('AuthProvider leaving the device (Fase 31J)', () => {
   function keepOnDevice() {
     saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'latte', optionIds: [], quantity: 2 }] });
     savePostalCode('72000');
+    markPostalCodePending('72000');
   }
 
   async function signIn(role: 'Customer' | 'TenantAdmin', id = 'u1') {
@@ -85,6 +86,7 @@ describe('AuthProvider leaving the device (Fase 31J)', () => {
 
     expect(latestCart()).toBeNull();
     expect(readPostalCode()).toBe('');
+    expect(pendingPostalCode()).toBeNull();
     expect(authApi.logout).toHaveBeenCalled();
   });
 

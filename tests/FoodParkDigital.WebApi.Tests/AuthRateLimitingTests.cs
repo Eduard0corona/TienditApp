@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace FoodParkDigital.WebApi.Tests;
 
@@ -57,6 +58,19 @@ public class AuthRateLimitingTests
         var perAccount = typeof(MeController).GetMethod(action)!.GetCustomAttribute<ServiceFilterAttribute>();
         Assert.Equal(typeof(MyReviewsAccountLimit), perAccount?.ServiceType);
         Assert.Null(PolicyOf(typeof(MeController), nameof(MeController.GetMyReviews)));
+    }
+
+    [Fact]
+    public void TheAccountLimit_ShouldBeOneForTheWholeApp_SoEveryRequestOfAnAccountCountsInIt()
+    {
+        // One per request would start each at 0, and an account would never reach its limit.
+        using var api = new HealthEndpointsTests.ApiWithoutDatabase();
+        using var first = api.Services.CreateScope();
+        using var second = api.Services.CreateScope();
+
+        Assert.Same(
+            first.ServiceProvider.GetRequiredService<MyReviewsAccountLimit>(),
+            second.ServiceProvider.GetRequiredService<MyReviewsAccountLimit>());
     }
 
     [Fact]
