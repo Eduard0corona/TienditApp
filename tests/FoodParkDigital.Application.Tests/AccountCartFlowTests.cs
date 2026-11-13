@@ -232,6 +232,26 @@ public class AccountCartFlowTests
     }
 
     [Fact]
+    public async Task OrderOfTheAccount_ShouldBePlaced_EvenWhenAnotherDeviceDeletesItsCartMeanwhile()
+    {
+        var meanwhile = new CartDeletedMeanwhile();
+        await using var fixture = SalesTestFixture.Create(null, meanwhile);
+        meanwhile.Tenant = fixture.TenantService;
+        var (_, tacos) = await StoreAsync(fixture, "demo", drawer: true);
+        SignIn(fixture, await AccountAsync(fixture, "mariana@demo.com"));
+        await SaveAsync(fixture, "demo", [Line(tacos.Id, 2)]);
+
+        // A save in another store, on another device, deletes this cart (it keeps ten) as the order empties it.
+        meanwhile.Armed = true;
+        var receipt = await PlaceAsync(fixture, tacos);
+
+        Assert.True(receipt.IsSuccess, receipt.Error);
+        Assert.False(meanwhile.Armed);
+        Assert.Equal(1, await fixture.Context.Orders.CountAsync());
+        Assert.Empty(await CartsAsync(fixture));
+    }
+
+    [Fact]
     public async Task PostalCode_ShouldFollowTheAccount_AndBeOnlyACustomers()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -333,6 +353,32 @@ public class AccountCartFlowTests
                 creating.UserId, creating.BusinessId, [new AccountCartLine(creating.Lines[0].ProductId, [], 7, null)], null, null, SalesTestFixture.Now));
             await other.SaveChangesAsync(cancellationToken);
             throw new DbUpdateException("The cart of this store was created meanwhile on another device.");
+        }
+    }
+
+    /// <summary>
+    /// Once armed, the next save that changes a cart finds it deleted meanwhile by another device of the account, and the
+    /// database changing no row, as SQL Server does.
+    /// </summary>
+    private sealed class CartDeletedMeanwhile : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+        public ICurrentTenantService? Tenant { get; set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var changing = eventData.Context!.ChangeTracker.Entries<AccountCart>()
+                .FirstOrDefault(entry => entry.State == EntityState.Modified)?.Entity;
+            if (!Armed || changing is null)
+                return result;
+
+            Armed = false;
+            var options = (DbContextOptions<ApplicationDbContext>)eventData.Context.GetService<IDbContextOptions>();
+            await using var other = new SalesDbContext(options, Tenant!);
+            other.AccountCarts.Remove(await other.AccountCarts.SingleAsync(c => c.Id == changing.Id, cancellationToken));
+            await other.SaveChangesAsync(cancellationToken);
+            return result;
         }
     }
 

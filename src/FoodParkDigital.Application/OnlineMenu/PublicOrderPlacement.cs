@@ -182,8 +182,6 @@ internal sealed class PublicOrderPlacement
         await orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, StockShortageHandling.Allow);
         if (accountId is { } account && request.Delivery is not null)
             await RememberAddressAsync(account, request, now, cancellationToken);
-        if (accountId is { } owner)
-            await ForgetCartAsync(owner, tenant.Id, now, cancellationToken);
         order.IssueTrackingToken(OrderTracking.NewToken());
         return accepted;
     }
@@ -191,13 +189,26 @@ internal sealed class PublicOrderPlacement
     /// <summary>
     /// The cart the account left in this store is ordered now (Fase 31J, ADR 0090): it is emptied, whatever device it was
     /// left on, as the store forgets the one of the device; it stays, empty and with when, so another device that kept it
-    /// from before forgets its own instead of sending it back. Saved with the order. Only one already there: a new row could
-    /// meet one another device saves at the same time, and the order would fail for it.
+    /// from before forgets its own instead of sending it back. Once the order is saved, in a save of its own, and only one
+    /// already there: another device can create that row at the same time, or delete it (a save in another store keeps
+    /// ten), and the order never fails for its cart. One deleted meanwhile has nothing left to empty.
     /// </summary>
-    private async Task ForgetCartAsync(Guid accountId, Guid businessId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task ForgetCartAsync(Guid accountId, Guid businessId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var cart = await _context.AccountCarts.FirstOrDefaultAsync(c => c.UserId == accountId && c.BusinessId == businessId, cancellationToken);
-        cart?.Empty(now);
+        if (cart is null)
+            return;
+
+        cart.Empty(now);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Deleted meanwhile: the update changed no row, so the order's transaction goes on with the order in it.
+            _context.ChangeTracker.Entries<AccountCart>().ToList().ForEach(entry => entry.State = EntityState.Detached);
+        }
     }
 
     /// <summary>

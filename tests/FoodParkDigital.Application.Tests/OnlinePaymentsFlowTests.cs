@@ -10,6 +10,7 @@ using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
@@ -654,7 +655,7 @@ public partial class OnlinePaymentsFlowTests
     }
 
     [Fact]
-    public async Task CustomerAccount_ThatPaid_ShouldKeepTheOrderInItsOrders()
+    public async Task CustomerAccount_ThatPaid_ShouldKeepTheOrderInItsOrders_AndEmptyItsCart()
     {
         await using var shop = await Shop.OpenAsync();
         var customer = new ApplicationUser
@@ -667,6 +668,9 @@ public partial class OnlinePaymentsFlowTests
             IsActive = true
         };
         shop.Context.Users.Add(customer);
+        // The cart it left in this store (Fase 31J).
+        shop.Context.AccountCarts.Add(AccountCart.Create(
+            customer.Id, shop.Tenant.Id, [new AccountCartLine(shop.Product.Id, [], 1, null)], null, null, SalesTestFixture.Now));
         await shop.Context.SaveChangesAsync();
         shop.Fixture.CurrentUser.UserId = customer.Id.ToString();
         var started = (await shop.CheckoutAsync()).Value;
@@ -676,6 +680,8 @@ public partial class OnlinePaymentsFlowTests
         await shop.NotifyAsync(payment.Id);
 
         Assert.Equal(customer.Id, (await shop.Context.Orders.SingleAsync()).CustomerUserId);
+        // Ordered, the cart stays empty: the device that kept it from before forgets its own.
+        Assert.Empty((await shop.Context.AccountCarts.AsNoTracking().SingleAsync()).Lines);
     }
 
     [Fact]
