@@ -491,6 +491,8 @@ public class QuoteDeliveryFlowTests
         var model = Assert.Single(shop.Pdfs.Rendered);
         Assert.Equal(RecordingQuotePdfRenderer.Pdf(model), Read(file.Content));
         Assert.Equal((shop.Tenant.Id, QuoteStatus.Sent, "Valeria Ruiz"), (model.TenantId, model.Status, model.CustomerName));
+        // With its lines, read from the link's version as from the business's.
+        Assert.Equal([("Cambio de calentador", 1160m)], model.Lines.Select(l => (l.Description, l.Total)));
 
         // A link unknown, or changed, has none.
         Assert.Null(await shop.PublicPdfAsync(new string('a', token.Length)));
@@ -521,7 +523,10 @@ public class QuoteDeliveryFlowTests
         var sent = Assert.Single(documents.Sent);
         Assert.Equal(("+525522107765", "cotizacion-COT-000001.pdf", "application/pdf", message.Body, (string?)null),
             (sent.Phone, sent.Document.FileName, sent.Document.ContentType, sent.Caption, sent.TemplateName));
-        Assert.Equal(RecordingQuotePdfRenderer.Pdf(Assert.Single(shop.Pdfs.Rendered)), sent.Document.Content);
+        var model = Assert.Single(shop.Pdfs.Rendered);
+        Assert.Equal(RecordingQuotePdfRenderer.Pdf(model), sent.Document.Content);
+        // The PDF of the whole version: the message reads the quote with its lines.
+        Assert.Equal([("Cambio de calentador", 1160m)], model.Lines.Select(l => (l.Description, l.Total)));
     }
 
     [Fact]
@@ -635,6 +640,13 @@ public class QuoteDeliveryFlowTests
         Assert.Equal(((DateOnly?)new DateOnly(2026, 10, 4), (DateOnly?)new DateOnly(2026, 10, 4)), (paid.SentOn, paid.RepliedOn));
         // Part of the visit's sale refunded: only what is still paid comes off.
         Assert.Equal((100m, 1060m, (string?)null), (refunded.VisitCredit, refunded.ToPay, refunded.BusinessPhone));
+
+        // A draft dropped is closed, never answered: its PDF has no day of reply.
+        var dropped = Quote.Start(Guid.NewGuid(), "COT-000010", new QuoteCustomer(null, "Valeria Ruiz", "5522107765", null),
+            Guid.NewGuid(), true, 15, now);
+        dropped.Discard(now);
+        var discarded = QuotePdfs.Model(dropped, "Plomería", null, "America/Mexico_City", new DateOnly(2026, 10, 4), null);
+        Assert.Equal((QuoteStatus.Discarded, (DateOnly?)null, (DateOnly?)null), (discarded.Status, discarded.RepliedOn, discarded.SentOn));
     }
 
     [Fact]
