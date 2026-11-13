@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Identity;
 using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.OnlinePayments;
+using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Billing;
@@ -15,6 +16,7 @@ using FoodParkDigital.Infrastructure.BackgroundJobs.Invoicing;
 using FoodParkDigital.Infrastructure.BackgroundJobs.OnlinePayments;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Reporting;
+using FoodParkDigital.Infrastructure.Documents;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Invoicing;
 using FoodParkDigital.Infrastructure.OnlinePayments;
@@ -220,6 +222,8 @@ public static class DependencyInjection
         services.Configure<SwSapienOptions>(configuration.GetSection(SwSapienOptions.SectionName));
         services.AddSingleton<ICfdiPdfLogos, TenantCfdiPdfLogos>();
         services.AddSingleton<IInvoicingGateway, SwSapienGateway>();
+        // The PDF of a quote (Fase 31M, ADR 0093): TienditApp's own writer, with the logo the CFDI PDF uses.
+        services.AddSingleton<IQuotePdfRenderer, QuotePdfRenderer>();
         services.AddScoped<WhatsAppService>();
         services.AddScoped<IWhatsAppService>(provider => provider.GetRequiredService<WhatsAppService>());
         // Fase 31L: the photos and audios customers send, downloaded with the business's WhatsApp.

@@ -48,7 +48,11 @@ public class QuoteDeliveryFlowTests
         var sent = Assert.Single(shop.Email.Documents);
         Assert.Equal(("valeria@correo.mx", "Cotización COT-000001 de Negocio plomero", "Negocio plomero vía TienditApp", "plomero@demo.com"),
             (sent.To, sent.Subject, sent.SenderName, sent.ReplyTo));
-        Assert.Empty(sent.Attachments);
+        // Its PDF goes attached (Fase 31M), and the body says so.
+        var pdf = Assert.Single(sent.Attachments);
+        Assert.Equal(("cotizacion-COT-000001.pdf", "application/pdf"), (pdf.FileName, pdf.ContentType));
+        Assert.Equal(RecordingQuotePdfRenderer.Pdf(Assert.Single(shop.Pdfs.Rendered)), pdf.Content);
+        Assert.Contains("La cotización va adjunta en PDF.", sent.HtmlBody);
         Assert.Contains("Cambio de calentador", sent.HtmlBody);
         Assert.Contains("vale hasta el 19 de octubre de 2026", sent.HtmlBody);
         Assert.Contains("Total: $1,160.00", sent.HtmlBody);
@@ -392,6 +396,174 @@ public class QuoteDeliveryFlowTests
         Assert.Equal(MessageTemplateLimits.QuoteManagersOnlyMessage, error.Message);
     }
 
+    [Fact]
+    public async Task TheEmail_ShouldGoWithoutItsPdf_WhenThePdfCannotBeRendered_NeverLate()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        await shop.EmailAsync(quote.Id, "valeria@correo.mx");
+        shop.Pdfs.Failure = new InvalidOperationException("the PDF broke");
+
+        await shop.DeliverAsync((await shop.Context.QuoteEmails.SingleAsync()).Id);
+
+        var sent = Assert.Single(shop.Email.Documents);
+        Assert.Empty(sent.Attachments);
+        Assert.DoesNotContain("adjunta en PDF", sent.HtmlBody);
+        Assert.Contains($"href=\"{AppUrl}/cotizacion#{quote.TrackingToken}\"", sent.HtmlBody);
+        Assert.Equal(SalesTestFixture.Now, (await shop.Context.QuoteEmails.SingleAsync()).SentAt);
+    }
+
+    [Fact]
+    public async Task TheBusiness_ShouldDownloadThePdfOfAnyVersion_ADraftToo_AsItReadsOnItsDay()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var sent = await shop.SentAsync(note: "Incluye material.");
+        var draft = await shop.DraftAsync(customerName: "Luis Gómez", line: "Revisión de fuga");
+
+        var file = await shop.PdfAsync(sent.Id);
+
+        Assert.True(file.IsSuccess, file.Error);
+        Assert.Equal(("application/pdf", "cotizacion-COT-000001.pdf"), (file.Value!.ContentType, file.Value.FileName));
+        var model = Assert.Single(shop.Pdfs.Rendered);
+        Assert.Equal(RecordingQuotePdfRenderer.Pdf(model), Read(file.Value.Content));
+        Assert.Equal((shop.Tenant.Id, "Negocio plomero", (string?)"plomero@demo.com", "COT-000001", 1, QuoteStatus.Sent, "Valeria Ruiz"),
+            (model.TenantId, model.BusinessName, model.BusinessEmail, model.Number, model.Revision, model.Status, model.CustomerName));
+        Assert.Equal(((DateOnly?)new DateOnly(2026, 10, 4), (DateOnly?)new DateOnly(2026, 10, 19), (DateOnly?)null),
+            (model.SentOn, model.ValidUntil, model.RepliedOn));
+        Assert.Equal([new QuotePdfLine("Cambio de calentador", 1m, 1160m, 1160m)], model.Lines);
+        Assert.Equal((1000m, 160m, 1160m, 0m, 1160m, true, (string?)"Incluye material."),
+            (model.SubTotal, model.Tax, model.Total, model.VisitCredit, model.ToPay, model.PricesIncludeTax, model.Note));
+
+        Assert.True((await shop.PdfAsync(draft.Id)).IsSuccess);
+        var ofDraft = shop.Pdfs.Rendered[1];
+        Assert.Equal((QuoteStatus.Draft, "Luis Gómez", (DateOnly?)null, (DateOnly?)null, 15),
+            (ofDraft.Status, ofDraft.CustomerName, ofDraft.SentOn, ofDraft.ValidUntil, ofDraft.ValidityDays));
+
+        // Past its validity on the business's day it reads expired, as its page says.
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddDays(16);
+        Assert.True((await shop.PdfAsync(sent.Id)).IsSuccess);
+        Assert.Equal(QuoteStatus.Expired, shop.Pdfs.Rendered[2].Status);
+    }
+
+    [Fact]
+    public async Task ACorrectedVersion_ShouldNameItsPdfWithItsVersion_AndTheReplacedOneSayItWasReplaced()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var first = await shop.SentAsync();
+        var revised = await shop.Handler.Handle(new ReviseQuoteCommand(first.Id), CancellationToken.None);
+        Assert.True(revised.IsSuccess, revised.Error);
+        Assert.True((await shop.Handler.Handle(new SendQuoteCommand(revised.Value!.Id), CancellationToken.None)).IsSuccess);
+
+        var second = await shop.PdfAsync(revised.Value.Id);
+        var replaced = await shop.PdfAsync(first.Id);
+
+        Assert.Equal("cotizacion-COT-000001-v2.pdf", second.Value!.FileName);
+        Assert.Equal("cotizacion-COT-000001.pdf", replaced.Value!.FileName);
+        Assert.Equal([QuoteStatus.Sent, QuoteStatus.Superseded], shop.Pdfs.Rendered.Select(model => model.Status));
+    }
+
+    [Fact]
+    public async Task AnotherBusinesssQuote_ShouldHaveNoPdf()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        await shop.OtherBusinessAsync();
+
+        var file = await shop.PdfAsync(quote.Id);
+
+        Assert.True(file.IsFailure);
+        Assert.Equal(QuotePdfs.NotFoundMessage, file.Error);
+        Assert.Empty(shop.Pdfs.Rendered);
+    }
+
+    [Fact]
+    public async Task TheCustomer_ShouldDownloadThePdfOfTheirLink_OnlyWhileItOpens()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        var token = quote.TrackingToken!;
+
+        var file = await shop.PublicPdfAsync(token);
+
+        Assert.NotNull(file);
+        Assert.Equal(("application/pdf", "cotizacion-COT-000001.pdf"), (file.ContentType, file.FileName));
+        var model = Assert.Single(shop.Pdfs.Rendered);
+        Assert.Equal(RecordingQuotePdfRenderer.Pdf(model), Read(file.Content));
+        Assert.Equal((shop.Tenant.Id, QuoteStatus.Sent, "Valeria Ruiz", (string?)"plomero@demo.com"),
+            (model.TenantId, model.Status, model.CustomerName, model.BusinessEmail));
+
+        // A link unknown, or changed, has none.
+        Assert.Null(await shop.PublicPdfAsync(new string('a', token.Length)));
+        Assert.Null(await shop.PublicPdfAsync(token[..^1] + (token[^1] == 'a' ? 'b' : 'a')));
+        // Up to 30 days after its validity (the 19th of October), expired; the day after, none.
+        shop.Clock.UtcNow = new DateTimeOffset(2026, 11, 18, 18, 0, 0, TimeSpan.Zero);
+        Assert.NotNull(await shop.PublicPdfAsync(token));
+        Assert.Equal(QuoteStatus.Expired, shop.Pdfs.Rendered[^1].Status);
+        shop.Clock.UtcNow = new DateTimeOffset(2026, 11, 19, 18, 0, 0, TimeSpan.Zero);
+        Assert.Null(await shop.PublicPdfAsync(token));
+        Assert.Equal(2, shop.Pdfs.Rendered.Count);
+    }
+
+    [Fact]
+    public async Task AWhatsAppWithoutATemplate_ShouldCarryThePdfAsItsDocument_WithItsTextAsTheCaption()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        await shop.WhatsAppAsync(quote.Id, "5522107765");
+        var whatsApp = new CreditTestKit.FakeWhatsApp();
+        var documents = new RecordingWhatsAppDocuments();
+        var message = await shop.Context.OutgoingMessages.SingleAsync();
+
+        var outcome = await shop.Sender(whatsApp, documents).SendAsync(message, CancellationToken.None);
+
+        Assert.Equal((OutgoingSendDecision.Sent, "wamid.doc.1"), (outcome.Decision, outcome.ProviderMessageId));
+        Assert.Empty(whatsApp.Sent);
+        var sent = Assert.Single(documents.Sent);
+        Assert.Equal(("+525522107765", "cotizacion-COT-000001.pdf", "application/pdf", message.Body, (string?)null),
+            (sent.Phone, sent.Document.FileName, sent.Document.ContentType, sent.Caption, sent.TemplateName));
+        Assert.Equal(RecordingQuotePdfRenderer.Pdf(Assert.Single(shop.Pdfs.Rendered)), sent.Document.Content);
+    }
+
+    [Fact]
+    public async Task AWhatsAppWithATemplate_OrWhosePdfCannotBeRendered_ShouldGoAsBefore()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        var template = new MessageTemplate(shop.Tenant.Id, "Cotización", MessagePurpose.QuoteDocument,
+            "{negocio}: tu cotización {folio} de {monto} vale hasta el {fecha}. {enlace}", "cotizacion_lista");
+        shop.Context.MessageTemplates.Add(template);
+        await shop.Context.SaveChangesAsync();
+        Assert.True((await shop.Handler.Handle(new SetQuoteWhatsAppTemplateCommand(template.Id), CancellationToken.None)).IsSuccess);
+        await shop.WhatsAppAsync(quote.Id, "5522107765");
+        var whatsApp = new CreditTestKit.FakeWhatsApp();
+        var documents = new RecordingWhatsAppDocuments();
+        var sender = shop.Sender(whatsApp, documents);
+
+        // The business's template may have no document header: it goes as Meta approved it, without the PDF.
+        var withTemplate = await sender.SendAsync(await shop.Context.OutgoingMessages.SingleAsync(), CancellationToken.None);
+        Assert.Equal(OutgoingSendDecision.Sent, withTemplate.Decision);
+        Assert.Equal([("template:cotizacion_lista", "+525522107765")], whatsApp.Sent);
+        Assert.Empty(shop.Pdfs.Rendered);
+
+        // Without a template but without its PDF, the text goes.
+        template.SetActive(false);
+        await shop.Context.SaveChangesAsync();
+        await shop.WhatsAppAsync(quote.Id, "5522107765");
+        shop.Pdfs.Failure = new InvalidOperationException("the PDF broke");
+        var text = await shop.Context.OutgoingMessages.SingleAsync(m => m.ProviderTemplateName == null);
+        var withoutPdf = await sender.SendAsync(text, CancellationToken.None);
+        Assert.Equal(OutgoingSendDecision.Sent, withoutPdf.Decision);
+        Assert.Equal(("text", "+525522107765"), whatsApp.Sent[^1]);
+        Assert.Empty(documents.Sent);
+    }
+
+    private static byte[] Read(Stream content)
+    {
+        using var buffer = new MemoryStream();
+        content.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
     private sealed class Links : IAppLinks
     {
         public string? BaseUrl => AppUrl;
@@ -430,6 +602,7 @@ public class QuoteDeliveryFlowTests
         public SalesTestFixture Fixture { get; }
         public Tenant Tenant { get; }
         public RecordingEmailService Email { get; } = new();
+        public RecordingQuotePdfRenderer Pdfs { get; } = new();
         public SalesDbContext Context => Fixture.Context;
         public SalesClock Clock => Fixture.Clock;
         public QuotesHandler Handler => new(Context, Fixture.TenantService, Fixture.CurrentUser, Clock);
@@ -488,10 +661,24 @@ public class QuoteDeliveryFlowTests
         public OutgoingMessageSender Sender() => new(Context, new CreditTestKit.FakeWhatsApp(),
             new MessagingConsentService(Context, Fixture.TenantService, Clock), Clock);
 
+        /// <summary>The worker's sender as the application composes it: a quote's message without a template carries its PDF.</summary>
+        public OutgoingMessageSender Sender(CreditTestKit.FakeWhatsApp whatsApp, RecordingWhatsAppDocuments documents) => new(
+            Context, whatsApp, new MessagingConsentService(Context, Fixture.TenantService, Clock), Clock, cfdi: null,
+            new QuoteWhatsAppDocuments(Context, Pdfs, documents, Clock, NullLogger<QuoteWhatsAppDocuments>.Instance));
+
+        /// <summary>The PDF of a version, as the business downloads it.</summary>
+        public Task<Result<Orders.Queries.PrivateFileDownload>> PdfAsync(Guid id)
+            => new GetQuotePdfQueryHandler(Context, Fixture.TenantService, Pdfs, Clock).Handle(new GetQuotePdfQuery(id), CancellationToken.None);
+
+        /// <summary>The PDF of a link, as its customer downloads it.</summary>
+        public Task<Orders.Queries.PrivateFileDownload?> PublicPdfAsync(string token)
+            => new GetPublicQuotePdfQueryHandler(Context, Fixture.TenantService, Pdfs, Clock)
+                .Handle(new GetPublicQuotePdfQuery(token), CancellationToken.None);
+
         /// <summary>The outbox runs the email's handler, attempt <paramref name="attempt"/> of <paramref name="maxAttempts"/>.</summary>
         public async Task DeliverAsync(Guid emailId, int attempt = 1, int maxAttempts = 8)
         {
-            var handler = new QuoteEmailRequestedHandler(Context, Email, new Links(), Clock, NullLogger<QuoteEmailRequestedHandler>.Instance);
+            var handler = new QuoteEmailRequestedHandler(Context, Email, new Links(), Pdfs, Clock, NullLogger<QuoteEmailRequestedHandler>.Instance);
             await handler.HandleAsync(new QuoteEmailRequestedEvent(emailId),
                 new OutboxEventContext(Guid.NewGuid(), Tenant.Id, null, null, Clock.UtcNow, attempt, maxAttempts), CancellationToken.None);
             await Context.SaveChangesAsync();

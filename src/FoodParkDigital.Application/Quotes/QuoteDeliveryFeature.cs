@@ -377,7 +377,8 @@ public class QuoteDeliveryHandler :
 }
 
 /// <summary>
-/// Sends the email of a quote that was asked for (Fase 29D), with the quote as it reads now. The mail server not answering
+/// Sends the email of a quote that was asked for (Fase 29D), with the quote as it reads now and, since the Fase 31M (ADR 0093),
+/// its PDF attached: one that cannot be rendered leaves the email without it, never late. The mail server not answering
 /// throws, so the outbox tries again; refused, or not set up, the email ends; past the last attempt it ends not delivered,
 /// and a person can send it again.
 /// </summary>
@@ -386,6 +387,7 @@ public sealed class QuoteEmailRequestedHandler : IOutboxEventHandler<QuoteEmailR
     private readonly IApplicationDbContext _context;
     private readonly IEmailService _email;
     private readonly IAppLinks _links;
+    private readonly IQuotePdfRenderer _pdfs;
     private readonly IDateTimeProvider _clock;
     private readonly ILogger<QuoteEmailRequestedHandler> _logger;
 
@@ -393,12 +395,14 @@ public sealed class QuoteEmailRequestedHandler : IOutboxEventHandler<QuoteEmailR
         IApplicationDbContext context,
         IEmailService email,
         IAppLinks links,
+        IQuotePdfRenderer pdfs,
         IDateTimeProvider clock,
         ILogger<QuoteEmailRequestedHandler> logger)
     {
         _context = context;
         _email = email;
         _links = links;
+        _pdfs = pdfs;
         _clock = clock;
         _logger = logger;
     }
@@ -440,14 +444,15 @@ public sealed class QuoteEmailRequestedHandler : IOutboxEventHandler<QuoteEmailR
             .Select(t => new { t.Name, t.ContactEmail, t.ContactPhone })
             .FirstAsync(cancellationToken);
         var stillPaid = await QuoteVisitCredits.StillPaidAsync(_context, quote, cancellationToken);
+        var pdf = await QuotePdfs.RenderForMessageAsync(_pdfs, _context, quote, _clock.UtcNow, _logger, cancellationToken);
 
         var message = new DocumentEmail(
             email.To,
             Subject(quote, business.Name),
-            Body(quote, business.Name, business.ContactEmail, business.ContactPhone, stillPaid, _links.BaseUrl),
+            Body(quote, business.Name, business.ContactEmail, business.ContactPhone, stillPaid, _links.BaseUrl, withPdf: pdf is not null),
             $"{business.Name} vía TienditApp",
             business.ContactEmail,
-            []);
+            pdf is null ? [] : [new EmailAttachment(QuotePdfs.FileName(quote.Number, quote.Revision), QuotePdfs.ContentType, pdf)]);
 
         EmailSendOutcome outcome;
         try
@@ -482,9 +487,12 @@ public sealed class QuoteEmailRequestedHandler : IOutboxEventHandler<QuoteEmailR
 
     /// <summary>
     /// The quote as the customer reads it on its page: what it includes, its taxes, the visit it takes off, what is left to
-    /// pay, until when it is valid and its link. Everything the business or the customer wrote is encoded.
+    /// pay, until when it is valid and its link, and that its PDF goes attached when it does. Everything the business or the
+    /// customer wrote is encoded.
     /// </summary>
-    public static string Body(Quote quote, string businessName, string? replyTo, string? businessPhone, decimal? stillPaidForTheVisit, string? appUrl)
+    public static string Body(
+        Quote quote, string businessName, string? replyTo, string? businessPhone, decimal? stillPaidForTheVisit, string? appUrl,
+        bool withPdf = false)
     {
         static string E(string text) => WebUtility.HtmlEncode(text);
         static string Money(decimal amount) => E(OrderStatusLabels.FormatMoney(amount));
@@ -516,6 +524,8 @@ public sealed class QuoteEmailRequestedHandler : IOutboxEventHandler<QuoteEmailR
         if (!string.IsNullOrWhiteSpace(quote.Note))
             body.Append($"<p>{E(quote.Note).ReplaceLineEndings("<br>")}</p>");
 
+        if (withPdf)
+            body.Append("<p>La cotización va adjunta en PDF.</p>");
         body.Append($"<p><a href=\"{E(link)}\">Ver la cotización</a></p>");
         if (!string.IsNullOrWhiteSpace(replyTo))
             body.Append("<p>Para aceptarla o preguntar algo, responde a este correo.</p>");

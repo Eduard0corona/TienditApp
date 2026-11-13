@@ -8,6 +8,7 @@ using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.Quotes;
+using FoodParkDigital.Domain.Quotes.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Messaging;
@@ -34,7 +35,8 @@ public sealed record OutgoingSendOutcome(
 /// not opted out (campaigns and reminders), the campaign was not cancelled, the appointment did not change, no
 /// newer notice of the same appointment is waiting, the customer still owes something overdue (Fase 26C), and still owes
 /// what comes due on the day of the notice before it does (Fase 26E). The PDF of a CFDI goes with
-/// <see cref="CfdiWhatsAppSender"/> (Fase 28M). The worker records the outcome and retries transient failures.
+/// <see cref="CfdiWhatsAppSender"/> (Fase 28M), and the PDF of a quote sent without a template with
+/// <see cref="QuoteWhatsAppDocuments"/> (Fase 31M). The worker records the outcome and retries transient failures.
 /// </summary>
 public sealed class OutgoingMessageSender
 {
@@ -60,19 +62,22 @@ public sealed class OutgoingMessageSender
     private readonly MessagingConsentService _consent;
     private readonly IDateTimeProvider _clock;
     private readonly CfdiWhatsAppSender? _cfdi;
+    private readonly QuoteWhatsAppDocuments? _quoteDocuments;
 
     public OutgoingMessageSender(
         IApplicationDbContext context,
         IWhatsAppService whatsApp,
         MessagingConsentService consent,
         IDateTimeProvider clock,
-        CfdiWhatsAppSender? cfdi = null)
+        CfdiWhatsAppSender? cfdi = null,
+        QuoteWhatsAppDocuments? quoteDocuments = null)
     {
         _context = context;
         _whatsApp = whatsApp;
         _consent = consent;
         _clock = clock;
         _cfdi = cfdi;
+        _quoteDocuments = quoteDocuments;
     }
 
     public async Task<OutgoingSendOutcome> SendAsync(OutgoingMessage message, CancellationToken cancellationToken)
@@ -134,9 +139,11 @@ public sealed class OutgoingMessageSender
             return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: notDue);
 
         // A quote's message retried for hours may go out after its version stopped being what the business offers (Fase 29D).
+        Quote? quote = null;
         if (message.Purpose == MessagePurpose.QuoteDocument)
         {
-            var quote = await _context.Quotes.AsNoTracking()
+            quote = await _context.Quotes.AsNoTracking()
+                .Include(q => q.Lines)
                 .FirstOrDefaultAsync(q => q.Id == message.QuoteId && q.TenantId == message.TenantId, cancellationToken);
             var today = await QuoteCalendar.TodayAsync(_context, message.TenantId, _clock.UtcNow, cancellationToken);
             if (quote is null || quote.StatusOn(today) != QuoteStatus.Sent)
@@ -149,7 +156,11 @@ public sealed class OutgoingMessageSender
             && await _consent.IsOptedOutAsync(message.TenantId, message.Phone, cancellationToken))
             return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: OptedOutReason);
 
-        var result = message.ProviderTemplateName is { } templateName
+        // Without a template, a quote's message carries its PDF (Fase 31M); otherwise, or without the PDF, it goes as before.
+        var result = quote is not null && _quoteDocuments is not null
+            && await _quoteDocuments.SendAsync(message, quote, cancellationToken) is { } withPdf
+            ? withPdf
+            : message.ProviderTemplateName is { } templateName
             ? await _whatsApp.SendTemplateMessageAsync(
                 message.TenantId,
                 message.Phone,

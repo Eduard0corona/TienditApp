@@ -15,6 +15,7 @@ using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.OnlineBooking;
+using FoodParkDigital.Application.Quotes;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<CreditDueSoonPlanner>();
         services.AddScoped<OutgoingMessageSender>();
         services.AddScoped<CfdiWhatsAppSender>();
+        services.AddScoped<QuoteWhatsAppDocuments>();
         services.AddScoped<AppointmentNotices>();
 
         // Rules that used to live in Infrastructure: who an order's phone belongs to, and the automatic replies.

@@ -1,3 +1,5 @@
+import api from './axios';
+import { fileNameOf, readBlobError } from './blobDownloads';
 import { apiRequest, type Schemas } from './typedClient';
 import type { QuoteListFilter } from '../types';
 
@@ -71,6 +73,10 @@ export const quotesApi = {
   /** The WhatsApp template the quotes go out with, or TienditApp's text (null): owners and admins. */
   setWhatsAppTemplate: (templateId: string | null) =>
     apiRequest('put', '/api/v1/quotes/settings/whatsapp-template', { body: { templateId } }),
+
+  /** The PDF of a version as it reads now (Fase 31M): any version, a draft too. */
+  downloadPdf: (id: string): Promise<{ blob: Blob; fileName: string }> =>
+    downloadPdf(() => api.get<Blob>(`/quotes/${encodeURIComponent(id)}/pdf`, { responseType: 'blob' })),
 };
 
 export const publicQuoteApi = {
@@ -83,4 +89,20 @@ export const publicQuoteApi = {
    */
   reply: (token: string, accepted: boolean, response: string | null) =>
     apiRequest('post', '/api/v1/public/quotes/reply', { body: { token, accepted, response } }),
+
+  /** The PDF of the link's quote (Fase 31M), as its page shows it. The link travels in the body, never in the URL. */
+  downloadPdf: (token: string): Promise<{ blob: Blob; fileName: string }> =>
+    downloadPdf(() => api.post<Blob>('/public/quotes/pdf', { token }, { responseType: 'blob' })),
 };
+
+// A refusal comes as a blob too: read back, its message (not found, say) reaches the person.
+async function downloadPdf(request: () => Promise<{ data: Blob; headers: Record<string, unknown> }>): Promise<{ blob: Blob; fileName: string }> {
+  let response;
+  try {
+    response = await request();
+  } catch (err: unknown) {
+    await readBlobError(err);
+    throw err;
+  }
+  return { blob: response.data, fileName: fileNameOf(response.headers['content-disposition'], 'cotizacion.pdf') };
+}

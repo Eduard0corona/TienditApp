@@ -57,5 +57,8 @@
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!-- Apache-2.0. Only the tests read with it the PDF TienditApp writes itself (Fase 31M, ADR 0093): an independent
+         reader checks the text, the pages and the image. -->
+    <PackageVersion Include="PdfPig" Version="0.1.16" />
   </ItemGroup>
 </Project>
