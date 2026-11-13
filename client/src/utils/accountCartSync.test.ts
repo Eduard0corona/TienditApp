@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountApi } from '../api/accountApi';
-import { ACCOUNT_CART_DELAY_MS, cartSignature, scheduleAccountCartSave } from './accountCartSync';
+import { ACCOUNT_CART_DELAY_MS, cartSignature, scheduleAccountCartSave, sendDeviceCarts } from './accountCartSync';
 import { CUSTOMER_LEFT_EVENT } from './customerDevice';
 import { readCart, saveCart } from './savedCart';
 
-vi.mock('../api/accountApi', () => ({ accountApi: { saveCart: vi.fn() } }));
+vi.mock('../api/accountApi', () => ({ accountApi: { getCarts: vi.fn(), saveCart: vi.fn() } }));
 
 const api = vi.mocked(accountApi);
 const line = (quantity: number) => ({ productId: 'taco', optionIds: [], quantity });
@@ -16,6 +16,8 @@ describe('accountCartSync', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     api.saveCart.mockReset();
+    api.getCarts.mockReset();
+    window.localStorage.clear();
   });
   afterEach(() => vi.useRealTimers());
 
@@ -111,5 +113,24 @@ describe('accountCartSync', () => {
     expect(api.saveCart).toHaveBeenCalledWith('cafe', { lines: [line(2)], reorderOf: 4, skipped: null });
     expect(cartSignature({ lines: [line(1)] })).toBe(cartSignature({ lines: [line(1)] }));
     expect(cartSignature({ lines: [line(1)] })).not.toBe(cartSignature({ lines: [line(2)] }));
+  });
+
+  it('gives the account the carts this device chose before its session, each only when newer and different (Fase 31J)', async () => {
+    const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+    saveCart('cafe-luna', { businessName: 'Café Luna', lines: [line(2)] }, minutesAgo(5));
+    saveCart('el-guero', { businessName: 'El Güero', lines: [line(1)] }, minutesAgo(30));
+    saveCart('tacos', { businessName: 'Tacos', lines: [line(4)] }, minutesAgo(5));
+    const kept = (slug: string, quantity: number, savedAt: Date) => ({
+      slug, businessName: slug, savedAt: savedAt.toISOString(), lines: [{ ...line(quantity), notes: null }],
+    });
+    // The account changed El Güero's later; Tacos' it has the same.
+    api.getCarts.mockResolvedValue([kept('el-guero', 3, minutesAgo(10)), kept('tacos', 4, minutesAgo(20))]);
+    api.saveCart.mockResolvedValue({} as never);
+
+    await sendDeviceCarts();
+    await settle();
+
+    expect(api.saveCart).toHaveBeenCalledTimes(1);
+    expect(api.saveCart).toHaveBeenCalledWith('cafe-luna', { lines: [line(2)], reorderOf: null, skipped: null });
   });
 });

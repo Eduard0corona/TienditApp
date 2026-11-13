@@ -246,9 +246,10 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
         if (refusal is null)
         {
             await _context.SaveChangesAsync(cancellationToken);
-            // The cart the account left in this store, once the order is saved (Fase 31J): the order never fails for it.
+            // The cart the account left in this store, once the order is saved (Fase 31J): the order never fails for it. As it
+            // was when the customer went to pay: one saved since (a payment applied late) is another cart, and stays.
             if (checkout.CustomerUserId is { } account)
-                await new PublicOrderPlacement(_context).ForgetCartAsync(account, checkout.TenantId, now, cancellationToken);
+                await new PublicOrderPlacement(_context).ForgetCartAsync(account, checkout.TenantId, now, checkout.StartedAt, cancellationToken);
             return Result.Success(OnlinePaymentApplication.Placed);
         }
 

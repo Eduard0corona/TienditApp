@@ -1,11 +1,13 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { useContext } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { accountApi } from '../api/accountApi';
 import { authApi } from '../api/authApi';
 import { refreshAccessToken } from '../api/axios';
 import { profileApi } from '../api/profileApi';
 import { apiRequest } from '../api/typedClient';
 import { readPostalCode, savePostalCode } from '../utils/postalCodePreference';
+import { cancelAccountCartSaves } from '../utils/accountCartSync';
 import { CUSTOMER_LEFT_EVENT, CUSTOMER_STORAGE_KEY } from '../utils/customerDevice';
 import { latestCart, saveCart } from '../utils/savedCart';
 import { AuthProvider } from './AuthContext';
@@ -13,6 +15,7 @@ import { AuthContext } from './AuthContextDefinition';
 import { useSessionSync } from './useSessionSync';
 
 vi.mock('../api/authApi', () => ({ authApi: { login: vi.fn(), logout: vi.fn() } }));
+vi.mock('../api/accountApi', () => ({ accountApi: { getCarts: vi.fn(), saveCart: vi.fn() } }));
 vi.mock('../api/axios', async (importOriginal) => ({ ...(await importOriginal<object>()), refreshAccessToken: vi.fn() }));
 vi.mock('../api/profileApi', () => ({ profileApi: { getProfile: vi.fn() } }));
 vi.mock('../api/typedClient', () => ({ apiRequest: vi.fn() }));
@@ -46,9 +49,14 @@ describe('AuthProvider leaving the device (Fase 31J)', () => {
     vi.mocked(authApi.login).mockResolvedValue({ data: { accessToken: 'token', requiresTwoFactor: false } } as never);
     vi.mocked(authApi.logout).mockResolvedValue({} as never);
     vi.mocked(apiRequest).mockRejectedValue(new Error('Sin negocio'));
+    vi.mocked(accountApi.getCarts).mockResolvedValue([]);
+    vi.mocked(accountApi.saveCart).mockResolvedValue({} as never);
   });
 
-  afterEach(() => window.localStorage.clear());
+  afterEach(() => {
+    cancelAccountCartSaves();
+    window.localStorage.clear();
+  });
 
   /** What the device keeps for whoever buys on it. */
   function keepOnDevice() {
@@ -85,6 +93,20 @@ describe('AuthProvider leaving the device (Fase 31J)', () => {
 
     expect(latestCart()?.slug).toBe('cafe-luna');
     expect(readPostalCode()).toBe('72000');
+  });
+
+  it('gives a customer account the carts chosen on this device before signing in: the device forgets them when it leaves', async () => {
+    keepOnDevice();
+    const team = await signIn('TenantAdmin');
+    team.unmount();
+    // A session of a business's team buys as a guest: nothing goes to an account.
+    expect(accountApi.getCarts).not.toHaveBeenCalled();
+
+    await signIn('Customer');
+
+    await waitFor(() => expect(accountApi.saveCart).toHaveBeenCalledWith(
+      'cafe-luna', { lines: [{ productId: 'latte', optionIds: [], quantity: 2 }], reorderOf: null, skipped: null },
+    ));
   });
 
   it('forgets them too when the session of a customer account expires or is revoked, and stops what was waiting', async () => {

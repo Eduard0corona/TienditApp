@@ -12,10 +12,10 @@ export const CUSTOMER_LEFT_EVENT = 'tienditapp:customer-left';
 export const CUSTOMER_STORAGE_KEY = 'tienditapp.customer';
 
 /**
- * The session of a customer account starts on this device, which keeps its carts and postal code from now on. Those of
- * another account that left without the device forgetting them (a session that could not be recovered while it was
- * closed) go first: whoever signs in does not take them into their own account. A session of a business's team changes
- * nothing: its carts are only ever on this device.
+ * The session of a customer account starts on this device, which keeps its carts and postal code from now on: the carts
+ * it chose before go to the account. Those of another account that left without the device forgetting them (a session
+ * that ended while it was closed) go first: whoever signs in does not take them into their own account. A session of a
+ * business's team changes nothing: its carts are only ever on this device.
  */
 export function rememberCustomerDevice(user: UserProfileDto): void {
   if (!getAccess(user, null).myOrders) return;
@@ -23,6 +23,10 @@ export function rememberCustomerDevice(user: UserProfileDto): void {
     const kept = window.localStorage.getItem(CUSTOMER_STORAGE_KEY);
     if (kept && kept !== user.id) forgetCustomerDevice();
     window.localStorage.setItem(CUSTOMER_STORAGE_KEY, user.id);
+    // What it chose here before goes to the account, which keeps it when the device forgets it.
+    if (window.localStorage.getItem(CARTS_STORAGE_KEY)) {
+      void import('./accountCartSync').then((sync) => sync.sendDeviceCarts()).catch(() => undefined);
+    }
   } catch {
     // Storage blocked: there is nothing kept.
   }

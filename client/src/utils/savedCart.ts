@@ -117,6 +117,14 @@ export function readCart(slug: string, now = new Date()): SavedCart | null {
   return fresh({ ...cart, lines }, now) ? { ...cart, lines, skipped } : null;
 }
 
+/** The carts this device keeps, one per store: fresh and with something in them. */
+export function deviceCarts(now = new Date()): { slug: string; cart: SavedCart }[] {
+  return Object.keys(readAll()).flatMap((slug) => {
+    const cart = readCart(slug, now);
+    return cart ? [{ slug, cart }] : [];
+  });
+}
+
 /** Keeps the cart of a store; an empty one is forgotten. */
 export function saveCart(slug: string, cart: Omit<SavedCart, 'savedAt'>, now = new Date()): void {
   const carts = readAll();

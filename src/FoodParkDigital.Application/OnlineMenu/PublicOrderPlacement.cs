@@ -193,10 +193,15 @@ internal sealed class PublicOrderPlacement
     /// already there: another device can create that row at the same time, or delete it (a save in another store keeps
     /// ten), and the order never fails for its cart. One deleted meanwhile has nothing left to empty.
     /// </summary>
-    public async Task ForgetCartAsync(Guid accountId, Guid businessId, DateTimeOffset now, CancellationToken cancellationToken)
+    /// <param name="orderedAsOf">
+    /// When what is ordered was fixed, for an order placed later (a payment applied late): a cart saved after it is another
+    /// the customer is choosing, and stays. Null for an order placed now.
+    /// </param>
+    public async Task ForgetCartAsync(
+        Guid accountId, Guid businessId, DateTimeOffset now, DateTimeOffset? orderedAsOf, CancellationToken cancellationToken)
     {
         var cart = await _context.AccountCarts.FirstOrDefaultAsync(c => c.UserId == accountId && c.BusinessId == businessId, cancellationToken);
-        if (cart is null)
+        if (cart is null || cart.SavedAt > orderedAsOf)
             return;
 
         cart.Empty(now);

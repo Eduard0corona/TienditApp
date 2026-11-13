@@ -727,7 +727,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         }
 
         if (account is not null)
-            await placement.ForgetCartAsync(account.Id, tenant.Id, now, cancellationToken);
+            await placement.ForgetCartAsync(account.Id, tenant.Id, now, orderedAsOf: null, cancellationToken);
         return Result.Success(Receipt(order, tenant, accepted, account));
     }
 

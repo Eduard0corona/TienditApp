@@ -1,6 +1,6 @@
 import { accountApi, type MyCart } from '../api/accountApi';
 import { CUSTOMER_LEFT_EVENT } from './customerDevice';
-import { adoptAccountSavedAt, type SavedCartLine } from './savedCart';
+import { adoptAccountSavedAt, deviceCarts, fromAccountCart, newerCart, type SavedCartLine } from './savedCart';
 
 /** What the account keeps of a cart (Fase 31J): its lines and «Pedir otra vez». */
 export interface AccountCartPayload {
@@ -87,4 +87,22 @@ async function send(slug: string, entry: Pending): Promise<void> {
   entry.running = null;
   // Changed while it went, and its moment already passed: the last one goes now.
   if (entry.payload && entry.timer === null) await send(slug, entry);
+}
+
+/**
+ * The session of a customer account starts on this device (Fase 31J): the carts the device chose before it (signed out, or
+ * while the account could not be reached) go to the account, since the device forgets them when the session ends. Each
+ * only when it is newer than the account's of its store and holds something else; one the account refuses (a store that
+ * no longer takes orders online) is dropped, as any save that fails.
+ */
+export async function sendDeviceCarts(): Promise<void> {
+  const carts = deviceCarts();
+  if (carts.length === 0) return;
+  const kept = await accountApi.getCarts();
+  for (const { slug, cart } of carts) {
+    const account = kept.find((item) => item.slug === slug);
+    const theirs = account ? fromAccountCart(account) : null;
+    if (newerCart(cart, theirs) !== cart || (theirs && cartSignature(theirs) === cartSignature(cart))) continue;
+    scheduleAccountCartSave(slug, { lines: cart.lines, reorderOf: cart.reorderOf, skipped: cart.skipped }, null, 0);
+  }
 }
