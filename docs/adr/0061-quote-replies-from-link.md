@@ -60,8 +60,8 @@ Tomé las decisiones de la Fase 29G con la autorización permanente del dueño d
     - La configuración de cotizaciones lleva `onlineReplies`. Si el cliente no lo manda (una versión anterior del navegador), queda como está.
     - La lista de cotizaciones suma el filtro `ToConvert` (6) y `repliedFromLink` en cada renglón.
 11. **Fuera de esta fase:**
-    - **El anticipo por Mercado Pago al aceptar.** Necesita decidir cuánto se cobra, qué pasa si el pago llega tarde o la cotización cambió, y cómo entra el pago a la orden ([ADR 0031](0031-online-payments.md), [ADR 0044](0044-online-payment-reconciliation.md)).
-    - **Que aceptar convierta sola la cotización en su orden:** la conversión sigue siendo del negocio (Fase 29E), que decide cuándo promete el trabajo.
+    - **El anticipo por Mercado Pago al aceptar.** Necesita decidir cuánto se cobra, qué pasa si el pago llega tarde o la cotización cambió, y cómo entra el pago a la orden ([ADR 0031](0031-online-payments.md), [ADR 0044](0044-online-payment-reconciliation.md)). Llegó en la Fase 31N ([ADR 0094](0094-quote-deposit.md)).
+    - **Que aceptar convierta sola la cotización en su orden:** la conversión sigue siendo del negocio (Fase 29E), que decide cuándo promete el trabajo. Desde la Fase 31N la convierte el anticipo pagado ([ADR 0094](0094-quote-deposit.md)); sin anticipo sigue siendo del negocio.
     - **Un aviso al negocio por WhatsApp, correo o en tiempo real:** hoy se entera por Inicio, por la lista y por la actividad.
     - **Que el cliente cambie su respuesta desde el enlace.**
 12. **La migración** `20261102151555_AddQuoteOnlineReplies`:

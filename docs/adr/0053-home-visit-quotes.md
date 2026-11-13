@@ -253,7 +253,7 @@ El trabajo de la orden en que se convirtió la cotización se agenda (punto 17):
 
 ### Después
 
-- Que el cliente acepte la cotización desde su enlace, con un anticipo por Mercado Pago ([ADR 0031](0031-online-payments.md)). La respuesta sin anticipo llegó en la Fase 29G ([ADR 0061](0061-quote-replies-from-link.md)); el anticipo sigue pendiente.
+- Que el cliente acepte la cotización desde su enlace, con un anticipo por Mercado Pago ([ADR 0031](0031-online-payments.md)). La respuesta sin anticipo llegó en la Fase 29G ([ADR 0061](0061-quote-replies-from-link.md)), y el anticipo en la 31N ([ADR 0094](0094-quote-deposit.md)): el negocio pide un porcentaje de lo que queda por pagar, y pagarlo acepta la versión y la vuelve su orden de servicio.
 - Fotos del problema en la solicitud: llegaron en la Fase 29H ([ADR 0062](0062-visit-problem-photos.md)).
 - PDF de la cotización y documento adjunto por WhatsApp: llegó en la Fase 31M, con un escritor de PDF propio en lugar de una biblioteca con licencia por decidir ([ADR 0093](0093-quote-pdf.md)). El WhatsApp lo lleva cuando va sin plantilla.
 - El tiempo de respuesta del negocio como criterio de orden en Explorar: llegó en la Fase 29J ([ADR 0064](0064-response-time-in-explore.md)).
@@ -267,7 +267,7 @@ El trabajo de la orden en que se convirtió la cotización se agenda (punto 17):
   - La cotización queda guardada, con sus versiones, su vigencia y lo que el cliente decidió, y se vuelve el trabajo sin capturarlo dos veces.
   - Los negocios nuevos no publican la casa del dueño, y los registrados se enteran de que la publican.
 - **Lo que limita:**
-  - El cliente no acepta la cotización en línea: responde, y el negocio lo registra. Desde la Fase 29G la acepta o la rechaza desde su enlace, sin anticipo ([ADR 0061](0061-quote-replies-from-link.md)).
+  - El cliente no acepta la cotización en línea: responde, y el negocio lo registra. Desde la Fase 29G la acepta o la rechaza desde su enlace, sin anticipo ([ADR 0061](0061-quote-replies-from-link.md)); desde la 31N, si el negocio lo pide, la acepta pagando el anticipo por Mercado Pago ([ADR 0094](0094-quote-deposit.md)).
   - Sin plantilla aprobada en Meta, el WhatsApp de la cotización solo llega a quien escribió en las últimas 24 horas. El correo llega si el cliente lo dio.
   - «Cerca de mí» no ordena a estos negocios: no publican su punto, y las zonas son por código postal, no por distancia.
   - La búsqueda de Explorar no encuentra por su ciudad a uno «Solo a domicilio», porque no la muestra.
