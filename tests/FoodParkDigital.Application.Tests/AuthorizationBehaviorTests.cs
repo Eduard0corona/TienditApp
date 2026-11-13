@@ -50,7 +50,7 @@ public class AuthorizationBehaviorTests
             "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicAppointmentQuery", "GetPublicBookingQuery",
             "GetPublicBookingSlotsQuery", "GetPublicCfdiFileQuery", "GetPublicCfdiQuery", "GetPublicDeliveryQuoteQuery",
             "GetPublicDirectoryQuery", "GetPublicHomeVisitCoverageQuery", "GetPublicHomeVisitQuery", "GetPublicHomeVisitSlotsQuery",
-            "GetPublicMenuQuery", "GetPublicOrderTrackingQuery", "GetPublicQuoteQuery", "GetPublicReviewsQuery", "GetPublicSitemapQuery",
+            "GetPublicMenuQuery", "GetPublicOrderTrackingQuery", "GetPublicQuotePdfQuery", "GetPublicQuoteQuery", "GetPublicReviewsQuery", "GetPublicSitemapQuery",
             "GetSelfInvoicePageQuery",
             "GetStorePreviewQuery",
             "IssuePendingCreditNotesCommand", "IssuePendingPaymentComplementsCommand", "Login2FACommand", "LoginCommand", "LogoutCommand", "LookUpSelfInvoiceTicketQuery",

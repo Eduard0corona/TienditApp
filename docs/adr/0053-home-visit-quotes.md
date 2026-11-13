@@ -241,7 +241,7 @@ El trabajo de la orden en que se convirtió la cotización se agenda (punto 17):
     - Con «Se descuenta si contratas» y una visita cobrada, la cotización lleva el renglón «Visita (se descuenta)» por lo que se pagó, calculado por el servidor desde la venta de la visita. Si esa venta se cancela, el renglón deja de aplicar.
 15. **Sus estados los cambia el agregado:** Borrador → Enviada → Aceptada, Rechazada o Vencida. Una enviada no se edita: corregirla crea una versión nueva, y la anterior queda «Reemplazada» en el historial, con lo que decía. Vence sola cuando pasa su vigencia.
 16. **Le llega al cliente por WhatsApp y por correo** (decisión 6), desde el outbox:
-    - El correo sale de la plataforma con el nombre «{Negocio} vía TienditApp» y `Reply-To` al correo del negocio, como la factura ([ADR 0049](0049-cfdi-email.md)), con la cotización en el cuerpo y su enlace. Sin PDF, porque TienditApp no genera PDF hoy.
+    - El correo sale de la plataforma con el nombre «{Negocio} vía TienditApp» y `Reply-To` al correo del negocio, como la factura ([ADR 0049](0049-cfdi-email.md)), con la cotización en el cuerpo y su enlace. Desde la Fase 31M lleva también su PDF adjunto ([ADR 0093](0093-quote-pdf.md)).
     - El WhatsApp lleva el folio, el total, la vigencia y el enlace. Fuera de las 24 horas necesita una plantilla aprobada en Meta, como el aviso «En camino».
     - El enlace es como el de un pedido ([ADR 0023](0023-order-tracking.md)): va en el fragmento, abre solo esa cotización sin datos del cliente fuera de su nombre, y deja de abrir 30 días después de vencer.
     - Cada envío queda en su historial con su resultado, como `CfdiEmail`.
@@ -255,7 +255,7 @@ El trabajo de la orden en que se convirtió la cotización se agenda (punto 17):
 
 - Que el cliente acepte la cotización desde su enlace, con un anticipo por Mercado Pago ([ADR 0031](0031-online-payments.md)). La respuesta sin anticipo llegó en la Fase 29G ([ADR 0061](0061-quote-replies-from-link.md)); el anticipo sigue pendiente.
 - Fotos del problema en la solicitud: llegaron en la Fase 29H ([ADR 0062](0062-visit-problem-photos.md)).
-- PDF de la cotización y documento adjunto por WhatsApp. Sigue pendiente: necesita que el dueño elija una biblioteca de PDF y su licencia. La que se consideró en la Fase 29J, PDFsharp, declara `AGPL-3.0-only` en su paquete 6.5.0 de NuGet y pide una licencia al crear un documento (revisado el 2026-11-03).
+- PDF de la cotización y documento adjunto por WhatsApp: llegó en la Fase 31M, con un escritor de PDF propio en lugar de una biblioteca con licencia por decidir ([ADR 0093](0093-quote-pdf.md)). El WhatsApp lo lleva cuando va sin plantilla.
 - El tiempo de respuesta del negocio como criterio de orden en Explorar: llegó en la Fase 29J ([ADR 0064](0064-response-time-in-explore.md)).
 - Que la búsqueda de Explorar encuentre los servicios de estos negocios: llegó en la Fase 29I ([ADR 0063](0063-explore-finds-services.md)).
 

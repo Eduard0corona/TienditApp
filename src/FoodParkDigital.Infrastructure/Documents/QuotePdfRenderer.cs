@@ -95,8 +95,9 @@ internal sealed class QuotePdfRenderer : IQuotePdfRenderer
             }
             return new LogoPixels(image.Width, image.Height, rgb, opaque ? null : alpha);
         }
-        catch (Exception ex) when (ex is ImageFormatException or InvalidImageContentException or UnknownImageFormatException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            // Whatever it is, the PDF goes without the logo: never missing because of it.
             _logger.LogWarning("The logo of business {TenantId} could not be decoded ({Error}): its quote PDF goes without it",
                 tenantId, ex.GetType().Name);
             return null;
