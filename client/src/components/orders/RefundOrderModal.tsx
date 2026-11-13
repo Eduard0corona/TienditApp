@@ -19,8 +19,9 @@ type RefundModalProps = {
 );
 
 // What the business gives back with its own money. «Plataforma» and «En línea» are never among them: only what a platform
-// charged, or the customer paid online, goes back that way, outside every drawer, and then it is the only way. «Saldo a
-// favor» (Fase 26D) is offered apart, when the order has the customer's phone.
+// charged, or the customer paid online, goes back that way, outside every drawer, and then it is the only way (but for a
+// deposit paid online with the rest paid at the business, Fase 31N). «Saldo a favor» (Fase 26D) is offered apart, when the
+// order has the customer's phone.
 const METHODS: OrderPaymentMethod[] = [
   PaymentMethod.Cash,
   PaymentMethod.Card,
@@ -28,6 +29,13 @@ const METHODS: OrderPaymentMethod[] = [
   PaymentMethod.DigitalWallet,
   PaymentMethod.Other,
 ];
+
+/** What was paid the ways `matches` picks and has not gone back those ways, in cents, as the server counts it. */
+function leftCents(order: OrderDto, matches: (method: OrderPaymentMethod) => boolean): number {
+  const paid = order.payments.filter((payment) => matches(payment.method)).reduce((sum, payment) => sum + toCents(payment.amount), 0);
+  const back = (order.refunds ?? []).filter((refund) => matches(refund.method)).reduce((sum, refund) => sum + toCents(refund.amount), 0);
+  return Math.max(0, paid - back);
+}
 
 /**
  * Refund (money back, optionally for returned units) or void (everything back and the sale cancelled).
@@ -46,14 +54,24 @@ export default function RefundOrderModal(props: RefundModalProps) {
   // Paid online (Fase 24I): it goes back «En línea», through Mercado Pago, and only that way (the server refuses any other
   // method): never out of a drawer it never entered.
   const paidOnline = order.payments.some((payment) => payment.method === PaymentMethod.Online);
-  const fixedMethod = platformCharged ? PaymentMethod.Platform : paidOnline ? PaymentMethod.Online : null;
+  // A service order with its deposit paid online (Fase 31N) and the rest paid at the business: each part goes back the way
+  // it was paid, up to what was paid that way (the server refuses more).
+  const onlineLeftCents = leftCents(order, (method) => method === PaymentMethod.Online);
+  const otherLeftCents = leftCents(order, (method) => method !== PaymentMethod.Online);
+  const mixedOnline = !platformCharged && paidOnline && otherLeftCents > 0;
+  const fixedMethod = platformCharged ? PaymentMethod.Platform : paidOnline && !mixedOnline ? PaymentMethod.Online : null;
   // To the balance in the customer's favor (Fase 26D): the account of the order's phone, so only with one.
-  const methods = order.customerPhone ? [...METHODS, PaymentMethod.CustomerBalance as OrderPaymentMethod] : METHODS;
+  const ownMethods = order.customerPhone ? [...METHODS, PaymentMethod.CustomerBalance as OrderPaymentMethod] : METHODS;
+  const methods = mixedOnline ? [PaymentMethod.Online as OrderPaymentMethod, ...ownMethods] : ownMethods;
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   // Weighed lines take a typed quantity ("0.5"); the text is kept while it is being written.
   const [quantityTexts, setQuantityTexts] = useState<Record<string, string>>({});
   const [amountInput, setAmountInput] = useState('');
   const [method, setMethod] = useState<OrderPaymentMethod>(remaining[0]?.method ?? PaymentMethod.Cash);
+  // The most this refund can give back the way it goes.
+  const maxCents = !mixedOnline
+    ? toCents(netPaid)
+    : Math.min(toCents(netPaid), method === PaymentMethod.Online ? onlineLeftCents : otherLeftCents);
   const [reason, setReason] = useState('');
   // An order of a platform is voided mostly because the platform cancelled it or it was registered twice: the food was
   // usually cooked, so its supplies stay out unless someone says otherwise.
@@ -66,7 +84,7 @@ export default function RefundOrderModal(props: RefundModalProps) {
   const linesTotalCents = order.items.reduce((sum, item) => sum + toCents(item.chargedPrice ?? item.totalPrice), 0);
   // The share of the order total of the units chosen (the total already has its IVA).
   const suggestedCents = Math.min(
-    toCents(netPaid),
+    maxCents,
     linesTotalCents === 0
       ? 0
       : Math.round(order.items.reduce((sum, item) => {
@@ -77,7 +95,7 @@ export default function RefundOrderModal(props: RefundModalProps) {
   const typedAmount = amountInput.trim() === '' ? null : parseMoneyInput(amountInput);
   const amountCents = typedAmount === null ? suggestedCents : toCents(typedAmount);
   const anyUnits = Object.values(quantities).some((value) => value > 0);
-  const amountValid = amountCents > 0 && amountCents <= toCents(netPaid) && (amountInput.trim() === '' || typedAmount !== null);
+  const amountValid = amountCents > 0 && amountCents <= maxCents && (amountInput.trim() === '' || typedAmount !== null);
   const reasonValid = reason.trim().length >= 3;
   const canSubmit = !submitting && reasonValid && (props.mode === 'void' || amountValid);
 
@@ -201,7 +219,7 @@ export default function RefundOrderModal(props: RefundModalProps) {
                     onChange={(event) => setAmountInput(event.target.value)}
                   />
                   {!amountValid && amountCents > 0 && (
-                    <div className="invalid-feedback">No puede ser mayor a {formatMoney(netPaid)}.</div>
+                    <div className="invalid-feedback">No puede ser mayor a {formatMoney(maxCents / 100)}.</div>
                   )}
                   <div className="form-text">Vacío usa lo que corresponde a los artículos elegidos.</div>
                 </div>
@@ -225,6 +243,13 @@ export default function RefundOrderModal(props: RefundModalProps) {
                           <option key={item} value={item}>{getPaymentMethodLabel(item)}</option>
                         ))}
                       </select>
+                      {mixedOnline && (
+                        <div className="form-text">
+                          {method === PaymentMethod.Online
+                            ? `Hasta ${formatMoney(onlineLeftCents / 100)}, lo que pagó en línea: Mercado Pago se lo devuelve a su tarjeta o cuenta.`
+                            : `Hasta ${formatMoney(otherLeftCents / 100)}, lo que pagó en el negocio.`}
+                        </div>
+                      )}
                       {method === PaymentMethod.Cash && <div className="form-text">Sale del efectivo de tu caja.</div>}
                       {method === PaymentMethod.CustomerBalance && (
                         <div className="form-text">Queda a favor del cliente para su próxima compra; no sale de tu caja.</div>

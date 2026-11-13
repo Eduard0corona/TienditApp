@@ -1,9 +1,9 @@
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
 import {
-  ACCEPTED_QUOTE_ID, ANSWERED_QUOTE_LINK, CONNECTED_QUOTE_ID, CONVERTED_QUOTE_ID, DRAFT_QUOTE_ID, PLUMBER_QUOTES, PUBLIC_QUOTE_ROUTES,
-  QUOTES_ROUTES, QUOTES_WITH_WHATSAPP_ROUTES, QUOTE_LINK, QUOTE_WITH_PROBLEM_ROUTES, REPLACED_QUOTE_LINK, SCHEDULED_QUOTE_ID,
-  SENT_QUOTE_ID,
+  ACCEPTED_QUOTE_ID, ANSWERED_QUOTE_LINK, CONNECTED_QUOTE_ID, CONVERTED_QUOTE_ID, DEPOSIT_CHECKOUT_ID, DEPOSIT_QUOTE_LINK, DRAFT_QUOTE_ID,
+  PAID_QUOTE_LINK, PLUMBER_QUOTES, PUBLIC_QUOTE_ROUTES, QUOTES_ROUTES, QUOTES_WITH_DEPOSIT_ROUTES, QUOTES_WITH_WHATSAPP_ROUTES, QUOTE_LINK,
+  QUOTE_WITH_PROBLEM_ROUTES, REPLACED_QUOTE_LINK, SCHEDULED_QUOTE_ID, SENT_QUOTE_ID,
 } from './cotizaciones.mocks';
 
 // The quotes (Fase 29C, ADR 0053): a plumber's list of open quotes, a draft with its lines, the quote of a visit sent with
@@ -221,4 +221,61 @@ test('the scenes open the quotes the mocks answer', () => {
     '7a3f1c52-2d4b-4e6a-9c1f-0b8e5d2a7c41', '0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58', '3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63',
     '5d2a8f61-3c7e-4b9a-8e14-6f0b2c9d7a35', '8b4e1d73-9a2c-4f6e-b5d8-2c7a0e9f4b16', '2f6c8a14-7d3b-4e9a-a5c2-9b1e0d4f7a83',
   ]);
+});
+
+// Fase 31N: the business asks a deposit of 30 % to accept from the link, with its Mercado Pago account; its customer accepts by
+// paying it, and the quote is already its order.
+test.describe('Anticipo de la cotización', () => {
+  test.use({ prepareData: PLUMBER_QUOTES, extraRoutes: QUOTES_WITH_DEPOSIT_ROUTES });
+
+  test('cotizaciones con anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/quotes');
+    await expect(page.getByLabel('Anticipo para aceptar')).toHaveValue('30');
+    await snap(page, 'cotizaciones-anticipo-escritorio');
+  });
+
+  test('cotización con su anticipo pagado', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/quotes/9e2b7c41-6d3a-4f8e-b1c5-0a7d4e9f2b63');
+    await expect(page.getByText('Anticipo pagado en línea')).toBeVisible();
+    await snap(page, 'cotizacion-anticipo-pagado-escritorio');
+  });
+});
+
+test.describe('Anticipo desde el enlace', () => {
+  test.use({ signedIn: false, extraRoutes: PUBLIC_QUOTE_ROUTES });
+
+  test('cotización del enlace con anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/cotizacion#${DEPOSIT_QUOTE_LINK}`);
+    await expect(page.getByRole('button', { name: 'Aceptar y pagar el anticipo de $1,266.72' })).toBeVisible();
+    await snap(page, 'cotizacion-enlace-anticipo-telefono');
+  });
+
+  test('pagar el anticipo desde el enlace', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/cotizacion#${DEPOSIT_QUOTE_LINK}`);
+    await page.getByRole('button', { name: 'Aceptar y pagar el anticipo de $1,266.72' }).click();
+    await expect(page.getByRole('button', { name: 'Ir a pagar $1,266.72' })).toBeVisible();
+    await snap(page, 'cotizacion-enlace-pagar-anticipo-telefono');
+  });
+
+  test('cotización aceptada con su anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/cotizacion#${PAID_QUOTE_LINK}`);
+    await expect(page.getByText(/y pagaste su anticipo de/)).toBeVisible();
+    await snap(page, 'cotizacion-enlace-anticipo-pagado-telefono');
+  });
+
+  test('regreso del pago del anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    // This device went to pay it from the link: the return page reads it with the link it kept.
+    await page.addInitScript(({ checkoutId, token }) => {
+      window.localStorage.setItem('tienditapp.quoteDeposits', JSON.stringify({ [checkoutId]: { token, savedAt: new Date().toISOString() } }));
+    }, { checkoutId: DEPOSIT_CHECKOUT_ID, token: PAID_QUOTE_LINK });
+    await open(page, '/cotizacion/pago/6c1e9a47-2b8d-4f3a-9e5c-7d0b2a8f4c19?payment_id=1234567890&status=approved');
+    await expect(page.getByRole('heading', { name: '¡Anticipo pagado!' })).toBeVisible();
+    await snap(page, 'cotizacion-anticipo-regreso-telefono');
+  });
 });

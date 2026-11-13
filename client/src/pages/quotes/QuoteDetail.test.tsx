@@ -326,6 +326,25 @@ describe('QuoteDetail', () => {
     expect(screen.getByText('La venta de la visita se canceló o se reembolsó: ya no se descuenta.')).toBeInTheDocument();
   });
 
+  it('shows the deposit the version asks to accept it from its link, and when the customer paid it (Fase 31N)', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({ depositAmount: 348, depositPaid: false }));
+    renderAt();
+
+    expect(await screen.findByText('Anticipo para aceptarla')).toBeInTheDocument();
+    expect(screen.getByText('$348.00')).toBeInTheDocument();
+    expect(screen.getByText(/Desde su enlace, el cliente la acepta pagando el anticipo; tú puedes registrar su aceptación sin él/)).toBeInTheDocument();
+  });
+
+  it('says the deposit was paid online and its order has it', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({
+      status: QuoteStatus.Accepted, replyChannel: QuoteReplyChannel.Link, depositAmount: 348, depositPaid: true,
+    }));
+    renderAt();
+
+    expect(await screen.findByText('Anticipo pagado en línea')).toBeInTheDocument();
+    expect(screen.getByText('El cliente pagó el anticipo desde su enlace: la orden lo tiene como pago en línea.')).toBeInTheDocument();
+  });
+
   it('shows what the server said when it refuses to finish it', async () => {
     vi.mocked(quotesApi.get).mockResolvedValue(quote({ lines: [] }));
     vi.mocked(quotesApi.send).mockRejectedValue(refusal('Agrega al menos un renglón con precio antes de enviarla.'));

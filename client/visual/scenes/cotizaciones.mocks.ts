@@ -17,6 +17,11 @@ export const QUOTE_LINK = 'Qt5Lm8Rv2PxK7nWc4Yb9Hd1Mf6Js3Ga0Ue-_RtXpZa';
 export const REPLACED_QUOTE_LINK = 'Rp4Kq9Lm2Xc7Vz1Hd6Pf3Js8Ga0Ue5Yt-_RwTiOpQs';
 /** The link of a quote the customer already accepted from it (Fase 29G). */
 export const ANSWERED_QUOTE_LINK = 'Ak7Pz2Wq9Lm4Xc1Vb6Hd3Nf8Js5Ga0Ue-_RtYuIoPa';
+/** Fase 31N: the version that asks a deposit of 30 % of what is left (4,222.40), and the same one once paid. */
+export const DEPOSIT_QUOTE_LINK = 'Dp3Kx8Wq1Lm6Zc4Vb9Hd2Nf7Js0Ga5Ue-_RtYuIoPd';
+export const PAID_QUOTE_LINK = 'Pd6Lm1Wq8Kx3Zc9Vb4Hd7Nf2Js5Ga0Ue-_RtYuIoPp';
+export const DEPOSIT_CHECKOUT_ID = '6c1e9a47-2b8d-4f3a-9e5c-7d0b2a8f4c19';
+const DEPOSIT = 1266.72;
 
 const LINES = [
   { position: 1, productId: 'svc-calentador', description: 'Cambio de calentador de paso', quantity: 1, unitPrice: 2800, taxRate: 16, isTaxExempt: false, total: 2800 },
@@ -48,6 +53,7 @@ const DRAFT = {
   customerName: 'Jorge Salinas',
   customerPhone: '5544332211',
   customerEmail: null,
+  depositPaid: false,
   appointment: null,
   pricesIncludeTax: false,
   validityDays: 15,
@@ -188,7 +194,7 @@ const WHATSAPP_TEMPLATES = [
 
 const quotesRoutes: ExtraRoutes = (_data, { ok, paginate }) => [
   ['GET', /^\/quotes$/, (_match, query) => ok(paginate(SUMMARIES, query, 20))],
-  ['GET', /^\/quotes\/settings$/, () => ok({ validityDays: 15, onlineReplies: true, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] })],
+  ['GET', /^\/quotes\/settings$/, () => ok({ validityDays: 15, onlineReplies: true, depositAvailable: false, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] })],
   ['GET', new RegExp(`^/quotes/${DRAFT_ID}$`), () => ok(DRAFT)],
   ['GET', new RegExp(`^/quotes/${SENT_ID}$`), () => ok(SENT)],
   ['GET', new RegExp(`^/quotes/${CONNECTED_ID}$`), () => ok(CONNECTED)],
@@ -200,9 +206,33 @@ const quotesRoutes: ExtraRoutes = (_data, { ok, paginate }) => [
 /** The same business once it connected its WhatsApp and picked the template of its quotes. */
 const quotesWithWhatsAppRoutes: ExtraRoutes = (data, helpers) => [
   ['GET', /^\/quotes\/settings$/, () => helpers.ok({
-    validityDays: 15, onlineReplies: true, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 'tpl-cotizacion',
+    validityDays: 15, onlineReplies: true, depositAvailable: false, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 'tpl-cotizacion',
     whatsAppTemplates: WHATSAPP_TEMPLATES,
   })],
+  ...quotesRoutes(data, helpers),
+];
+
+/**
+ * Fase 31N: the business asks 30 % of what is left to accept from the link, with its Mercado Pago account connected, and the
+ * quote its customer accepted by paying it, already its order.
+ */
+const DEPOSIT_PAID_ID = '9e2b7c41-6d3a-4f8e-b1c5-0a7d4e9f2b63';
+const DEPOSIT_PAID = {
+  ...CONVERTED,
+  id: DEPOSIT_PAID_ID,
+  replyChannel: 4,
+  customerResponse: null,
+  depositAmount: DEPOSIT,
+  depositPaid: true,
+  order: { ...CONVERTED.order, orderNumber: 'ORD-000058' },
+  versions: [{ id: DEPOSIT_PAID_ID, revision: 1, status: 2, total: 4686.4, sentAt: '2026-10-04T16:20:00Z', closedAt: '2026-10-05T15:40:00Z' }],
+};
+const quotesWithDepositRoutes: ExtraRoutes = (data, helpers) => [
+  ['GET', /^\/quotes\/settings$/, () => helpers.ok({
+    validityDays: 15, onlineReplies: true, depositPercent: 30, depositAvailable: true, pricesIncludeTax: false, defaultTaxRate: 16,
+    whatsAppConnected: false, whatsAppTemplates: [],
+  })],
+  ['GET', new RegExp(`^/quotes/${DEPOSIT_PAID_ID}$`), () => helpers.ok(DEPOSIT_PAID)],
   ...quotesRoutes(data, helpers),
 ];
 
@@ -230,6 +260,8 @@ const PUBLIC_QUOTE = {
   repliedOn: null,
   repliedFromLink: false,
   response: null,
+  canPayDeposit: false,
+  depositPaid: false,
 };
 
 function problem(status: number, detail: string) {
@@ -248,8 +280,23 @@ const publicQuoteRoutes: ExtraRoutes = (data, helpers) => [
         response: 'Los espero el jueves por la mañana; el portón negro.',
       });
     }
+    if (body?.token === DEPOSIT_QUOTE_LINK) return helpers.ok({ ...PUBLIC_QUOTE, depositAmount: DEPOSIT, canPayDeposit: true });
+    if (body?.token === PAID_QUOTE_LINK) {
+      return helpers.ok({
+        ...PUBLIC_QUOTE, status: 2, canReply: false, repliedFromLink: true, repliedAt: '2026-10-05T15:40:00Z', repliedOn: '2026-10-05',
+        depositAmount: DEPOSIT, depositPaid: true,
+      });
+    }
     return problem(404, 'Esta cotización no existe o su enlace ya venció. Pídele al negocio que te la mande otra vez.');
   }],
+  // Fase 31N: back from Mercado Pago, the deposit of that version applied: the quote accepted and its order made.
+  ['POST', /^\/public\/quotes\/deposit\/confirm$/, (_match, _query, body: { token?: string; checkoutId?: string }) =>
+    body?.token === PAID_QUOTE_LINK && body.checkoutId === DEPOSIT_CHECKOUT_ID
+      ? helpers.ok({
+        status: 1, amount: DEPOSIT, expiresAt: '2026-10-05T16:05:00Z', checkoutUrl: null, failureMessage: null,
+        orderNumber: 'ORD-000058',
+      })
+      : problem(404, 'No encontramos ese pago.')],
   ...publicRoutes(data, helpers),
 ];
 
@@ -259,6 +306,7 @@ export const CONNECTED_QUOTE_ID = CONNECTED_ID;
 export const ACCEPTED_QUOTE_ID = ACCEPTED_ID;
 export const CONVERTED_QUOTE_ID = CONVERTED_ID;
 export const SCHEDULED_QUOTE_ID = SCHEDULED_ID;
+export const DEPOSIT_PAID_QUOTE_ID = DEPOSIT_PAID_ID;
 export const PLUMBER_QUOTES = asOption(plumber);
 /**
  * Valeria's sent quote with what she said happens and her two photos (Fase 29H): it opens them with the session from the
@@ -284,3 +332,4 @@ export const QUOTES_ROUTES = asOption(quotesRoutes);
 export const QUOTE_WITH_PROBLEM_ROUTES = asOption(quoteWithProblemRoutes);
 export const QUOTES_WITH_WHATSAPP_ROUTES = asOption(quotesWithWhatsAppRoutes);
 export const PUBLIC_QUOTE_ROUTES = asOption(publicQuoteRoutes);
+export const QUOTES_WITH_DEPOSIT_ROUTES = asOption(quotesWithDepositRoutes);

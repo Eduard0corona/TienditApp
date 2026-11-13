@@ -492,6 +492,13 @@ function QuoteDetail({ id }: { id: string }) {
                       <dd className="col-5 text-end fw-semibold mb-0">{formatMoney(quote.toPay)}</dd>
                     </>
                   )}
+                  {/* Fase 31N: the deposit this version asks to accept it from its link, fixed when it was sent. */}
+                  {quote.depositAmount != null && (
+                    <>
+                      <dt className="col-7 text-muted fw-normal">{quote.depositPaid ? 'Anticipo pagado en línea' : 'Anticipo para aceptarla'}</dt>
+                      <dd className="col-5 text-end mb-0">{formatMoney(quote.depositAmount)}</dd>
+                    </>
+                  )}
                 </dl>
               )}
               <p className="text-muted small mt-2 mb-0">{ivaNote}</p>
@@ -500,6 +507,11 @@ function QuoteDetail({ id }: { id: string }) {
               )}
               {quote.order && quote.visitCredit?.applies && (
                 <p className="text-muted small mt-1 mb-0">Lo que pagó por la visita quedó como pago de la orden.</p>
+              )}
+              {quote.depositPaid ? (
+                <p className="text-muted small mt-1 mb-0">El cliente pagó el anticipo desde su enlace: la orden lo tiene como pago en línea.</p>
+              ) : quote.depositAmount != null && quote.status === QuoteStatus.Sent && (
+                <p className="text-muted small mt-1 mb-0">Desde su enlace, el cliente la acepta pagando el anticipo; tú puedes registrar su aceptación sin él.</p>
               )}
             </div>
           </div>
