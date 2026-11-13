@@ -103,6 +103,12 @@ public class ReviewEmailTests
 
         // The admin stopped getting them, or became staff, since it was queued; the owner's business was suspended.
         var membership = await fixture.Context.TenantUsers.IgnoreQueryFilters().SingleAsync(m => m.UserId == admin);
+        membership.ChooseReviewEmails(false);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        Assert.Empty(await SendAsync(fixture, shop, review, admin));
+        membership = await fixture.Context.TenantUsers.IgnoreQueryFilters().SingleAsync(m => m.UserId == admin);
+        membership.ChooseReviewEmails(true);
         membership.SetRole(TenantUserRole.Staff);
         await fixture.Context.SaveChangesAsync();
         fixture.Context.ChangeTracker.Clear();
