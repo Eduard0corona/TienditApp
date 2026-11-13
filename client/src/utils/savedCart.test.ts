@@ -4,10 +4,12 @@ import {
   cartLineKey,
   clearCart,
   fromAccountCart,
+  joinLines,
   latestCart,
   latestPendingCart,
   lineNotes,
   linesOfOrder,
+  MAX_CART_LINES,
   newerCart,
   readCart,
   restoreLines,
@@ -226,5 +228,14 @@ describe('savedCart', () => {
     const ordered = { ...accountCart, slug: 'el-guero', businessName: 'El Güero', lines: [], savedAt: later(1).toISOString() };
     expect(latestPendingCart(device, [ordered])).toBeNull();
     expect(latestPendingCart(device, [{ ...ordered, savedAt: later(-1).toISOString() }])).toEqual(device);
+  });
+
+  it('joins what was added while the cart was read: the same line adds up to what it takes, another goes last (Fase 31J)', () => {
+    const line = (key: string, quantity: number) => ({ key, quantity });
+
+    expect(joinLines([line('latte', 98), line('concha', 1)], [line('latte', 5), line('te', 2)]))
+      .toEqual([line('latte', 99), line('concha', 1), line('te', 2)]);
+    const full = Array.from({ length: MAX_CART_LINES }, (_, index) => line(`p${index}`, 1));
+    expect(joinLines(full, [line('nuevo', 1)])).toEqual(full);
   });
 });

@@ -253,6 +253,20 @@ export function linesOfOrder(
 }
 
 /**
+ * The lines restored, and then what the customer added while they were read (Fase 31J): nothing chosen is lost. The same
+ * product with the same options and note adds its quantity (up to what a line takes); another goes last while there is room.
+ */
+export function joinLines<L extends { key: string; quantity: number }>(restored: L[], added: L[]): L[] {
+  const joined = [...restored];
+  for (const line of added) {
+    const index = joined.findIndex((existing) => existing.key === line.key);
+    if (index >= 0) joined[index] = { ...joined[index], quantity: Math.min(joined[index].quantity + line.quantity, MAX_LINE_QUANTITY) };
+    else if (joined.length < MAX_CART_LINES) joined.push(line);
+  }
+  return joined;
+}
+
+/**
  * The saved lines that the menu of now can take, priced with it: the product is on the menu and available now, and its
  * options still exist and make a valid choice. How many products did not come back goes in `dropped`.
  */

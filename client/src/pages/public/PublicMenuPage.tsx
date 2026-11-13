@@ -39,6 +39,7 @@ import { readPostalCode } from '../../utils/postalCodePreference';
 import {
   cartLineKey,
   fromAccountCart,
+  joinLines,
   lineNotes,
   MAX_CART_LINES,
   MAX_LINE_QUANTITY,
@@ -276,7 +277,8 @@ export default function PublicMenuPage() {
       ? restoreLines(saved.lines, data.categories.flatMap((item) => item.products))
       : null;
     if (saved && restored) {
-      setLines(restored.lines);
+      // The menu shows while the session and the account's carts are read: what was added meanwhile stays, with it.
+      setLines((added) => joinLines(restored.lines, added));
       setRestoredNotice(restoredMessage(restored.lines.length, restored.dropped, saved.skipped ?? 0, saved.reorderOf !== undefined));
     }
     // What the account has: the same cart is not sent again. When it could not be read, what this device restores: only
