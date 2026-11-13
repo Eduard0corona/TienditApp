@@ -679,7 +679,8 @@ describe('PublicMenuPage', () => {
     it('brings back the cart the account left on another device when it changed later, and keeps there what changes', async () => {
       // Within the week a cart lasts: here two hours ago, on the other device an hour ago.
       saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 1 }] }, new Date(Date.now() - 2 * 3_600_000));
-      account.getCarts.mockResolvedValue([accountCart(3, new Date(Date.now() - 3_600_000).toISOString())]);
+      const accountSavedAt = new Date(Date.now() - 3_600_000).toISOString();
+      account.getCarts.mockResolvedValue([accountCart(3, accountSavedAt)]);
       account.getAddresses.mockResolvedValue([]);
       account.saveCart.mockResolvedValue({} as never);
       api.getMenu.mockResolvedValue(menu());
@@ -688,6 +689,8 @@ describe('PublicMenuPage', () => {
 
       expect(await screen.findByRole('button', { name: /^Ver pedido · 3/ })).toBeInTheDocument();
       expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: [], quantity: 3 }]);
+      // With the account's time, not this device's: a clock ahead does not make it newer than what the account keeps later.
+      expect(readCart('cafe-luna')?.savedAt).toBe(accountSavedAt);
       await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
       await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
         'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 4 }], reorderOf: null, skipped: null },

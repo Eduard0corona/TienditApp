@@ -261,6 +261,8 @@ export default function PublicMenuPage() {
   });
   // What the account received last of this store's cart: the same cart is not sent again.
   const accountCartSent = useRef<string | null>(null);
+  // The cart restored and when it was kept (the server's time, when it came from the account).
+  const restoredCart = useRef<{ signature: string; savedAt: Date } | null>(null);
   // Who the session is, and with an account its carts read now, are known (or could not be read: the device's then).
   const accountKnown = !checking && (!customer || accountCarts.isFetchedAfterMount);
 
@@ -275,6 +277,9 @@ export default function PublicMenuPage() {
     const saved = newerCart(readCart(slug), fromAccount);
     const restored = saved && saved.lines.length > 0
       ? restoreLines(saved.lines, data.categories.flatMap((item) => item.products))
+      : null;
+    restoredCart.current = saved && restored
+      ? { signature: cartSignature({ lines: savedLinesOf(restored.lines) }), savedAt: new Date(saved.savedAt) }
       : null;
     if (saved && restored) {
       // The menu shows while the session and the account's carts are read: what was added meanwhile stays, with it.
@@ -371,9 +376,11 @@ export default function PublicMenuPage() {
   useEffect(() => {
     if (restoredFor !== slug || !businessName) return;
     const kept = savedLinesOf(lines);
-    saveCart(slug, { businessName, lines: kept });
-    if (!customerId) return;
     const signature = cartSignature({ lines: kept });
+    // Unchanged since it came back, it keeps when it was kept: a device clock ahead does not make it newer than the account's.
+    const restoredAt = restoredCart.current?.signature === signature ? restoredCart.current.savedAt : undefined;
+    saveCart(slug, { businessName, lines: kept }, restoredAt);
+    if (!customerId) return;
     if (signature === accountCartSent.current) return;
     accountCartSent.current = signature;
     scheduleAccountCartSave(slug, { lines: kept }, (saved) => {

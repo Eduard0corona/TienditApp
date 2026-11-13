@@ -82,8 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await refreshProfile();
         }
       } catch {
-        // No valid refresh cookie; user needs to log in.
-        forgetCustomerDevice();
+        // No valid refresh cookie; user needs to log in. One the server refused ended the session (`expired`, which forgets
+        // a customer account's carts); a passing failure (offline) keeps them for when it comes back.
         setUser(null);
         setSessionMarker(false);
       } finally {

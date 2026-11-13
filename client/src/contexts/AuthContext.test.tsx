@@ -104,16 +104,20 @@ describe('AuthProvider leaving the device (Fase 31J)', () => {
     window.removeEventListener(CUSTOMER_LEFT_EVENT, customerLeft);
   });
 
-  it('forgets them when the session of the customer account that kept them cannot be recovered on opening', async () => {
+  it('keeps them when the session cannot be recovered on opening for a passing failure (offline): it did not end', async () => {
+    // One the server refuses ends through the sync, as an expired one (above).
     window.localStorage.setItem('fpd_has_session', '1');
     window.localStorage.setItem(CUSTOMER_STORAGE_KEY, 'u1');
     keepOnDevice();
-    vi.mocked(refreshAccessToken).mockRejectedValue(new Error('Sesión vencida'));
+    vi.mocked(refreshAccessToken).mockRejectedValue(new Error('Network Error'));
 
     render(<AuthProvider><Session /></AuthProvider>);
 
-    await waitFor(() => expect(latestCart()).toBeNull());
-    expect(readPostalCode()).toBe('');
+    await waitFor(() => expect(refreshAccessToken).toHaveBeenCalled());
+    expect(await screen.findByText('Sin sesión')).toBeInTheDocument();
+    expect(latestCart()?.slug).toBe('cafe-luna');
+    expect(readPostalCode()).toBe('72000');
+    expect(window.localStorage.getItem(CUSTOMER_STORAGE_KEY)).toBe('u1');
   });
 
   it('forgets those of another customer account when one signs in, and keeps its own', async () => {

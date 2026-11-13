@@ -29,8 +29,8 @@ export function rememberCustomerDevice(user: UserProfileDto): void {
 }
 
 /**
- * The session ends on this device, however it ends (signing out here or in another tab, expired, revoked or not
- * recovered), and nothing waiting goes to the account. When it was a customer account's, the device forgets its carts and
+ * The session ends on this device, however it ends (signing out here or in another tab, expired or revoked, also found
+ * so when the app opens), and nothing waiting goes to the account. When it was a customer account's, the device forgets its carts and
  * postal code (the account keeps them), so whoever comes next does not take them into their own account.
  */
 export function forgetCustomerDevice(): void {
