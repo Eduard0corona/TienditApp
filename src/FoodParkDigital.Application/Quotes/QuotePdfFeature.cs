@@ -31,6 +31,7 @@ public interface IQuotePdfRenderer
 /// What the PDF of a version says, as the customer reads it on its page: of the customer, only their name; of the business,
 /// its name and its phone (its contact email starts as its owner's: the page does not show it either). Every amount is the
 /// server's; <see cref="Status"/> is the status on the business's day (a sent one whose validity passed reads expired).
+/// Since the Fase 31N (ADR 0094), the deposit the version asks to accept it from its link, and whether it was paid.
 /// </summary>
 public sealed record QuotePdfModel(
     Guid TenantId,
@@ -51,7 +52,9 @@ public sealed record QuotePdfModel(
     decimal VisitCredit,
     decimal ToPay,
     bool PricesIncludeTax,
-    string? Note);
+    string? Note,
+    decimal? DepositAmount = null,
+    bool DepositPaid = false);
 
 /// <summary>A line of the PDF: what it includes, how many, at how much each and its amount.</summary>
 public sealed record QuotePdfLine(string Description, decimal Quantity, decimal UnitPrice, decimal Total);
@@ -71,8 +74,10 @@ public static class QuotePdfs
     /// while its sale still has <paramref name="stillPaidForTheVisit"/> paid, and the day it was sent and answered in the
     /// business's time zone, as its validity.
     /// </summary>
+    /// <param name="depositPaid">Whether a payment of its deposit accepted it (<see cref="QuoteDeposits.PaidAsync"/>).</param>
     public static QuotePdfModel Model(
-        Quote quote, string businessName, string? businessPhone, string? timeZone, DateOnly today, decimal? stillPaidForTheVisit)
+        Quote quote, string businessName, string? businessPhone, string? timeZone, DateOnly today, decimal? stillPaidForTheVisit,
+        bool depositPaid = false)
     {
         var status = quote.StatusOn(today);
         var replied = status is QuoteStatus.Accepted or QuoteStatus.Rejected;
@@ -97,7 +102,9 @@ public static class QuotePdfs
             quote.VisitCreditStanding(stillPaidForTheVisit),
             quote.ToPay(stillPaidForTheVisit),
             quote.PricesIncludeTax,
-            quote.Note);
+            quote.Note,
+            quote.DepositAmount,
+            depositPaid);
     }
 
     /// <summary>The model of a version of the business, read as it is now.</summary>
@@ -110,7 +117,8 @@ public static class QuotePdfs
             .FirstAsync(cancellationToken);
         var timeZone = (await TenantSalesSettings.ReadAsync(context, quote.TenantId, cancellationToken)).TimeZone;
         var stillPaid = await QuoteVisitCredits.StillPaidAsync(context, quote, cancellationToken);
-        return Model(quote, business.Name, business.ContactPhone, timeZone, QuoteCalendar.Today(timeZone, now), stillPaid);
+        return Model(quote, business.Name, business.ContactPhone, timeZone, QuoteCalendar.Today(timeZone, now), stillPaid,
+            await QuoteDeposits.PaidAsync(context, quote, cancellationToken));
     }
 
     /// <summary>How long a message waits for its PDF (its logo comes from the storage) before it goes without it.</summary>
@@ -241,7 +249,8 @@ public class GetPublicQuotePdfQueryHandler : IRequestHandler<GetPublicQuotePdfQu
 
         var stillPaid = await QuoteVisitCredits.StillPaidAsync(_context, quote, cancellationToken);
         var pdf = await _renderer.RenderAsync(
-            QuotePdfs.Model(quote, business.Name, business.ContactPhone, business.TimeZone, today, stillPaid),
+            QuotePdfs.Model(quote, business.Name, business.ContactPhone, business.TimeZone, today, stillPaid,
+                await QuoteDeposits.PaidAsync(_context, quote, cancellationToken)),
             cancellationToken);
         return new PrivateFileDownload(new MemoryStream(pdf), QuotePdfs.ContentType, QuotePdfs.FileName(quote.Number, quote.Revision));
     }

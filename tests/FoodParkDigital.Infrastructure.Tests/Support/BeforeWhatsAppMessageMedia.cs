@@ -25,6 +25,7 @@ internal static class BeforeWhatsAppMessageMedia
             message.Ignore(m => m.MediaPath);
             message.Ignore(m => m.MediaState);
         });
+        BeforeQuoteDeposits.Ignore(modelBuilder);
     }
 
     private sealed class Context(

@@ -380,6 +380,23 @@ public class CustomerAnswerNoticesTests
     }
 
     [Fact]
+    public void TheEmailOfAQuoteAcceptedWithItsDeposit_ShouldSayItWasPaid_AndNameItsOrder_ThoughItIsAnOrderAlready()
+    {
+        var email = QuoteReplyEmail.Compose(
+            "Plomería", "Valeria", "COT-000007", accepted: true, 1160m, leftAMessage: false, mayConvert: true, Guid.NewGuid(), AppUrl,
+            depositPaid: 348m, orderNumber: "OS-0042");
+
+        Assert.Equal("Cotización aceptada con anticipo en Plomería: COT-000007 por $1,160.00", email.Subject);
+        Assert.Contains("pagó en línea su anticipo de <strong>$348.00</strong>", email.HtmlBody);
+        Assert.Contains("Ya es la orden de servicio <strong>OS-0042</strong>", email.HtmlBody);
+        Assert.DoesNotContain("Conviértela", email.HtmlBody);
+        // Paying it made it its order (Fase 31N): still news, unlike one the business converted after an answer.
+        var answeredAt = DateTimeOffset.UtcNow;
+        Assert.True(QuoteReplyEmail.Worth(QuoteStatus.Accepted, QuoteReplyChannel.Link, answeredAt, Guid.NewGuid(), answeredAt, depositPaid: true));
+        Assert.False(QuoteReplyEmail.Worth(QuoteStatus.Accepted, QuoteReplyChannel.Link, answeredAt, Guid.NewGuid(), answeredAt));
+    }
+
+    [Fact]
     public async Task TheEmailOfAnAnswer_ShouldNotGo_WhenTheMemberStoppedGettingThem_TheQuoteBecameItsOrder_OrItIsOfAnotherBusiness()
     {
         await using var fixture = Fixture();

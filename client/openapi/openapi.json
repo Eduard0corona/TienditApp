@@ -16057,6 +16057,102 @@
         }
       }
     },
+    "/api/v1/public/quotes/deposit": {
+      "post": {
+        "tags": [
+          "PublicQuotes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicQuoteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicQuoteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicQuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDepositStartedDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDepositStartedDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDepositStartedDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/quotes/deposit/confirm": {
+      "post": {
+        "tags": [
+          "PublicQuotes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmQuoteDepositRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmQuoteDepositRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmQuoteDepositRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDepositStatusDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDepositStatusDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDepositStatusDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/self-invoice/{slug}": {
       "get": {
         "tags": [
@@ -22538,6 +22634,27 @@
           },
           "code": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfirmQuoteDepositRequest": {
+        "required": [
+          "checkoutId",
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "checkoutId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paymentId": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -36822,8 +36939,10 @@
         "required": [
           "businessName",
           "businessSlug",
+          "canPayDeposit",
           "canReply",
           "customerName",
+          "depositPaid",
           "lines",
           "number",
           "pricesIncludeTax",
@@ -36932,6 +37051,17 @@
           "response": {
             "type": "string",
             "nullable": true
+          },
+          "depositAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "canPayDeposit": {
+            "type": "boolean"
+          },
+          "depositPaid": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -37366,6 +37496,70 @@
         },
         "additionalProperties": false
       },
+      "QuoteDepositStartedDto": {
+        "required": [
+          "amount",
+          "checkoutId",
+          "checkoutUrl",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "checkoutId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "checkoutUrl": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuoteDepositStatusDto": {
+        "required": [
+          "amount",
+          "expiresAt",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/OnlineCheckoutStatus"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checkoutUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "refundStatus": {
+            "$ref": "#/components/schemas/OnlinePaymentRefundStatus"
+          },
+          "orderNumber": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "QuoteDto": {
         "required": [
           "canConvertToOrder",
@@ -37373,6 +37567,7 @@
           "createdAt",
           "customerName",
           "customerPhone",
+          "depositPaid",
           "emails",
           "id",
           "lines",
@@ -37470,6 +37665,14 @@
           "toPay": {
             "type": "number",
             "format": "double"
+          },
+          "depositAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "depositPaid": {
+            "type": "boolean"
           },
           "sentAt": {
             "type": "string",
@@ -37764,6 +37967,7 @@
       "QuoteSettingsDto": {
         "required": [
           "defaultTaxRate",
+          "depositAvailable",
           "onlineReplies",
           "pricesIncludeTax",
           "validityDays",
@@ -37777,6 +37981,14 @@
             "format": "int32"
           },
           "onlineReplies": {
+            "type": "boolean"
+          },
+          "depositPercent": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "depositAvailable": {
             "type": "boolean"
           },
           "pricesIncludeTax": {
@@ -42687,6 +42899,11 @@
           },
           "onlineReplies": {
             "type": "boolean",
+            "nullable": true
+          },
+          "depositPercent": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         },

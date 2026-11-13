@@ -70,6 +70,24 @@ public class QuotePdfRendererTests
         Assert.DoesNotContain("Notas", text);
     }
 
+    [Fact]
+    public async Task TheDeposit_ShouldSayWhatAcceptingItAsks_WhileItWaits_AndThatItWasPaid()
+    {
+        // Fase 31N: the deposit fixed when it was sent.
+        var waiting = Text(await RenderAsync(Quote() with { DepositAmount = 348m }));
+        Assert.Contains("Anticipo para aceptarla", waiting);
+        Assert.Contains("$348.00", waiting);
+
+        var paid = Text(await RenderAsync(Quote() with { Status = QuoteStatus.Accepted, RepliedOn = new DateOnly(2026, 11, 15), DepositAmount = 348m, DepositPaid = true }));
+        Assert.Contains("Anticipo pagado en línea", paid);
+        Assert.DoesNotContain("Anticipo para aceptarla", paid);
+
+        // Answered by the business, expired or replaced, it asks nothing anymore.
+        foreach (var status in new[] { QuoteStatus.Accepted, QuoteStatus.Expired, QuoteStatus.Superseded })
+            Assert.DoesNotContain("Anticipo", Text(await RenderAsync(Quote() with { Status = status, DepositAmount = 348m })));
+        Assert.DoesNotContain("Anticipo", Text(await RenderAsync(Quote())));
+    }
+
     [Theory]
     [InlineData(QuoteStatus.Draft, "Borrador: todavía no se envía al cliente.")]
     [InlineData(QuoteStatus.Accepted, "Aceptada el 15 de noviembre de 2026.")]

@@ -24,6 +24,9 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// </summary>
 public class QuoteConversionMigrationSqlServerTests
 {
+    // The database here is at most at this migration: every context is the model of the version after it, which does not know
+    // what later migrations added either (BeforeAppointmentWork and the ones it chains).
+
     // The migration right before AddQuoteConversion, where its rollback.sql takes the database.
     private const string BeforeMigration = "20261101181148_AddQuoteDeliveries";
     private const string Migration = "20261102014702_AddQuoteConversion";
@@ -48,7 +51,7 @@ public class QuoteConversionMigrationSqlServerTests
             (tenantId, quoteId) = (tenant.Id, quote.Id);
         }
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeAppointmentWork.CreateContext(database, tenantId);
         var saved = await context.Quotes.SingleAsync(q => q.Id == quoteId);
         Assert.Equal((QuoteStatus.Accepted, (Guid?)null, (DateTimeOffset?)null, (decimal?)null),
             (saved.Status, saved.OrderId, saved.ConvertedAt, saved.AppliedVisitCredit));
@@ -62,7 +65,7 @@ public class QuoteConversionMigrationSqlServerTests
         var (tenantId, accepted, order) = await SeedAsync(database);
         Guid sentId;
         Guid withoutVisitId;
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeAppointmentWork.CreateContext(database, tenantId))
         {
             var sent = Quote.Start(tenantId, Folios.QuoteNumber(2), new QuoteCustomer(null, "Luis", "5522107766", null), null, true, 15, Now);
             sent.ReplaceLines([new QuoteLineInput(null, "Revisión", 1m, 500m, VatRate.General)], Now);
@@ -74,7 +77,7 @@ public class QuoteConversionMigrationSqlServerTests
             (sentId, withoutVisitId) = (sent.Id, withoutVisit.Id);
         }
 
-        await using var check = database.CreateContext(tenantId);
+        await using var check = BeforeAppointmentWork.CreateContext(database, tenantId);
         foreach (var sql in new[]
         {
             // A version not accepted.
@@ -116,7 +119,7 @@ public class QuoteConversionMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var (tenantId, quoteId, orderId) = await SeedAsync(database);
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeAppointmentWork.CreateContext(database, tenantId))
         {
             var quote = await context.Quotes.SingleAsync(q => q.Id == quoteId);
             quote.ConvertToOrder(orderId, 406m, Now);
@@ -125,7 +128,7 @@ public class QuoteConversionMigrationSqlServerTests
 
         var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
         Assert.True(stopped is SqlException { Number: 50053 }, stopped?.Message ?? "it was not stopped");
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeAppointmentWork.CreateContext(database, tenantId))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             var converted = await context.Quotes.SingleAsync(q => q.Id == quoteId);
@@ -155,7 +158,7 @@ public class QuoteConversionMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the quote has not become anything.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenantId);
+        await using var forward = BeforeAppointmentWork.CreateContext(database, tenantId);
         Assert.Null((await forward.Quotes.SingleAsync()).OrderId);
     }
 

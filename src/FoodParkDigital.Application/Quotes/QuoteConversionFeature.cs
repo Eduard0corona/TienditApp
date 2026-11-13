@@ -98,7 +98,7 @@ public static class QuoteConversions
 }
 
 /// <summary>
-/// Turns an accepted quote into its service order, in one transaction:
+/// Turns an accepted quote into its service order, in one transaction (the order itself is <see cref="QuoteOrderConverter"/>):
 /// <list type="number">
 /// <item>The order is the business's: accepted for the team, with the quote's customer, lines and tax policy, so it totals
 /// what the customer accepted; it takes the supplies of the catalog's products that have a recipe, never refused for a
@@ -119,11 +119,7 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUser;
     private readonly CurrentAccessContext _access;
-    private readonly ICustomerLookupService _customerLookup;
-    private readonly IPhoneNormalizationService _phones;
-    private readonly IOrderInventoryService _inventory;
-    private readonly IOrderCashService _cash;
-    private readonly IFolioGenerator _folios;
+    private readonly QuoteOrderConverter _converter;
     private readonly IDateTimeProvider _clock;
 
     public ConvertQuoteToOrderCommandHandler(
@@ -142,11 +138,7 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
         _tenantService = tenantService;
         _currentUser = currentUser;
         _access = access;
-        _customerLookup = customerLookup;
-        _phones = phones;
-        _inventory = inventory;
-        _cash = cash;
-        _folios = folios;
+        _converter = new QuoteOrderConverter(context, customerLookup, phones, inventory, cash, folios, clock);
         _clock = clock;
     }
 
@@ -174,48 +166,150 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
                 return Result.Failure<QuoteDto>(QuoteConversions.PromisedAtMessage);
         }
 
-        // What the quote takes off for the visit now, never more than the job's total: read from the sale of the visit as it is
-        // tracked to refund it, so a change of that sale meanwhile collides on its version when this is saved.
-        Order? visitSale = null;
-        if (quote.VisitCreditSaleOrderId is { } visitSaleId)
-        {
-            visitSale = await OrderRefundQueries.LoadForRefundAsync(_context, visitSaleId, cancellationToken);
-            if (visitSale is null || visitSale.TenantId != TenantId)
-                throw new EntityNotFoundException(nameof(Order), visitSaleId);
-        }
-        var stillPaid = visitSale is null
-            ? null
-            : QuoteVisitCredits.PaidForTheVisit(visitSale, await QuoteVisitCredits.VisitServiceAsync(_context, quote, cancellationToken));
-        var applied = Math.Min(quote.VisitCreditStanding(stillPaid), quote.Total);
-        if (applied > 0)
+        var visit = await _converter.VisitCreditAsync(quote, cancellationToken);
+        if (visit.Applied > 0)
         {
             var permissions = await _access.GetPermissionsAsync(cancellationToken);
             if (!permissions.Contains(nameof(TenantPermission.ChargeOrders)) || !permissions.Contains(nameof(TenantPermission.ProcessRefunds)))
                 throw new ForbiddenAccessException(QuoteConversions.ChargeToApplyVisitMessage);
         }
 
+        var converted = await _converter.ConvertAsync(quote, visit, request.PromisedAt, _currentUser, cancellationToken);
+        if (converted.IsFailure)
+            return Result.Failure<QuoteDto>(converted.Error!);
+        var order = converted.Value!;
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The quote or the sale of its visit changed at the same time: the other change stands, and this one is undone
+            // whole. Converted by someone else (into another order: this transaction may have already written its own before
+            // the sale collided), it says so.
+            var convertedElsewhere = await _context.Quotes
+                .AsNoTracking()
+                .AnyAsync(q => q.Id == quote.Id && q.TenantId == TenantId && q.OrderId != null && q.OrderId != order.Id,
+                    cancellationToken);
+            return Result.Failure<QuoteDto>(convertedElsewhere ? QuoteRules.AlreadyConvertedMessage : QuoteConversions.ChangedMeanwhileMessage);
+        }
+
+        return Result.Success(await QuoteViews.DescribeAsync(_context, quote,
+            await QuoteCalendar.TodayAsync(_context, TenantId, _clock.UtcNow, cancellationToken), cancellationToken));
+    }
+}
+
+/// <summary>
+/// Who turns a quote into its order when no one of the team does (Fase 31N, ADR 0094): the customer who paid its deposit from
+/// the link. The order, its payments and the activity say «Cliente (enlace)».
+/// </summary>
+internal sealed class QuoteLinkCustomer : ICurrentUserService
+{
+    public static readonly QuoteLinkCustomer Instance = new();
+
+    public string? UserId => null;
+    public string? UserName => QuoteAudit.CustomerFromLink;
+    public string? Role => null;
+    public string? TenantRole => null;
+    public IReadOnlyCollection<string> Permissions => [];
+    public Guid? TenantId => null;
+}
+
+/// <summary>
+/// The service order of an accepted quote (Fase 29E), as <see cref="ConvertQuoteToOrderCommandHandler"/> describes it, built,
+/// numbered and added to the context with the quote marked converted, but not saved: the caller saves it in its transaction.
+/// Since the Fase 31N (ADR 0094) a deposit paid from the link converts the quote too, as «Cliente (enlace)», in the default
+/// branch.
+/// </summary>
+internal sealed class QuoteOrderConverter
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICustomerLookupService _customerLookup;
+    private readonly IPhoneNormalizationService _phones;
+    private readonly IOrderInventoryService _inventory;
+    private readonly IOrderCashService _cash;
+    private readonly IFolioGenerator _folios;
+    private readonly IDateTimeProvider _clock;
+
+    public QuoteOrderConverter(
+        IApplicationDbContext context,
+        ICustomerLookupService customerLookup,
+        IPhoneNormalizationService phones,
+        IOrderInventoryService inventory,
+        IOrderCashService cash,
+        IFolioGenerator folios,
+        IDateTimeProvider clock)
+    {
+        _context = context;
+        _customerLookup = customerLookup;
+        _phones = phones;
+        _inventory = inventory;
+        _cash = cash;
+        _folios = folios;
+        _clock = clock;
+    }
+
+    /// <summary>The sale of the visit, tracked to refund it, and what the quote takes off for the visit now.</summary>
+    public sealed record VisitCredit(Order? Sale, decimal Applied);
+
+    /// <summary>
+    /// What the quote takes off for the visit now, never more than the job's total: read from the sale of the visit as it is
+    /// tracked to refund it, so a change of that sale meanwhile collides on its version when this is saved.
+    /// </summary>
+    public async Task<VisitCredit> VisitCreditAsync(Quote quote, CancellationToken cancellationToken)
+    {
+        Order? visitSale = null;
+        if (quote.VisitCreditSaleOrderId is { } visitSaleId)
+        {
+            visitSale = await OrderRefundQueries.LoadForRefundAsync(_context, visitSaleId, cancellationToken);
+            if (visitSale is null || visitSale.TenantId != quote.TenantId)
+                throw new EntityNotFoundException(nameof(Order), visitSaleId);
+        }
+        var stillPaid = visitSale is null
+            ? null
+            : QuoteVisitCredits.PaidForTheVisit(visitSale, await QuoteVisitCredits.VisitServiceAsync(_context, quote, cancellationToken));
+        return new VisitCredit(visitSale, Math.Min(quote.VisitCreditStanding(stillPaid), quote.Total));
+    }
+
+    /// <summary>
+    /// The service order of <paramref name="quote"/> (accepted, not converted, of a business with service orders), with what
+    /// <paramref name="visit"/> applies for the visit, as <paramref name="actor"/>: in the branch of their open drawer, else
+    /// the default one. Added to the context with the quote converted and its activity; or why it cannot be.
+    /// </summary>
+    public async Task<Result<Order>> ConvertAsync(
+        Quote quote, VisitCredit visit, DateTimeOffset? promisedAt, ICurrentUserService actor, CancellationToken cancellationToken)
+    {
+        if (quote.Status != QuoteStatus.Accepted)
+            return Result.Failure<Order>(QuoteRules.NotAcceptedMessage);
+        if (quote.OrderId is not null)
+            return Result.Failure<Order>(QuoteRules.AlreadyConvertedMessage);
+        var tenantId = quote.TenantId;
+        var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, tenantId, cancellationToken);
+        if (!TenantCapabilityRules.CanCreateOrderType(capabilities, OrderType.Service))
+            return Result.Failure<Order>(QuoteRules.NoServiceOrdersMessage);
+
         // The customer by the quote's phone. A quote only asks that it is written, and an accepted one is no longer corrected: one
         // that does not read as a phone takes the phone of the sale of its visit (kept in E.164), or none, as a counter sale.
         var phone = _phones.TryNormalizeToE164(quote.CustomerPhone, CustomerPhoneOwnershipRules.DefaultCountry, out var quotePhone)
             ? quotePhone
-            : visitSale?.CustomerPhone;
+            : visit.Sale?.CustomerPhone;
         var customer = string.IsNullOrWhiteSpace(phone)
             ? null
             : await _customerLookup.ResolveForOrderAsync(
-                TenantId, phone, quote.CustomerName, CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
+                tenantId, phone, quote.CustomerName, CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
 
         var branch = await BranchRules.ResolveForSaleAsync(
-            _context, TenantId, null, Guid.TryParse(_currentUser.UserId, out var userId) ? userId : null, cancellationToken);
+            _context, tenantId, null, Guid.TryParse(actor.UserId, out var userId) ? userId : null, cancellationToken);
         if (branch.IsFailure)
-            return Result.Failure<QuoteDto>(branch.Error!);
+            return Result.Failure<Order>(branch.Error!);
         var businessType = await _context.Tenants
-            .Where(t => t.Id == TenantId)
+            .Where(t => t.Id == tenantId)
             .Select(t => t.BusinessType)
             .FirstAsync(cancellationToken);
         var now = _clock.UtcNow;
 
         var order = new Order(
-            tenantId: TenantId,
+            tenantId: tenantId,
             customerUserId: customer?.CustomerUserId,
             temporaryCustomerId: customer?.TemporaryCustomerId,
             createdByBusiness: true,
@@ -234,7 +328,7 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
         var productIds = quote.Lines.Where(l => l.ProductId is not null).Select(l => l.ProductId!.Value).Distinct().ToList();
         var products = await _context.Products
             .AsNoTracking()
-            .Where(p => p.TenantId == TenantId && productIds.Contains(p.Id))
+            .Where(p => p.TenantId == tenantId && productIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, cancellationToken);
         var lines = QuoteConversion.Lines(quote, products.ToDictionary(p => p.Key, p => OrderLineFiscalData.From(p.Value)));
         foreach (var line in lines)
@@ -248,21 +342,21 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
         // quote is no longer corrected: past it, the order goes without pieces and its intake note says so, never stuck.
         var pieces = QuoteConversions.ServicePieces(trackable.Select(t => (t.Item1, t.Item2.Quantity)));
         var withPieces = pieces <= OrderLimits.MaxServicePiecesPerOrder;
-        order.SetServiceDetail(now, request.PromisedAt, QuoteConversions.NormalPriority,
+        order.SetServiceDetail(now, promisedAt, QuoteConversions.NormalPriority,
             QuoteConversions.IntakeNote(quote, withPieces ? null : pieces), null, null, null, null);
         if (withPieces && OrderPlacement.AddServicePieces(order, null, trackable, lines.Select(l => l.ProductId).ToHashSet()) is { } piecesError)
-            return Result.Failure<QuoteDto>(piecesError);
-        OrderPlacement.ApplyBusinessDefaultStatus(order, _currentUser.UserName);
+            return Result.Failure<Order>(piecesError);
+        OrderPlacement.ApplyBusinessDefaultStatus(order, actor.UserName);
         if (order.Total != quote.Total)
-            return Result.Failure<QuoteDto>(QuoteConversions.TotalMismatchMessage);
+            return Result.Failure<Order>(QuoteConversions.TotalMismatchMessage);
 
-        order.AssignNumber(await _folios.NextOrderNumberAsync(TenantId, cancellationToken));
+        order.AssignNumber(await _folios.NextOrderNumberAsync(tenantId, cancellationToken));
 
-        if (applied > 0)
+        if (visit.Applied > 0)
         {
-            var visitApplied = await ApplyVisitAsync(quote, visitSale!, order, applied, cancellationToken);
+            var visitApplied = await ApplyVisitAsync(quote, visit.Sale!, order, visit.Applied, actor, cancellationToken);
             if (visitApplied is not null)
-                return Result.Failure<QuoteDto>(QuoteConversions.VisitNotAppliedMessage(visitApplied));
+                return Result.Failure<Order>(QuoteConversions.VisitNotAppliedMessage(visitApplied));
         }
 
         // The customer accepted the job: a shortage warns, never refuses it.
@@ -270,44 +364,28 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
 
         try
         {
-            quote.ConvertToOrder(order.Id, applied, now);
+            quote.ConvertToOrder(order.Id, visit.Applied, now);
         }
         catch (DomainException ex)
         {
-            return Result.Failure<QuoteDto>(ex.Message);
+            return Result.Failure<Order>(ex.Message);
         }
 
         order.MarkAsCreated();
         _context.Orders.Add(order);
-        _context.AuditLogs.Add(QuoteAudit.Create(quote, QuoteAudit.Converted, _currentUser.UserName,
-            new { order.OrderNumber, AppliedVisitCredit = applied }));
-        try
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            // The quote or the sale of its visit changed at the same time: the other change stands, and this one is undone
-            // whole. Converted by someone else (into another order: this transaction may have already written its own before
-            // the sale collided), it says so.
-            var converted = await _context.Quotes
-                .AsNoTracking()
-                .AnyAsync(q => q.Id == quote.Id && q.TenantId == TenantId && q.OrderId != null && q.OrderId != order.Id,
-                    cancellationToken);
-            return Result.Failure<QuoteDto>(converted ? QuoteRules.AlreadyConvertedMessage : QuoteConversions.ChangedMeanwhileMessage);
-        }
-
-        return Result.Success(await QuoteViews.DescribeAsync(_context, quote,
-            await QuoteCalendar.TodayAsync(_context, TenantId, now, cancellationToken), cancellationToken));
+        _context.AuditLogs.Add(QuoteAudit.Create(quote, QuoteAudit.Converted, actor.UserName,
+            new { order.OrderNumber, AppliedVisitCredit = visit.Applied }));
+        return Result.Success(order);
     }
 
     /// <summary>
     /// What was paid for the visit goes from its sale to the order: refunded to the balance in favor of the sale's phone and
     /// paid from it into the order, both now. Null once applied; otherwise why the sale of the visit could not give it back.
     /// </summary>
-    private async Task<string?> ApplyVisitAsync(Quote quote, Order visitSale, Order order, decimal amount, CancellationToken cancellationToken)
+    private async Task<string?> ApplyVisitAsync(
+        Quote quote, Order visitSale, Order order, decimal amount, ICurrentUserService actor, CancellationToken cancellationToken)
     {
-        var refunds = new OrderRefundProcessor(_context, _currentUser, _cash, _inventory, _clock);
+        var refunds = new OrderRefundProcessor(_context, actor, _cash, _inventory, _clock);
         var refund = await refunds.RefundAsync(visitSale, new OrderRefundInput(
             amount, OrderPaymentMethod.CustomerBalance, QuoteConversions.RefundReason(quote, order), RestockItems: false, [], null,
             order.OrderNumber), cancellationToken);
@@ -318,7 +396,7 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
         var account = MessagingPhone.ToKey(visitSale.CustomerPhone!);
         var customerId = (await CreditAccount.RecordAsync(_context, account, cancellationToken, tracked: false))?.Id;
         var payment = await new OrderPaymentRegistrar(_context, _cash, _clock).ApplyCustomerBalanceAsync(
-            order, amount, QuoteConversions.PaymentNote(visitSale), account, customerId, _currentUser.UserName ?? "system",
+            order, amount, QuoteConversions.PaymentNote(visitSale), account, customerId, actor.UserName ?? "system",
             cancellationToken);
         return payment.IsFailure ? payment.Error : null;
     }

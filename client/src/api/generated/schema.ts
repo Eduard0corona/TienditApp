@@ -13410,6 +13410,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/quotes/deposit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PublicQuoteRequest"];
+                    "text/json": components["schemas"]["PublicQuoteRequest"];
+                    "application/*+json": components["schemas"]["PublicQuoteRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDepositStartedDto"];
+                        "application/json": components["schemas"]["QuoteDepositStartedDto"];
+                        "text/json": components["schemas"]["QuoteDepositStartedDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/quotes/deposit/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ConfirmQuoteDepositRequest"];
+                    "text/json": components["schemas"]["ConfirmQuoteDepositRequest"];
+                    "application/*+json": components["schemas"]["ConfirmQuoteDepositRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDepositStatusDto"];
+                        "application/json": components["schemas"]["QuoteDepositStatusDto"];
+                        "text/json": components["schemas"]["QuoteDepositStatusDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/self-invoice/{slug}": {
         parameters: {
             query?: never;
@@ -17267,6 +17353,12 @@ export interface components {
         ConfirmPhoneCommand: {
             userId: string;
             code: string;
+        };
+        ConfirmQuoteDepositRequest: {
+            token: string;
+            /** Format: uuid */
+            checkoutId: string;
+            paymentId?: string | null;
         };
         ConfirmStuckCfdiStampedRequest: {
             uuid: string;
@@ -21544,6 +21636,10 @@ export interface components {
             repliedOn?: string | null;
             repliedFromLink: boolean;
             response?: string | null;
+            /** Format: double */
+            depositAmount?: number | null;
+            canPayDeposit: boolean;
+            depositPaid: boolean;
         };
         PublicQuoteLineDto: {
             description: string;
@@ -21674,6 +21770,26 @@ export interface components {
             problem?: string | null;
             problemPhotos: string[];
         };
+        QuoteDepositStartedDto: {
+            /** Format: uuid */
+            checkoutId: string;
+            checkoutUrl: string;
+            /** Format: double */
+            amount: number;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        QuoteDepositStatusDto: {
+            status: components["schemas"]["OnlineCheckoutStatus"];
+            /** Format: double */
+            amount: number;
+            /** Format: date-time */
+            expiresAt: string;
+            checkoutUrl?: string | null;
+            failureMessage?: string | null;
+            refundStatus?: components["schemas"]["OnlinePaymentRefundStatus"];
+            orderNumber?: string | null;
+        };
         QuoteDto: {
             /** Format: uuid */
             id: string;
@@ -21704,6 +21820,9 @@ export interface components {
             visitCredit?: components["schemas"]["QuoteVisitCreditDto"];
             /** Format: double */
             toPay: number;
+            /** Format: double */
+            depositAmount?: number | null;
+            depositPaid: boolean;
             /** Format: date-time */
             sentAt?: string | null;
             trackingToken?: string | null;
@@ -21797,6 +21916,9 @@ export interface components {
             /** Format: int32 */
             validityDays: number;
             onlineReplies: boolean;
+            /** Format: int32 */
+            depositPercent?: number | null;
+            depositAvailable: boolean;
             pricesIncludeTax: boolean;
             /** Format: double */
             defaultTaxRate: number;
@@ -23212,6 +23334,8 @@ export interface components {
             /** Format: int32 */
             validityDays: number;
             onlineReplies?: boolean | null;
+            /** Format: int32 */
+            depositPercent?: number | null;
         };
         UpdateRequestEmailsCommand: {
             enabled: boolean;

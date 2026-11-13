@@ -248,6 +248,9 @@ public class CompleteOnlinePaymentConnectionCommandHandler
                 return await EndAsync(authorization, OnlinePaymentSettings.TurnOffFirstMessage, cancellationToken);
             if (await OnlinePaymentSettings.InCourseAsync(_context, cancellationToken))
                 return await EndAsync(authorization, OnlinePaymentSettings.InCourseMessage, cancellationToken);
+            // The deposit of the quotes is not behind the menu's switch (Fase 31N): off first, so none starts meanwhile.
+            if (await _context.TenantSettings.AnyAsync(s => s.TenantId == tenantId && s.QuoteDepositPercent != null, cancellationToken))
+                return await EndAsync(authorization, OnlinePaymentSettings.QuoteDepositBeforeChangeMessage, cancellationToken);
         }
 
         if (account is null)
@@ -320,6 +323,9 @@ public class DisconnectOnlinePaymentAccountCommandHandler
         // Off first, so no checkout starts with the account while it goes.
         if (account.AcceptsPayments)
             return Result.Failure<OnlinePaymentSettingsDto>(OnlinePaymentSettings.TurnOffFirstMessage);
+        // The deposit of the quotes is collected with it too (Fase 31N): off first, so no version is sent asking one.
+        if (await _context.TenantSettings.AnyAsync(s => s.TenantId == account.TenantId && s.QuoteDepositPercent != null, cancellationToken))
+            return Result.Failure<OnlinePaymentSettingsDto>(OnlinePaymentSettings.QuoteDepositFirstMessage);
         if (await OnlinePaymentSettings.InCourseAsync(_context, cancellationToken))
             return Result.Failure<OnlinePaymentSettingsDto>(OnlinePaymentSettings.InCourseMessage);
 
@@ -392,6 +398,10 @@ internal static class OnlinePaymentSettings
     public const string InCourseMessage =
         "Hay pagos o devoluciones en línea en curso: espera a que terminen (unos 45 minutos) para cambiar o desconectar la cuenta.";
     public const string TurnOffFirstMessage = "Apaga el pago en línea antes de desconectar o cambiar la cuenta de Mercado Pago.";
+    public const string QuoteDepositBeforeChangeMessage =
+        "Tus cotizaciones piden anticipo: quítalo en la configuración de cotizaciones antes de conectar otra cuenta de Mercado Pago.";
+    public const string QuoteDepositFirstMessage =
+        "Tus cotizaciones piden anticipo: quítalo en la configuración de cotizaciones antes de desconectar la cuenta de Mercado Pago.";
     public const string ReconnectMessage = "La cuenta de Mercado Pago ya no responde: vuelve a conectarla.";
 
     /// <summary>Payments in course or money going back: they need the account they started with.</summary>

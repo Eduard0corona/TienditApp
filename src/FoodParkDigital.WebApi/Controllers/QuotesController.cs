@@ -258,6 +258,45 @@ public class PublicQuotesController : ControllerBase
                 result.Error);
         return Ok(result.Value);
     }
+
+    /// <summary>
+    /// The customer goes to pay the deposit that accepts the quote (Fase 31N, ADR 0094): Mercado Pago's page, into the
+    /// business's account, for 30 minutes; a payment in course of the same version is the same one. A link unknown or
+    /// expired is not found; any other refusal (no deposit, no longer answerable, the business cannot collect it) says why.
+    /// </summary>
+    [HttpPost("deposit")]
+    [EnableRateLimiting("public-order")]
+    public async Task<ActionResult<QuoteDepositStartedDto>> StartDeposit([FromBody] PublicQuoteRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new StartQuoteDepositCommand(request.Token), cancellationToken);
+        if (result is null)
+            return this.ApiError(StatusCodes.Status404NotFound, PublicQuoteDto.NotFoundMessage);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    /// <summary>
+    /// How the deposit stands, after asking Mercado Pago (the customer's return page): to pay, paid (the quote accepted and
+    /// its order made), or paid but refused and going back. 404 for a link unknown or a payment that is not of its version.
+    /// </summary>
+    [HttpPost("deposit/confirm")]
+    [EnableRateLimiting("online-payment-status")]
+    public async Task<ActionResult<QuoteDepositStatusDto>> ConfirmDeposit(
+        [FromBody] ConfirmQuoteDepositRequest request, CancellationToken cancellationToken)
+    {
+        var status = await _mediator.Send(
+            new ConfirmQuoteDepositCommand(request.Token, request.CheckoutId, request.PaymentId), cancellationToken);
+        return status is null ? this.ApiError(StatusCodes.Status404NotFound, "No encontramos ese pago.") : Ok(status);
+    }
+}
+
+public class ConfirmQuoteDepositRequest
+{
+    /// <summary>The link of the quote, as the browser kept it when it went to pay.</summary>
+    public string Token { get; init; } = null!;
+    /// <summary>The payment the customer went to (the end of the return address /cotizacion/pago/{checkoutId}).</summary>
+    public Guid CheckoutId { get; init; }
+    /// <summary>The <c>payment_id</c> Mercado Pago's return carries, if any.</summary>
+    public string? PaymentId { get; init; }
 }
 
 public class PublicQuoteRequest

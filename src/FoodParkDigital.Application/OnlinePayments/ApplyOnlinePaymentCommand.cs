@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders;
+using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
@@ -151,6 +152,13 @@ internal sealed class OnlinePaymentChecker
                 refusal = ApplyOnlinePaymentCommandHandler.CatalogChangedMessage;
                 _logger.LogWarning("Online checkout {CheckoutId} could not be placed with the catalog of now ({Exception})", checkoutId, ex.GetType().Name);
             }
+            catch (QuoteDepositRefusedException ex) when (refusal is null)
+            {
+                // A deposit whose quote could not become its order (Fase 31N): it goes back with why.
+                _context.ChangeTracker.Clear();
+                refusal = ex.Message;
+                _logger.LogWarning("Deposit checkout {CheckoutId} could not accept its quote", checkoutId);
+            }
         }
     }
 }
@@ -162,7 +170,9 @@ internal sealed class OnlinePaymentChecker
 /// collected by the business's account, in the mode the platform works in, and for exactly the amount in pesos. Then the
 /// order is placed with the rules of the online menu as they are now (open, products, prices, the delivery zone, the same
 /// total), with an «En línea» payment for its total; if it can no longer be placed, was paid too late or the checkout was
-/// already paid, the payment goes back to the customer in full. Applying the same payment again changes nothing.
+/// already paid, the payment goes back to the customer in full. Applying the same payment again changes nothing. The deposit
+/// of a quote (Fase 31N, ADR 0094) accepts its version and makes it its service order instead
+/// (<see cref="QuoteDepositPlacement"/>), with the same checks of the payment and the same refunds.
 /// </summary>
 /// <param name="RefusedBecause">
 /// Set when a first attempt found the order can no longer be placed with the catalog of now: the payment goes back with
@@ -187,6 +197,7 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
     private readonly ICustomerLookupService _customerLookupService;
     private readonly IOrderInventoryService _orderInventoryService;
     private readonly IFolioGenerator _folios;
+    private readonly QuoteDepositPlacement _deposits;
     private readonly ILogger<ApplyOnlinePaymentCommandHandler> _logger;
 
     public ApplyOnlinePaymentCommandHandler(
@@ -196,6 +207,8 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
         ICustomerLookupService customerLookupService,
         IOrderInventoryService orderInventoryService,
         IFolioGenerator folios,
+        IPhoneNormalizationService phones,
+        IOrderCashService cash,
         ILogger<ApplyOnlinePaymentCommandHandler> logger)
     {
         _context = context;
@@ -204,6 +217,8 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
         _customerLookupService = customerLookupService;
         _orderInventoryService = orderInventoryService;
         _folios = folios;
+        _deposits = new QuoteDepositPlacement(context,
+            new QuoteOrderConverter(context, customerLookupService, phones, orderInventoryService, cash, folios, clock));
         _logger = logger;
     }
 
@@ -240,6 +255,8 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
             (failure, refusal) = (OnlineCheckoutFailure.PaidAfterExpiry, PaidLateMessage);
         else if (request.RefusedBecause is { } reason)
             (failure, refusal) = (OnlineCheckoutFailure.OrderRefused, reason);
+        else if (checkout.IsForQuote)
+            (failure, refusal) = await _deposits.PlaceAsync(checkout, payment, approvedAt, now, cancellationToken);
         else
             (failure, refusal) = await PlaceAsync(checkout, payment, approvedAt, now, cancellationToken);
 

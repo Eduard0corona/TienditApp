@@ -72,6 +72,32 @@ public static class QuoteRules
     public const string CustomerResponseTooLongMessage = "Tu mensaje admite hasta 500 caracteres.";
     public const string NotAnswerableMessage = "Esta cotización ya no se responde aquí: escríbele al negocio.";
 
+    // Fase 31N (ADR 0094): the deposit the customer pays online to accept from the link.
+    /// <summary>The share of what is left to pay a business may ask as a deposit, in percent.</summary>
+    public const int MinDepositPercent = 10;
+    public const int MaxDepositPercent = 100;
+    /// <summary>A deposit below it is not asked: a quote of a few pesos is accepted as before.</summary>
+    public const decimal MinDeposit = 10m;
+    public const string DepositPercentMessage = "El anticipo va del 10 % al 100 % de lo que queda por pagar.";
+    public const string DepositMessage = "El anticipo va de $10 al total de la cotización, con máximo 2 decimales.";
+    public const string DepositRequiredMessage = "Para aceptar esta cotización paga el anticipo: el negocio lo pide al aceptarla.";
+    public const string NoDepositMessage = "Esta cotización no pide anticipo.";
+
+    /// <summary>
+    /// The deposit a version asks when it is sent: <paramref name="percent"/> of what is left to pay
+    /// (<paramref name="toPay"/>), to the cent, half away from zero; none without a percent or below
+    /// <see cref="MinDeposit"/>. What it takes off for the visit can only shrink once sent, so it never exceeds what is left.
+    /// </summary>
+    public static decimal? DepositFor(int? percent, decimal toPay)
+    {
+        if (percent is not { } share)
+            return null;
+        if (share is < MinDepositPercent or > MaxDepositPercent)
+            throw new DomainException(DepositPercentMessage);
+        var deposit = decimal.Round(toPay * share / 100m, 2, MidpointRounding.AwayFromZero);
+        return deposit < MinDeposit ? null : deposit;
+    }
+
     /// <summary>
     /// Only a version sent and still valid on the business's <paramref name="today"/> goes to the customer (Fase 29D): an
     /// accepted, rejected, replaced or expired one is no longer what the business offers.

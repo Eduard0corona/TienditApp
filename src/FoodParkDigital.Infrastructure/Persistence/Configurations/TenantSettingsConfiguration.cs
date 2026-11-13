@@ -37,6 +37,10 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             table.HasCheckConstraint(
                 "CK_TenantSettings_QuoteValidityDays",
                 $"[QuoteValidityDays] >= {QuoteRules.MinValidityDays} AND [QuoteValidityDays] <= {QuoteRules.MaxValidityDays}");
+            // Fase 31N (ADR 0094): the deposit to accept a quote from its link, or none.
+            table.HasCheckConstraint(
+                "CK_TenantSettings_QuoteDepositPercent",
+                $"[QuoteDepositPercent] IS NULL OR [QuoteDepositPercent] BETWEEN {QuoteRules.MinDepositPercent} AND {QuoteRules.MaxDepositPercent}");
         });
         builder.HasKey(s => s.Id);
 

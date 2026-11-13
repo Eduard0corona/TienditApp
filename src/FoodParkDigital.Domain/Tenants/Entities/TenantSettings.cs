@@ -324,6 +324,20 @@ public class TenantSettings : BaseEntity, ITenantScoped
     public void SetQuoteOnlineReplies(bool enabled) => QuoteOnlineReplies = enabled;
 
     /// <summary>
+    /// The share of what is left to pay the customer pays online to accept a quote from its link (Fase 31N, ADR 0094), from
+    /// <see cref="QuoteRules.MinDepositPercent"/> to <see cref="QuoteRules.MaxDepositPercent"/>; null asks none, as by default.
+    /// Each version takes it when it is sent.
+    /// </summary>
+    public int? QuoteDepositPercent { get; private set; }
+
+    public void SetQuoteDepositPercent(int? percent)
+    {
+        if (percent is < QuoteRules.MinDepositPercent or > QuoteRules.MaxDepositPercent)
+            throw new DomainException(QuoteRules.DepositPercentMessage);
+        QuoteDepositPercent = percent;
+    }
+
+    /// <summary>
     /// The WhatsApp template the quotes go out with (Fase 29D, ADR 0053 point 16), approved in Meta so it reaches whoever has
     /// not written in 24 hours; null for TienditApp's text.
     /// </summary>

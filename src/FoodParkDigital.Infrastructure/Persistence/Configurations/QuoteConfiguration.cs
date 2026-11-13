@@ -48,6 +48,10 @@ public class QuoteConfiguration : IEntityTypeConfiguration<Quote>
                 "([VisitCreditSaleOrderId] IS NULL AND [VisitCreditAmount] IS NULL)"
                 + " OR ([VisitCreditSaleOrderId] IS NOT NULL AND [VisitCreditAmount] > 0 AND [AppointmentId] IS NOT NULL)");
             table.HasCheckConstraint("CK_Quotes_Totals", "[SubTotal] >= 0 AND [Tax] >= 0 AND [Total] = [SubTotal] + [Tax]");
+            // Fase 31N (ADR 0094): the deposit a version asks, fixed when it is sent, from $10 to its total.
+            table.HasCheckConstraint(
+                "CK_Quotes_Deposit",
+                $"[DepositAmount] IS NULL OR ([DepositAmount] >= {QuoteRules.MinDeposit:0} AND [DepositAmount] <= [Total] AND [SentAt] IS NOT NULL)");
             table.HasCheckConstraint(
                 "CK_Quotes_Conversion",
                 "([OrderId] IS NULL AND [ConvertedAt] IS NULL AND [AppliedVisitCredit] IS NULL)"
@@ -67,6 +71,7 @@ public class QuoteConfiguration : IEntityTypeConfiguration<Quote>
         builder.Property(x => x.Tax).HasColumnType("decimal(18,2)");
         builder.Property(x => x.Total).HasColumnType("decimal(18,2)");
         builder.Property(x => x.VisitCreditAmount).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.DepositAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.AppliedVisitCredit).HasColumnType("decimal(18,2)");
         builder.Property(x => x.TrackingToken).HasMaxLength(Order.TrackingTokenLength).IsUnicode(false);
         builder.Property(x => x.ReplyChannel).HasConversion<int?>();

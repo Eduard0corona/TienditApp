@@ -37,6 +37,7 @@ public sealed class QuoteReplyEmailHandler : IOutboxEventHandler<QuoteReplyEmail
         if (context.TenantId is not { } tenantId)
             return;
 
+        var paidDeposits = QuoteDeposits.PaidQuery(_context, tenantId);
         var quote = await _context.Quotes
             .AsNoTracking()
             .Where(q => q.Id == domainEvent.QuoteId && q.TenantId == tenantId)
@@ -50,10 +51,17 @@ public sealed class QuoteReplyEmailHandler : IOutboxEventHandler<QuoteReplyEmail
                 q.Revision,
                 q.CustomerName,
                 q.Total,
+                q.DepositAmount,
+                DepositPaid = paidDeposits.Any(c => c.QuoteId == q.Id),
                 LeftAMessage = q.CustomerResponse != null
             })
             .FirstOrDefaultAsync(cancellationToken);
-        if (quote is null || !QuoteReplyEmail.Worth(quote.Status, quote.ReplyChannel, quote.ClosedAt, quote.OrderId, _clock.UtcNow))
+        // Paying its deposit accepted it from the link and made it its order (Fase 31N).
+        var depositPaid = quote is { Status: QuoteStatus.Accepted, ReplyChannel: QuoteReplyChannel.Link, DepositPaid: true, DepositAmount: { } paid }
+            ? paid
+            : (decimal?)null;
+        if (quote is null
+            || !QuoteReplyEmail.Worth(quote.Status, quote.ReplyChannel, quote.ClosedAt, quote.OrderId, _clock.UtcNow, depositPaid is not null))
             return;
 
         var recipient = (await QuoteReplyEmailRecipients.ListAsync(_context, _access, tenantId, domainEvent.UserId, cancellationToken))
@@ -76,7 +84,14 @@ public sealed class QuoteReplyEmailHandler : IOutboxEventHandler<QuoteReplyEmail
             // An accepted quote becomes a service order only where the business has services (Fase 29E).
             TenantCapabilityRules.CanCreateOrderType(recipient.Capabilities, OrderType.Service),
             domainEvent.QuoteId,
-            _links.BaseUrl);
+            _links.BaseUrl,
+            depositPaid,
+            quote.OrderId is { } orderId
+                ? await _context.Orders.AsNoTracking()
+                    .Where(o => o.Id == orderId && o.TenantId == tenantId)
+                    .Select(o => o.OrderNumber)
+                    .FirstOrDefaultAsync(cancellationToken)
+                : null);
 
         await _email.SendEmailAsync(recipient.Email, email.Subject, email.HtmlBody);
     }

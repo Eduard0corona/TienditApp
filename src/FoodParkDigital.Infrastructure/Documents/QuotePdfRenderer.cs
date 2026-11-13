@@ -12,8 +12,8 @@ namespace FoodParkDigital.Infrastructure.Documents;
 /// <summary>
 /// The PDF of a quote (Fase 31M, ADR 0093), on letter-size pages: the business (its logo when it has one, its name and its
 /// phone), the folio and version, where the quote stands, who it is for, when it was sent and until when it is valid,
-/// its lines (the table continues on the next page with its header), its totals with the visit it takes off, whether its
-/// prices include IVA and its note. Every page says its number and how many there are.
+/// its lines (the table continues on the next page with its header), its totals with the visit it takes off and, since the
+/// Fase 31N, its deposit, whether its prices include IVA and its note. Every page says its number and how many there are.
 /// </summary>
 internal sealed class QuotePdfRenderer : IQuotePdfRenderer
 {
@@ -265,6 +265,9 @@ internal sealed class QuotePdfRenderer : IQuotePdfRenderer
                 rows.Add(("Visita (se descuenta)", "−" + Money(_quote.VisitCredit), false));
                 rows.Add(("Por pagar", Money(_quote.ToPay), true));
             }
+            // The deposit (Fase 31N): to pay to accept it while it waits, or paid once that accepted it.
+            if (_quote.DepositAmount is { } deposit && (_quote.DepositPaid || _quote.Status == QuoteStatus.Sent))
+                rows.Add((_quote.DepositPaid ? "Anticipo pagado en línea" : "Anticipo para aceptarla", Money(deposit), false));
             var height = 10 + rows.Count * 16 + 22;
             if (_y - height < Bottom)
                 NewPage();
