@@ -14,6 +14,7 @@ import { useToast } from '../../hooks/useToast';
 import { OutgoingMessageStatus, QuoteEmailFailure, QuoteReplyChannel, QuoteStatus, TenantCapability } from '../../types';
 import { setBusinessTimeZone } from '../../utils/dates';
 import { filesApi } from '../../api/filesApi';
+import { saveBlob } from '../../utils/cfdi';
 import QuoteDetail from './QuoteDetail';
 
 vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
@@ -27,9 +28,10 @@ vi.mock('../../api/employeesApi', () => ({ employeesApi: { getAll: vi.fn() } }))
 vi.mock('../../api/quotesApi', () => ({
   quotesApi: {
     get: vi.fn(), updateDraft: vi.fn(), send: vi.fn(), revise: vi.fn(), discard: vi.fn(), reply: vi.fn(),
-    sendByEmail: vi.fn(), sendByWhatsApp: vi.fn(), convertToOrder: vi.fn(), scheduleWork: vi.fn(),
+    sendByEmail: vi.fn(), sendByWhatsApp: vi.fn(), convertToOrder: vi.fn(), scheduleWork: vi.fn(), downloadPdf: vi.fn(),
   },
 }));
+vi.mock('../../utils/cfdi', async (importOriginal) => ({ ...await importOriginal<typeof import('../../utils/cfdi')>(), saveBlob: vi.fn() }));
 
 const TOKEN = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE';
 
@@ -139,6 +141,40 @@ describe('QuoteDetail', () => {
     })));
     expect(await screen.findByText('$1,624.00')).toBeInTheDocument();
     expect(JSON.stringify(vi.mocked(quotesApi.updateDraft).mock.calls[0][1])).not.toContain('total');
+  });
+
+  it('downloads the PDF of any version with the name the server gives, a draft once its changes are saved (Fase 31M)', async () => {
+    const pdf = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+    vi.mocked(quotesApi.get).mockResolvedValue(quote());
+    vi.mocked(quotesApi.downloadPdf).mockResolvedValue({ blob: pdf, fileName: 'cotizacion-COT-000007.pdf' });
+    renderAt();
+
+    const download = await screen.findByRole('button', { name: 'Descargar PDF de la cotización COT-000007' });
+    await userEvent.click(download);
+
+    await waitFor(() => expect(saveBlob).toHaveBeenCalledWith(pdf, 'cotizacion-COT-000007.pdf'));
+    expect(quotesApi.downloadPdf).toHaveBeenCalledWith('q1');
+    // With changes not saved, the PDF would not say them: it asks to save first.
+    await userEvent.type(screen.getByLabelText('Qué incluye', { selector: '#quote-line-0-description' }), ' de paso');
+    expect(download).toBeDisabled();
+    expect(screen.getByText('Guarda el borrador para descargar su PDF.')).toBeInTheDocument();
+  });
+
+  it('says why the PDF did not download, and holds still while it comes', async () => {
+    const coming = deferred<{ blob: Blob; fileName: string }>();
+    vi.mocked(quotesApi.get).mockResolvedValue(sent());
+    vi.mocked(quotesApi.downloadPdf).mockReturnValueOnce(coming.promise).mockRejectedValueOnce(refusal('La cotización no existe.'));
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Descargar PDF de la cotización COT-000007' }));
+    expect(screen.getByRole('button', { name: 'Descargar PDF de la cotización COT-000007' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Descargar PDF de la cotización COT-000007' })).toHaveTextContent('Descargando…');
+    coming.resolve({ blob: new Blob(['%PDF']), fileName: 'cotizacion-COT-000007.pdf' });
+    await waitFor(() => expect(saveBlob).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Descargar PDF de la cotización COT-000007' }));
+    expect(await screen.findByText('La cotización no existe.')).toHaveAttribute('role', 'alert');
+    expect(saveBlob).toHaveBeenCalledTimes(1);
   });
 
   it('adds a line from the catalog with its price', async () => {

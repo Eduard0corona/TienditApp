@@ -250,6 +250,76 @@ public sealed class CrossTenantQuoteSqlServerTests
         Assert.True((await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync("/api/v1/quotes/settings"))).GetProperty("onlineReplies").GetBoolean());
     }
 
+    [SqlServerFact]
+    public async Task ThePdfOfAQuote_ShouldBeOnlyItsBusinesses_AndThePdfOfItsLinkHaveOnlyTheCustomersName()
+    {
+        var mine = await _api.SignUpAsync("cotiza-pdf-a");
+        var theirs = await _api.SignUpAsync("cotiza-pdf-b");
+        var kitchen = await _api.SignUpAsync("cotiza-pdf-c", TwoBusinessesApi.FoodBusiness);
+        var draft = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/quotes",
+            new { customerName = "Valeria Ruiz", customerPhone = "5522107765", customerEmail = "valeria@correo.mx" }));
+        var id = draft.GetProperty("id").GetGuid();
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"/api/v1/quotes/{id}", new
+        {
+            customerName = "Valeria Ruiz",
+            customerPhone = "5522107765",
+            customerEmail = "valeria@correo.mx",
+            validityDays = 15,
+            lines = new[] { new { productId = (Guid?)null, description = "Instalación de calentador", quantity = 1m, unitPrice = 1160m } }
+        }));
+
+        // A draft has its PDF too, for the business.
+        var ofDraft = await mine.Client.GetAsync($"/api/v1/quotes/{id}/pdf");
+        Assert.Equal(HttpStatusCode.OK, ofDraft.StatusCode);
+        Assert.Contains("Borrador", PdfText(await ofDraft.Content.ReadAsByteArrayAsync()));
+
+        var token = (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"/api/v1/quotes/{id}/send", null)))
+            .GetProperty("trackingToken").GetString()!;
+        var pdf = await mine.Client.GetAsync($"/api/v1/quotes/{id}/pdf");
+        Assert.Equal(HttpStatusCode.OK, pdf.StatusCode);
+        Assert.Equal("application/pdf", pdf.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("cotizacion-COT-000001.pdf", pdf.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
+        // Downloaded, never rendered as a page of this origin nor kept by shared caches.
+        Assert.Equal("sandbox", string.Join(",", pdf.Headers.GetValues("Content-Security-Policy")));
+        Assert.Contains("no-store", pdf.Headers.CacheControl?.ToString());
+        var text = PdfText(await pdf.Content.ReadAsByteArrayAsync());
+        Assert.Contains("Cotización COT-000001", text);
+        Assert.Contains("Valeria Ruiz", text);
+        Assert.Contains("Instalación de calentador", text);
+        Assert.Contains("$1,160.00", text);
+
+        // Another business's is not found, a food business has no quotes, and without a session there is none.
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1/quotes/{id}/pdf")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await kitchen.Client.GetAsync($"/api/v1/quotes/{id}/pdf")).StatusCode);
+        using var stranger = _api.AnonymousClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await stranger.GetAsync($"/api/v1/quotes/{id}/pdf")).StatusCode);
+
+        // The link's PDF, without an account: the customer's name, never their phone nor email.
+        var linked = await stranger.PostAsJsonAsync("/api/v1/public/quotes/pdf", new { token });
+        Assert.Equal(HttpStatusCode.OK, linked.StatusCode);
+        Assert.Equal("application/pdf", linked.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("sandbox", string.Join(",", linked.Headers.GetValues("Content-Security-Policy")));
+        var linkedText = PdfText(await linked.Content.ReadAsByteArrayAsync());
+        Assert.Contains("Valeria Ruiz", linkedText);
+        foreach (var leaked in new[] { "5522107765", "+52 55 2210 7765", "valeria@correo.mx" })
+        {
+            Assert.DoesNotContain(leaked, linkedText);
+            Assert.DoesNotContain(leaked, text);
+        }
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await stranger.PostAsJsonAsync("/api/v1/public/quotes/pdf", new { token = new string('x', 43) })).StatusCode);
+        var otherCase = new string(token.Select(c => char.IsUpper(c) ? char.ToLowerInvariant(c) : char.ToUpperInvariant(c)).ToArray());
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await stranger.PostAsJsonAsync("/api/v1/public/quotes/pdf", new { token = otherCase })).StatusCode);
+    }
+
+    private static string PdfText(byte[] pdf)
+    {
+        Assert.StartsWith("%PDF-", System.Text.Encoding.ASCII.GetString(pdf, 0, 5));
+        using var document = UglyToad.PdfPig.PdfDocument.Open(pdf);
+        return string.Concat(document.GetPages().Select(page => page.Text));
+    }
+
     /// <summary>A quote of the business for «Cambio de calentador», sent: its id and its link.</summary>
     internal static async Task<(Guid Id, string Token)> SentQuoteAsync(HttpClient client)
     {

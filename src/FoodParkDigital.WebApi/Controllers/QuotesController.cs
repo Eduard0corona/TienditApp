@@ -139,8 +139,29 @@ public class QuotesController : ControllerBase
         => Answer(await _mediator.Send(new ScheduleQuoteWorkCommand(
             id, request.StartAt, request.EndAt, request.StaffUserId, request.Notes), cancellationToken));
 
+    /// <summary>
+    /// The PDF of a version (Fase 31M, ADR 0093), as it reads now: any version, a draft too. Another business's is not found.
+    /// </summary>
+    [HttpGet("{id:guid}/pdf")]
+    public async Task<IActionResult> DownloadPdf(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetQuotePdfQuery(id), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status404NotFound, result.Error) : this.QuotePdf(result.Value!);
+    }
+
     private ActionResult Answer<T>(Result<T> result)
         => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+}
+
+internal static class QuotePdfResults
+{
+    /// <summary>The PDF of a quote, downloaded: never rendered as a page of this origin nor kept by shared caches.</summary>
+    public static FileStreamResult QuotePdf(this ControllerBase controller, Application.Orders.Queries.PrivateFileDownload file)
+    {
+        controller.Response.Headers.ContentSecurityPolicy = "sandbox";
+        controller.Response.Headers.CacheControl = "private, no-store";
+        return controller.File(file.Content, file.ContentType, file.FileName);
+    }
 }
 
 public class UpdateQuoteDraftRequest
@@ -209,6 +230,15 @@ public class PublicQuotesController : ControllerBase
     {
         var quote = await _mediator.Send(new GetPublicQuoteQuery(request.Token), cancellationToken);
         return quote is null ? this.ApiError(StatusCodes.Status404NotFound, PublicQuoteDto.NotFoundMessage) : Ok(quote);
+    }
+
+    /// <summary>The PDF of the quote (Fase 31M, ADR 0093), as its page shows it; a link unknown or expired is not found.</summary>
+    [HttpPost("pdf")]
+    [EnableRateLimiting("public-menu")]
+    public async Task<IActionResult> DownloadPdf([FromBody] PublicQuoteRequest request, CancellationToken cancellationToken)
+    {
+        var file = await _mediator.Send(new GetPublicQuotePdfQuery(request.Token), cancellationToken);
+        return file is null ? this.ApiError(StatusCodes.Status404NotFound, PublicQuoteDto.NotFoundMessage) : this.QuotePdf(file);
     }
 
     /// <summary>

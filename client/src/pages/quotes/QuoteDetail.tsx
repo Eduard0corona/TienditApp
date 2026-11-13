@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import VisitProblem from '../../components/appointments/VisitProblem';
 import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
+import QuotePdfButton from '../../components/quotes/QuotePdfButton';
 import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
 import { queryKeys } from '../../api/queries';
 import { productsApi } from '../../api/productsApi';
@@ -572,6 +573,14 @@ function QuoteDetail({ id }: { id: string }) {
                   </ul>
                 </div>
               )}
+
+              {/* Any version, a draft too, as it reads now (Fase 31M): a draft with changes is saved first. */}
+              <QuotePdfButton
+                download={() => quotesApi.downloadPdf(quote.id)}
+                label={`Descargar PDF de la cotización ${folio}`}
+                disabled={busy || (isDraft && dirty)}
+              />
+              {isDraft && dirty && <p className="text-muted small mb-0">Guarda el borrador para descargar su PDF.</p>}
 
               {canRevise && (
                 <button

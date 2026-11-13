@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
 import { publicQuoteApi, type PublicQuote } from '../../api/quotesApi';
 import PageTitle from '../../components/common/PageTitle';
+import QuotePdfButton from '../../components/quotes/QuotePdfButton';
 import { QuoteStatus } from '../../types';
 import { formatCalendarDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
@@ -157,6 +158,14 @@ export default function PublicQuotePage() {
             </dl>
             <p className="text-muted small mb-0">{quote.pricesIncludeTax ? 'Los precios incluyen IVA.' : 'El IVA se suma a los precios.'}</p>
             {quote.note && <p className="small mt-2 mb-0">{quote.note}</p>}
+            {/* To keep it or print it (Fase 31M): as this page shows it. */}
+            <div className="mt-2">
+              <QuotePdfButton
+                download={() => publicQuoteApi.downloadPdf(token)}
+                label={`Descargar PDF de la cotización ${folio}`}
+                className="btn btn-link px-0"
+              />
+            </div>
 
             {quote.canReply && (
               <QuoteReplyPanel

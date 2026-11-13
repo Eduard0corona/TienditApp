@@ -4,12 +4,15 @@ import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { publicQuoteApi } from '../../api/quotesApi';
 import { apiRequest } from '../../api/typedClient';
 import { QuoteStatus } from '../../types';
+import { saveBlob } from '../../utils/cfdi';
 import PublicQuotePage from './PublicQuotePage';
 
 vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
+vi.mock('../../utils/cfdi', async (importOriginal) => ({ ...await importOriginal<typeof import('../../utils/cfdi')>(), saveBlob: vi.fn() }));
 
 const LINK = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE';
 const NEWER = 'ZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210_-ZyXwV';
@@ -71,6 +74,34 @@ describe('PublicQuotePage', () => {
     expect(screen.getByText('−$350.00')).toBeInTheDocument();
     expect(screen.getByText('$810.00')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Responder al negocio' }).getAttribute('href')).toContain('https://wa.me/525512345678');
+  });
+
+  it('downloads the PDF of the link, sending the link in the body (Fase 31M)', async () => {
+    const pdf = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+    const download = vi.spyOn(publicQuoteApi, 'downloadPdf').mockResolvedValue({ blob: pdf, fileName: 'cotizacion-COT-000007.pdf' });
+    vi.mocked(apiRequest).mockResolvedValue(quote() as never);
+    renderPage(`/cotizacion#${LINK}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Descargar PDF de la cotización COT-000007' }));
+
+    await waitFor(() => expect(saveBlob).toHaveBeenCalledWith(pdf, 'cotizacion-COT-000007.pdf'));
+    expect(download).toHaveBeenCalledWith(LINK);
+    download.mockRestore();
+  });
+
+  it('says why the PDF of the link did not download', async () => {
+    const headers = new AxiosHeaders();
+    const download = vi.spyOn(publicQuoteApi, 'downloadPdf').mockRejectedValue(new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+      status: 404, data: { detail: 'Esta cotización no existe o su enlace ya venció.' }, statusText: '', headers, config: { headers },
+    } as AxiosResponse));
+    vi.mocked(apiRequest).mockResolvedValue(quote() as never);
+    renderPage(`/cotizacion#${LINK}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Descargar PDF de la cotización COT-000007' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta cotización no existe o su enlace ya venció.');
+    expect(saveBlob).not.toHaveBeenCalled();
+    download.mockRestore();
   });
 
   it('leads from a replaced version to the new one', async () => {

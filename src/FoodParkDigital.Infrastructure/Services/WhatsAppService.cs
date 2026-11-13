@@ -77,7 +77,7 @@ public class WhatsAppService : IWhatsAppService, IWhatsAppDocumentSender
 
         var upload = await _client.UploadMediaAsync(account, document, cancellationToken);
         if (upload.IsFailure)
-            return Record(tenantId, upload);
+            return Record(tenantId, MessageSendResult.UploadFailed(upload.Error ?? "WhatsApp no tomó el documento.", upload.IsTransient));
 
         var uploaded = new WhatsAppMediaDocument(upload.ProviderMessageId!, document.FileName);
         return Record(tenantId, templateName is null
