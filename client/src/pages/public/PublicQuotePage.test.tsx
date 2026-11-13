@@ -89,6 +89,28 @@ describe('PublicQuotePage', () => {
     expect(apiRequest).not.toHaveBeenCalledWith('post', '/api/v1/public/quotes/reply', expect.anything());
   });
 
+  it('closes paying the deposit once it can no longer be paid, keeping why it was refused (Fase 31N)', async () => {
+    const headers = new AxiosHeaders();
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true, depositAmount: 243, canPayDeposit: true, depositPaid: false }) as never)
+      .mockRejectedValueOnce(new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+        status: 400, data: { detail: 'El negocio no puede recibir el anticipo en línea por ahora: escríbele para aceptar la cotización.' },
+        statusText: '', headers, config: { headers },
+      } as AxiosResponse))
+      .mockResolvedValueOnce(quote({ canReply: true, depositAmount: 243, canPayDeposit: false, depositPaid: false }) as never);
+    renderPage(`/cotizacion#${LINK}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Aceptar y pagar el anticipo de $243.00' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Ir a pagar $243.00' }));
+
+    expect(await screen.findByText(/pide un anticipo de \$243.00 que por ahora no se puede pagar en línea/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Ir a pagar/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'No la acepto' })).toBeInTheDocument();
+    const refusal = screen.getByRole('alert');
+    expect(refusal).toHaveTextContent('El negocio no puede recibir el anticipo en línea por ahora');
+    expect(refusal).toHaveFocus();
+    expect(goToExternalPage).not.toHaveBeenCalled();
+  });
+
   it('says a deposit that cannot be paid now, leaving only the rejection here, and says when it was paid', async () => {
     vi.mocked(apiRequest).mockResolvedValue(quote({ canReply: true, depositAmount: 243, canPayDeposit: false, depositPaid: false }) as never);
     const { unmount } = renderPage(`/cotizacion#${LINK}`);

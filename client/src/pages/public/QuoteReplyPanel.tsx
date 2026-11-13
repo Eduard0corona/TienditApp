@@ -53,6 +53,9 @@ export default function QuoteReplyPanel({ quote, token, onAnswered, onRefused }:
   }, [choice]);
 
   const deposit = quote.depositAmount ?? null;
+  // The deposit can stop being payable while its form is open (the business's account stopped collecting, and refusing to
+  // start it read the quote again): then only the rejection stays, and the refusal keeps the focus.
+  const shown = choice === 'accept' && deposit !== null && !quote.canPayDeposit ? null : choice;
 
   const payDeposit = useMutation({
     mutationFn: () => publicQuoteApi.startDeposit(token),
@@ -98,7 +101,7 @@ export default function QuoteReplyPanel({ quote, token, onAnswered, onRefused }:
           línea: escríbele para aceptarla.
         </p>
       )}
-      {choice === null ? (
+      {shown === null ? (
         <div className="d-flex flex-wrap gap-2">
           {(deposit === null || quote.canPayDeposit) && (
             <button ref={acceptRef} type="button" className="btn btn-primary" onClick={() => setChoice('accept')}>
@@ -110,7 +113,7 @@ export default function QuoteReplyPanel({ quote, token, onAnswered, onRefused }:
             No la acepto
           </button>
         </div>
-      ) : choice === 'accept' && deposit !== null ? (
+      ) : shown === 'accept' && deposit !== null ? (
         <form
           onSubmit={(e) => {
             e.preventDefault();

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Web;
+using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Quotes;
@@ -94,6 +95,50 @@ public sealed class CrossTenantQuoteDepositsSqlServerTests
 
         // Mercado Pago stays while the deposit is asked.
         Assert.Equal(HttpStatusCode.BadRequest, (await mine.Client.DeleteAsync($"{OnlinePayments}/account")).StatusCode);
+    }
+
+    [SqlServerFact]
+    public async Task TwoDepositsOfTheSameVersionPaidAtOnce_ShouldMakeOneOrder_AndGiveTheOtherBack()
+    {
+        var mine = await _api.SignUpAsync("anticipo-c");
+        var account = await ConnectAsync(mine.Client);
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync("/api/v1/quotes/settings",
+            new { validityDays = 15, onlineReplies = true, depositPercent = 30 }));
+        var (quoteId, token) = await SentAsync(mine.Client);
+        using var customer = _api.AnonymousClient();
+        var first = (await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync("/api/v1/public/quotes/deposit", new { token })))
+            .GetProperty("checkoutId").GetGuid();
+        // Another tab started a second payment of the same version (as once the first has less than five minutes left).
+        var second = await _api.QueryAsync(mine.TenantId, async db =>
+        {
+            var checkout = OnlineCheckout.ForQuote(mine.TenantId, account, quoteId, 348m, DateTimeOffset.UtcNow);
+            checkout.AttachPreference("pref-second", "https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=second");
+            db.OnlineCheckouts.Add(checkout);
+            await db.SaveChangesAsync();
+            return checkout.Id;
+        });
+        var firstPayment = _api.OnlinePayments.Approve(first, 348m, account);
+        var secondPayment = _api.OnlinePayments.Approve(second, 348m, account);
+
+        // Both tabs come back at once, each request with its own context applying its own payment of the same version.
+        var answers = await Task.WhenAll(
+            customer.PostAsJsonAsync("/api/v1/public/quotes/deposit/confirm", new { token, checkoutId = first, paymentId = firstPayment.Id }),
+            customer.PostAsJsonAsync("/api/v1/public/quotes/deposit/confirm", new { token, checkoutId = second, paymentId = secondPayment.Id }));
+        var statuses = new List<int>();
+        foreach (var answer in answers)
+            statuses.Add((await TwoBusinessesApi.ReadAsync(answer)).GetProperty("status").GetInt32());
+        Assert.Equal(new[] { (int)OnlineCheckoutStatus.Placed, (int)OnlineCheckoutStatus.NotPlaced }.Order(), statuses.Order());
+
+        // One order with one deposit «En línea»; the other payment goes back whole.
+        var order = Assert.Single(await _api.QueryAsync(mine.TenantId, db => db.Orders.Include(o => o.Payments).ToListAsync()));
+        var paid = Assert.Single(order.Payments);
+        Assert.Equal((OrderPaymentMethod.Online, 348m), (paid.Method, paid.Amount));
+        var refund = Assert.Single(await _api.QueryAsync(mine.TenantId, db => db.OnlinePaymentRefunds.ToListAsync()));
+        var placedPayment = paid.Reference;
+        Assert.Equal(placedPayment == firstPayment.Id ? secondPayment.Id : firstPayment.Id, refund.PaymentId);
+        Assert.Equal((OnlinePaymentRefundReason.NotPlaced, 348m), (refund.Reason, refund.Amount));
+        var quote = await _api.QueryAsync(mine.TenantId, db => db.Quotes.SingleAsync(q => q.Id == quoteId));
+        Assert.Equal((QuoteStatus.Accepted, order.Id), (quote.Status, quote.OrderId));
     }
 
     /// <summary>A quote of 1,160 sent to Valeria, and its link.</summary>
