@@ -720,6 +720,32 @@ describe('PublicMenuPage', () => {
       ), { timeout: 3000 });
     });
 
+    it('keeps what the menu does not have now when the store just opens, here and in the account, until something changes', async () => {
+      // Chilaquiles are sold for breakfast only: not now.
+      const latte = menu().categories[0].products[0];
+      const chilaquiles = { ...latte, id: 'p2', name: 'Chilaquiles', price: 90, availableNow: false };
+      account.getCarts.mockResolvedValue([{
+        slug: 'cafe-luna', businessName: 'Café Luna', savedAt: new Date(Date.now() - 3_600_000).toISOString(),
+        lines: [{ productId: 'p1', optionIds: [], quantity: 2, notes: null }, { productId: 'p2', optionIds: [], quantity: 1, notes: null }],
+      }]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu({ categories: [{ id: 'c1', name: 'Bebidas', products: [latte, chilaquiles] }] }));
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toBeInTheDocument();
+      // A visit takes them out of neither the account nor this device.
+      await new Promise((resolve) => { setTimeout(resolve, 1000); });
+      expect(account.saveCart).not.toHaveBeenCalled();
+      expect(readCart('cafe-luna')?.lines.map((line) => [line.productId, line.quantity])).toEqual([['p1', 2], ['p2', 1]]);
+      // A change made here sends what the page shows.
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 3 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+    });
+
     it('keeps the cart of the device when it changed later, and gives it to the account', async () => {
       saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 2 }] });
       account.getCarts.mockResolvedValue([accountCart(5, '2020-01-01T00:00:00Z')]);

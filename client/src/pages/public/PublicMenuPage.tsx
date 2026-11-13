@@ -50,7 +50,7 @@ import {
   type CartLine,
   type SavedCartLine,
 } from '../../utils/savedCart';
-import { cartSignature, scheduleAccountCartSave } from '../../utils/accountCartSync';
+import { cartSignature, scheduleAccountCartSave, type AccountCartPayload } from '../../utils/accountCartSync';
 import { bookingPath } from '../../utils/onlineBooking';
 import { featuredProducts, mapsUrl, optionGroupsOf, searchMenu, storePageTitle } from '../../utils/storeMenu';
 import { previewBusinessTheme } from '../../utils/theme';
@@ -261,8 +261,8 @@ export default function PublicMenuPage() {
   });
   // What the account received last of this store's cart: the same cart is not sent again.
   const accountCartSent = useRef<string | null>(null);
-  // The cart restored and when it was kept (the server's time, when it came from the account).
-  const restoredCart = useRef<{ signature: string; savedAt: Date } | null>(null);
+  // The cart restored as it was kept (also what the menu does not have now) and when (the server's time, from the account).
+  const restoredCart = useRef<{ signature: string; kept: AccountCartPayload; savedAt: Date } | null>(null);
   // Who the session is, and with an account its carts read now, are known (or could not be read: the device's then).
   const accountKnown = !checking && (!customer || accountCarts.isFetchedAfterMount);
 
@@ -279,7 +279,11 @@ export default function PublicMenuPage() {
       ? restoreLines(saved.lines, data.categories.flatMap((item) => item.products))
       : null;
     restoredCart.current = saved && restored
-      ? { signature: cartSignature({ lines: savedLinesOf(restored.lines) }), savedAt: new Date(saved.savedAt) }
+      ? {
+          signature: cartSignature({ lines: savedLinesOf(restored.lines) }),
+          kept: { lines: saved.lines, reorderOf: saved.reorderOf, skipped: saved.skipped },
+          savedAt: new Date(saved.savedAt),
+        }
       : null;
     if (saved && restored) {
       // The menu shows while the session and the account's carts are read: what was added meanwhile stays, with it.
@@ -290,7 +294,7 @@ export default function PublicMenuPage() {
     // a change made here goes then, never this device's cart over a newer one of the account.
     accountCartSent.current = accountRead
       ? cartSignature(fromAccount ?? { lines: [] })
-      : cartSignature({ lines: savedLinesOf(restored?.lines ?? []) });
+      : cartSignature(restoredCart.current?.kept ?? { lines: [] });
   }
 
   // The first time the order goes to an address: the account's last one used, or the postal code given in Explorar.
@@ -375,15 +379,17 @@ export default function PublicMenuPage() {
   const customerId = customer?.id;
   useEffect(() => {
     if (restoredFor !== slug || !businessName) return;
-    const kept = savedLinesOf(lines);
-    const signature = cartSignature({ lines: kept });
-    // Unchanged since it came back, it keeps when it was kept: a device clock ahead does not make it newer than the account's.
-    const restoredAt = restoredCart.current?.signature === signature ? restoredCart.current.savedAt : undefined;
-    saveCart(slug, { businessName, lines: kept }, restoredAt);
+    const shown = savedLinesOf(lines);
+    // Unchanged since it came back, it stays as it was kept and when: what the menu does not have now (a product out of its
+    // hours) is not taken out of it by a visit, and a device clock ahead does not make it newer than the account's.
+    const unchanged = restoredCart.current?.signature === cartSignature({ lines: shown }) ? restoredCart.current : null;
+    const kept = unchanged?.kept ?? { lines: shown };
+    saveCart(slug, { businessName, ...kept }, unchanged?.savedAt);
     if (!customerId) return;
+    const signature = cartSignature(kept);
     if (signature === accountCartSent.current) return;
     accountCartSent.current = signature;
-    scheduleAccountCartSave(slug, { lines: kept }, (saved) => {
+    scheduleAccountCartSave(slug, kept, (saved) => {
       // Explorar reads the same carts: it offers what the account keeps now, not what it had when this store opened.
       queryClient.setQueryData<MyCart[]>(['me', 'carts'], (carts) => carts && [
         ...(saved ? [saved] : []),
