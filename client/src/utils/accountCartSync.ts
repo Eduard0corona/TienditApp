@@ -24,9 +24,13 @@ interface Pending {
 
 const pending = new Map<string, Pending>();
 
-/** The same lines in the same order, as the account received them last. */
+/**
+ * The same lines in the same order, as the account received them last. The options of a line in any order: the account
+ * keeps them sorted and this device in the order they were chosen, and the same cart is not sent again for that.
+ */
 export function cartSignature(payload: AccountCartPayload): string {
-  return JSON.stringify([payload.lines, payload.reorderOf ?? null, payload.skipped ?? null]);
+  const lines = payload.lines.map((line) => ({ ...line, optionIds: [...line.optionIds].sort() }));
+  return JSON.stringify([lines, payload.reorderOf ?? null, payload.skipped ?? null]);
 }
 
 /**

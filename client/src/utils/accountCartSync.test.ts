@@ -113,6 +113,10 @@ describe('accountCartSync', () => {
     expect(api.saveCart).toHaveBeenCalledWith('cafe', { lines: [line(2)], reorderOf: 4, skipped: null });
     expect(cartSignature({ lines: [line(1)] })).toBe(cartSignature({ lines: [line(1)] }));
     expect(cartSignature({ lines: [line(1)] })).not.toBe(cartSignature({ lines: [line(2)] }));
+    // The account keeps the options sorted; this device, as they were chosen: the same cart.
+    const latte = (optionIds: string[]) => ({ productId: 'latte', optionIds, quantity: 1 });
+    expect(cartSignature({ lines: [latte(['grande', 'deslactosada'])] })).toBe(cartSignature({ lines: [latte(['deslactosada', 'grande'])] }));
+    expect(cartSignature({ lines: [latte(['grande'])] })).not.toBe(cartSignature({ lines: [latte(['chica'])] }));
   });
 
   it('gives the account the carts this device chose before its session, each only when newer and different (Fase 31J)', async () => {
