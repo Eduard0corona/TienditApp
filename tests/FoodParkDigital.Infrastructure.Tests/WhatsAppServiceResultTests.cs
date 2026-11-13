@@ -116,6 +116,7 @@ public class WhatsAppServiceResultTests
             "Hola: tu factura. " + new string('x', 2000), null, "es_MX", []);
 
         Assert.True(result.IsSuccess);
+        Assert.False(result.NotUploaded);
         using var payload = System.Text.Json.JsonDocument.Parse(http.Requests[1].Content);
         Assert.Equal("document", payload.RootElement.GetProperty("type").GetString());
         var document = payload.RootElement.GetProperty("document");
@@ -139,6 +140,8 @@ public class WhatsAppServiceResultTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(transient, result.IsTransient);
+        // Nothing reached the customer: a sender may still send the message another way (Fase 31M).
+        Assert.True(result.NotUploaded);
         Assert.Single(http.Requests);
     }
 

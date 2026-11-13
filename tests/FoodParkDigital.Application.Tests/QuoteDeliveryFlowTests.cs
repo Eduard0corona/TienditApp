@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.Messaging.Templates;
 using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Messaging.Entities;
@@ -426,8 +427,8 @@ public class QuoteDeliveryFlowTests
         Assert.Equal(("application/pdf", "cotizacion-COT-000001.pdf"), (file.Value!.ContentType, file.Value.FileName));
         var model = Assert.Single(shop.Pdfs.Rendered);
         Assert.Equal(RecordingQuotePdfRenderer.Pdf(model), Read(file.Value.Content));
-        Assert.Equal((shop.Tenant.Id, "Negocio plomero", (string?)"plomero@demo.com", "COT-000001", 1, QuoteStatus.Sent, "Valeria Ruiz"),
-            (model.TenantId, model.BusinessName, model.BusinessEmail, model.Number, model.Revision, model.Status, model.CustomerName));
+        Assert.Equal((shop.Tenant.Id, "Negocio plomero", "COT-000001", 1, QuoteStatus.Sent, "Valeria Ruiz"),
+            (model.TenantId, model.BusinessName, model.Number, model.Revision, model.Status, model.CustomerName));
         Assert.Equal(((DateOnly?)new DateOnly(2026, 10, 4), (DateOnly?)new DateOnly(2026, 10, 19), (DateOnly?)null),
             (model.SentOn, model.ValidUntil, model.RepliedOn));
         Assert.Equal([new QuotePdfLine("Cambio de calentador", 1m, 1160m, 1160m)], model.Lines);
@@ -489,8 +490,7 @@ public class QuoteDeliveryFlowTests
         Assert.Equal(("application/pdf", "cotizacion-COT-000001.pdf"), (file.ContentType, file.FileName));
         var model = Assert.Single(shop.Pdfs.Rendered);
         Assert.Equal(RecordingQuotePdfRenderer.Pdf(model), Read(file.Content));
-        Assert.Equal((shop.Tenant.Id, QuoteStatus.Sent, "Valeria Ruiz", (string?)"plomero@demo.com"),
-            (model.TenantId, model.Status, model.CustomerName, model.BusinessEmail));
+        Assert.Equal((shop.Tenant.Id, QuoteStatus.Sent, "Valeria Ruiz"), (model.TenantId, model.Status, model.CustomerName));
 
         // A link unknown, or changed, has none.
         Assert.Null(await shop.PublicPdfAsync(new string('a', token.Length)));
@@ -555,6 +555,124 @@ public class QuoteDeliveryFlowTests
         Assert.Equal(OutgoingSendDecision.Sent, withoutPdf.Decision);
         Assert.Equal(("text", "+525522107765"), whatsApp.Sent[^1]);
         Assert.Empty(documents.Sent);
+    }
+
+    [Fact]
+    public async Task APdfWhatsAppDidNotTake_ShouldLeaveTheTextToGoAlone_ButAFailedMessageAfterItsPdfNever()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        await shop.WhatsAppAsync(quote.Id, "5522107765");
+        var message = await shop.Context.OutgoingMessages.SingleAsync();
+        var whatsApp = new CreditTestKit.FakeWhatsApp();
+        var documents = new RecordingWhatsAppDocuments { Answer = MessageSendResult.UploadFailed("(#131053) Media upload error", isTransient: false) };
+
+        // The upload failed, so nothing reached the customer: the text goes.
+        var notUploaded = await shop.Sender(whatsApp, documents).SendAsync(message, CancellationToken.None);
+        Assert.Equal(OutgoingSendDecision.Sent, notUploaded.Decision);
+        Assert.Equal([("text", "+525522107765")], whatsApp.Sent);
+
+        // Taken, but the message itself refused: that is its outcome, and the text does not go after it.
+        documents.Answer = MessageSendResult.Failed("(#131026) Message undeliverable", isTransient: false);
+        var refused = await shop.Sender(whatsApp, documents).SendAsync(message, CancellationToken.None);
+        Assert.Equal((OutgoingSendDecision.Rejected, "(#131026) Message undeliverable"), (refused.Decision, refused.Reason));
+        Assert.Single(whatsApp.Sent);
+        documents.Answer = MessageSendResult.Failed("timeout", isTransient: true);
+        Assert.Equal(OutgoingSendDecision.TransientFailure, (await shop.Sender(whatsApp, documents).SendAsync(message, CancellationToken.None)).Decision);
+        Assert.Single(whatsApp.Sent);
+    }
+
+    [Fact]
+    public async Task AWhatsAppTooLongForTheCaptionOfADocument_ShouldGoAsText()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        var version = await shop.Context.Quotes.AsNoTracking().SingleAsync(q => q.Id == quote.Id);
+        var body = new string('x', QuoteWhatsAppDocuments.MaxCaptionLength + 1);
+        shop.Context.OutgoingMessages.Add(OutgoingMessage.ForQuote(version, "+525522107765", "Valeria", body, null, "es_MX", [],
+            Guid.NewGuid(), new DateOnly(2026, 10, 4), SalesTestFixture.Now));
+        await shop.Context.SaveChangesAsync();
+        var whatsApp = new CreditTestKit.FakeWhatsApp();
+        var documents = new RecordingWhatsAppDocuments();
+
+        var outcome = await shop.Sender(whatsApp, documents).SendAsync(await shop.Context.OutgoingMessages.SingleAsync(), CancellationToken.None);
+
+        Assert.Equal(OutgoingSendDecision.Sent, outcome.Decision);
+        Assert.Equal([("text", "+525522107765")], whatsApp.Sent);
+        Assert.Empty(documents.Sent);
+        Assert.Empty(shop.Pdfs.Rendered);
+    }
+
+    [Fact]
+    public async Task TheLinksPdf_ShouldNotExist_ForABusinessNoLongerActive()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        var tenant = await shop.Context.Tenants.SingleAsync(t => t.Id == shop.Tenant.Id);
+        tenant.SetStatus(TenantStatus.Suspended);
+        await shop.Context.SaveChangesAsync();
+
+        Assert.Null(await shop.PublicPdfAsync(quote.TrackingToken!));
+        Assert.Empty(shop.Pdfs.Rendered);
+    }
+
+    [Fact]
+    public void ThePdfsModel_ShouldTakeOffWhatIsStillPaidForTheVisit_AndSayTheBusinessesDayOfEachDate()
+    {
+        var now = new DateTimeOffset(2026, 10, 5, 3, 0, 0, TimeSpan.Zero);
+        var quote = Quote.Start(Guid.NewGuid(), "COT-000009", new QuoteCustomer(null, "Valeria Ruiz", "5522107765", "valeria@correo.mx"),
+            Guid.NewGuid(), true, 15, now);
+        quote.ReplaceLines([new QuoteLineInput(null, "Cambio de calentador", 1m, 1160m, VatRate.General)], now);
+        quote.SetVisitCredit(new QuoteVisitCredit(Guid.NewGuid(), 350m), now);
+        // At 3:00 UTC it is still the 4th in Mexico City: the business's day.
+        quote.Send(new DateOnly(2026, 10, 4), new string('a', 43), null, now);
+        quote.Accept(new DateOnly(2026, 10, 4), QuoteReplyChannel.WhatsApp, "Sí", now.AddHours(1));
+
+        var paid = QuotePdfs.Model(quote, "Plomería", " 55 1234 5678 ", "America/Mexico_City", new DateOnly(2026, 10, 4), stillPaidForTheVisit: 350m);
+        var refunded = QuotePdfs.Model(quote, "Plomería", null, "America/Mexico_City", new DateOnly(2026, 10, 4), stillPaidForTheVisit: 100m);
+
+        Assert.Equal((350m, 810m, (string?)"55 1234 5678", QuoteStatus.Accepted), (paid.VisitCredit, paid.ToPay, paid.BusinessPhone, paid.Status));
+        Assert.Equal(((DateOnly?)new DateOnly(2026, 10, 4), (DateOnly?)new DateOnly(2026, 10, 4)), (paid.SentOn, paid.RepliedOn));
+        // Part of the visit's sale refunded: only what is still paid comes off.
+        Assert.Equal((100m, 1060m, (string?)null), (refunded.VisitCredit, refunded.ToPay, refunded.BusinessPhone));
+    }
+
+    [Fact]
+    public async Task AMessage_ShouldNotWaitForAPdfThatTakesTooLong()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        var version = await shop.Context.Quotes.AsNoTracking().Include(q => q.Lines).SingleAsync(q => q.Id == quote.Id);
+        var logger = new MessagesLogger();
+
+        var pdf = await QuotePdfs.RenderForMessageAsync(new HangingRenderer(), shop.Context, version, shop.Clock.UtcNow, logger,
+            CancellationToken.None, timeout: TimeSpan.FromMilliseconds(50));
+
+        Assert.Null(pdf);
+        Assert.Contains(quote.Id.ToString(), Assert.Single(logger.Messages));
+        // The worker that stops still stops.
+        using var stopped = new CancellationTokenSource();
+        await stopped.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => QuotePdfs.RenderForMessageAsync(
+            new HangingRenderer(), shop.Context, version, shop.Clock.UtcNow, logger, stopped.Token));
+    }
+
+    private sealed class MessagesLogger : Microsoft.Extensions.Logging.ILogger
+    {
+        public List<string> Messages { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state,
+            Exception? exception, Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
+    }
+
+    private sealed class HangingRenderer : IQuotePdfRenderer
+    {
+        public async Task<byte[]> RenderAsync(QuotePdfModel quote, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return [];
+        }
     }
 
     private static byte[] Read(Stream content)

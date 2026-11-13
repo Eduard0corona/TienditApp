@@ -29,7 +29,7 @@ public class QuotePdfRendererTests
         var text = document.GetPage(1).Text;
         foreach (var expected in new[]
         {
-            "Plomería Díaz", "+52 55 1234 5678", "hola@plomeria.example",
+            "Plomería Díaz", "+52 55 1234 5678",
             "Cotización COT-000123", "versión 2",
             "Para", "Ana Pérez Núñez", "Fecha", "13 de noviembre de 2026", "Vale hasta", "28 de noviembre de 2026",
             "Qué incluye", "Cantidad", "Precio", "Importe",
@@ -127,10 +127,7 @@ public class QuotePdfRendererTests
         foreach (var page in pages)
         {
             Assert.Contains($"Página {page.Number} de {pages.Count}", page.Text);
-            // Nothing but the footer below the bottom margin, and nothing off the page.
-            var body = page.Letters.Where(letter => letter.StartBaseLine.Y > 60);
-            Assert.All(body, letter => Assert.True(letter.StartBaseLine.Y >= 72 - 0.01, $"«{letter.Value}» at {letter.StartBaseLine.Y} on page {page.Number}"));
-            Assert.All(page.Letters, letter => Assert.InRange(letter.StartBaseLine.X, 0, 612));
+            AssertWithinTheMargins(page);
         }
         // The totals come after the last line.
         var lastPage = pages.Single(page => page.Text.Contains("Renglón 50:"));
@@ -158,7 +155,8 @@ public class QuotePdfRendererTests
         var pdf = await RenderAsync(Quote() with { CustomerName = "Zoë 😀 王", Note = "Llámame\tantes ‐ gracias" });
 
         var text = Text(pdf);
-        Assert.Contains("Zoë  ?", text);
+        // The emoji is left out with its space; the other alphabet says something is missing.
+        Assert.Contains("Zoë ?", text);
         Assert.Contains("Llámame antes - gracias", text);
     }
 
@@ -228,11 +226,81 @@ public class QuotePdfRendererTests
         Assert.DoesNotContain("/FontFile", raw);
     }
 
+    [Fact]
+    public async Task ADescriptionWithManyLineBreaks_ShouldStayOneRow_WithinThePage()
+    {
+        // The domain takes 200 characters, line breaks among them, through the API.
+        var description = string.Concat(Enumerable.Repeat("w\n", 99)) + "w";
+        var pdf = await RenderAsync(Quote() with { Lines = [new QuotePdfLine(description, 1, 10m, 10m)] });
+
+        using var document = PdfDocument.Open(pdf);
+        Assert.Equal(1, document.NumberOfPages);
+        AssertWithinTheMargins(document.GetPage(1));
+        Assert.Equal(100, document.GetPage(1).Letters.Count(letter => letter.Value == "w" && letter.StartBaseLine.Y > 72));
+    }
+
+    [Fact]
+    public async Task NamesLongerThanTheirRoom_ShouldBeCutWithAnEllipsis_WithinTheMargins()
+    {
+        var business = "Plomería " + string.Join(' ', Enumerable.Repeat("Hermanos Díaz y Asociados", 8));
+        var customer = string.Join(' ', Enumerable.Repeat("Valeria Guadalupe Ruiz", 9));
+        var phone = new string('5', 120);
+        foreach (var logo in new byte[]?[] { null, Png(300, 120, transparent: false) })
+        {
+            var pdf = await RenderAsync(Quote() with { BusinessName = business, CustomerName = customer, BusinessPhone = phone }, logo);
+
+            using var document = PdfDocument.Open(pdf);
+            var page = document.GetPage(1);
+            AssertWithinTheMargins(page);
+            // The business, the customer and the footer, each cut where its room ends, and said so.
+            Assert.True(Count(page.Text, "…") >= 3, page.Text);
+            Assert.DoesNotContain(business, page.Text);
+            Assert.DoesNotContain(customer, page.Text);
+            Assert.Contains("Plomería Hermanos", page.Text);
+            Assert.Contains("Valeria Guadalupe", page.Text);
+            // The phone, never over the logo nor past the edge.
+            Assert.Contains("5555", page.Text);
+        }
+    }
+
+    [Fact]
+    public async Task EachStream_ShouldDeclareItsOwnLength()
+    {
+        var pdf = await RenderAsync(Quote() with { Lines = Enumerable.Range(1, 30).Select(i => new QuotePdfLine($"Renglón {i}", 1, 1m, 1m)).ToList() },
+            Png(64, 32, transparent: true));
+
+        var raw = Encoding.Latin1.GetString(pdf);
+        var streams = 0;
+        for (var at = raw.IndexOf("stream\n", StringComparison.Ordinal); at >= 0; at = raw.IndexOf("stream\n", at + 1, StringComparison.Ordinal))
+        {
+            if (at >= 3 && raw.Substring(at - 3, 3) == "end")
+                continue;
+            var dictionary = raw[raw.LastIndexOf("<<", at, StringComparison.Ordinal)..at];
+            var declared = int.Parse(System.Text.RegularExpressions.Regex.Match(dictionary, @"/Length (\d+)").Groups[1].Value);
+            var start = at + "stream\n".Length;
+            Assert.Equal("\nendstream", raw.Substring(start + declared, "\nendstream".Length));
+            streams++;
+        }
+        // The page's content, the logo and its mask.
+        Assert.True(streams >= 3, $"{streams} streams");
+    }
+
+    /// <summary>Nothing but the footer (its rule at 52 and its line at 40) below the bottom margin, nor past the side margins.</summary>
+    private static void AssertWithinTheMargins(Page page)
+    {
+        foreach (var letter in page.Letters)
+        {
+            var footer = Math.Abs(letter.StartBaseLine.Y - 40) < 0.5;
+            Assert.True(footer || letter.StartBaseLine.Y >= 72 - 0.01, $"«{letter.Value}» at y {letter.StartBaseLine.Y} on page {page.Number}");
+            Assert.True(letter.StartBaseLine.X >= 48 - 0.01 && letter.EndBaseLine.X <= 564 + 0.01,
+                $"«{letter.Value}» from x {letter.StartBaseLine.X} to {letter.EndBaseLine.X} on page {page.Number}");
+        }
+    }
+
     private static QuotePdfModel Quote() => new(
         Business,
         "Plomería Díaz",
         "+52 55 1234 5678",
-        "hola@plomeria.example",
         "COT-000123",
         1,
         QuoteStatus.Sent,

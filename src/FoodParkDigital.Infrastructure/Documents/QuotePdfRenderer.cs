@@ -10,8 +10,8 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace FoodParkDigital.Infrastructure.Documents;
 
 /// <summary>
-/// The PDF of a quote (Fase 31M, ADR 0093), on letter-size pages: the business (its logo when it has one, its name and how to
-/// reach it), the folio and version, where the quote stands, who it is for, when it was sent and until when it is valid,
+/// The PDF of a quote (Fase 31M, ADR 0093), on letter-size pages: the business (its logo when it has one, its name and its
+/// phone), the folio and version, where the quote stands, who it is for, when it was sent and until when it is valid,
 /// its lines (the table continues on the next page with its header), its totals with the visit it takes off, whether its
 /// prices include IVA and its note. Every page says its number and how many there are.
 /// </summary>
@@ -69,7 +69,7 @@ internal sealed class QuotePdfRenderer : IQuotePdfRenderer
         layout.Totals();
         layout.Note();
         layout.Footers();
-        return pdf.Build($"Cotización {Folio(quote)} de {quote.BusinessName}");
+        return pdf.Build($"Cotización {Folio(quote)} de {PdfText.OneLine(quote.BusinessName)}");
     }
 
     /// <summary>The logo's pixels, or null when there is none or it does not decode: the PDF goes without it.</summary>
@@ -147,9 +147,9 @@ internal sealed class QuotePdfRenderer : IQuotePdfRenderer
 
         public void Header((string Name, int Width, int Height)? logo)
         {
-            var contact = new[] { _quote.BusinessPhone, _quote.BusinessEmail }
+            var contact = new[] { _quote.BusinessPhone }
                 .Where(line => !string.IsNullOrWhiteSpace(line))
-                .Select(line => line!)
+                .Select(line => PdfText.OneLine(line))
                 .ToList();
             double logoWidth = 0, logoHeight = 0;
             if (logo is { } image)
@@ -172,14 +172,16 @@ internal sealed class QuotePdfRenderer : IQuotePdfRenderer
             var nameWidth = logo is null ? Right - Margin : Right - Margin - logoWidth - 24;
             var baseline = Top - 13;
             var lowest = baseline;
-            foreach (var line in PdfText.Wrap(_quote.BusinessName, PdfFont.Bold, 13, nameWidth).Take(2))
+            var name = PdfText.Wrap(PdfText.OneLine(_quote.BusinessName), PdfFont.Bold, 13, nameWidth);
+            foreach (var line in PdfText.Clip(name, 2, PdfFont.Bold, 13, nameWidth))
             {
                 Draw(line, baseline, PdfFont.Bold, 13, PdfColor.Black);
                 lowest = baseline;
                 baseline -= 15;
             }
             baseline += 2;
-            foreach (var line in contact)
+            // How to reach it, never past the business's block.
+            foreach (var line in contact.SelectMany(line => PdfText.Clip(PdfText.Wrap(line, PdfFont.Regular, 9, nameWidth), 2, PdfFont.Regular, 9, nameWidth)))
             {
                 Draw(line, baseline, PdfFont.Regular, 9, PdfColor.Muted);
                 lowest = baseline;
@@ -217,7 +219,7 @@ internal sealed class QuotePdfRenderer : IQuotePdfRenderer
             foreach (var (label, value, x, width) in columns)
             {
                 _page.Text(x, _y - SmallSize, label, PdfFont.Regular, SmallSize, PdfColor.Muted);
-                var lines = PdfText.Wrap(value, PdfFont.Bold, BodySize, width).Take(3).ToList();
+                var lines = PdfText.Clip(PdfText.Wrap(PdfText.OneLine(value), PdfFont.Bold, BodySize, width), 3, PdfFont.Bold, BodySize, width);
                 for (var i = 0; i < lines.Count; i++)
                     _page.Text(x, _y - SmallSize - 14 - i * Leading, lines[i], PdfFont.Bold, BodySize, PdfColor.Black);
                 tallest = Math.Max(tallest, lines.Count);
@@ -230,7 +232,8 @@ internal sealed class QuotePdfRenderer : IQuotePdfRenderer
             TableHeader(continues: false);
             foreach (var line in _quote.Lines)
             {
-                var description = PdfText.Wrap(line.Description, PdfFont.Regular, BodySize, DescriptionWidth);
+                // What it includes is one line of text, however it was written: a row never grows past a page.
+                var description = PdfText.Wrap(PdfText.OneLine(line.Description), PdfFont.Regular, BodySize, DescriptionWidth);
                 var rowHeight = Math.Max(1, description.Count) * Leading + CellPadding * 2;
                 if (_y - rowHeight < Bottom)
                 {
@@ -307,10 +310,10 @@ internal sealed class QuotePdfRenderer : IQuotePdfRenderer
         public void Footers()
         {
             var pages = _pdf.Pages;
-            var from = $"{_quote.BusinessName} · Cotización {Folio(_quote)}";
+            var from = $"{PdfText.OneLine(_quote.BusinessName)} · Cotización {Folio(_quote)}";
             var room = Right - Margin - 90;
             if (PdfText.Width(from, PdfFont.Regular, 8) > room)
-                from = PdfText.Wrap(from, PdfFont.Regular, 8, room)[0];
+                from = PdfText.Clip(PdfText.Wrap(from, PdfFont.Regular, 8, room), 1, PdfFont.Regular, 8, room)[0];
             for (var i = 0; i < pages.Count; i++)
             {
                 pages[i].Line(Margin, FooterY + 12, Right, FooterY + 12, 0.5, PdfColor.Rule);

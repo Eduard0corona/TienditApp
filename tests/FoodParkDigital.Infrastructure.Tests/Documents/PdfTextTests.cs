@@ -32,6 +32,26 @@ public class PdfTextTests
         Assert.Equal("ab"u8.ToArray(), PdfText.Encode("a​😀b"));
         // A script these fonts never had is a question mark per character, so the reader sees something is missing.
         Assert.Equal("Wang ??"u8.ToArray(), PdfText.Encode("Wang 王芳"));
+        // A symbol they lack is left out, also inside the basic plane, with the space it leaves doubled once.
+        Assert.Equal("Listo para el lunes"u8.ToArray(), PdfText.Encode("Listo ✅ para ★ el lunes ❤"));
+        // A letter with a stroke or without a dot is its letter.
+        Assert.Equal(new byte[] { (byte)'L', 0xF3, (byte)'d', (byte)'z', (byte)' ', (byte)'I', (byte)'s', (byte)'t', (byte)'a', (byte)'n',
+            (byte)' ', (byte)'d', (byte)'a', (byte)'k' }, PdfText.Encode("Łódź İstan đak"));
+    }
+
+    [Fact]
+    public void Clip_ShouldKeepTheLinesThatFit_AndEndTheLastWithAnEllipsis()
+    {
+        var lines = PdfText.Wrap(string.Join(' ', Enumerable.Repeat("Plomería Díaz", 10)), PdfFont.Bold, 13, 120);
+
+        var clipped = PdfText.Clip(lines, 2, PdfFont.Bold, 13, 120);
+
+        Assert.Equal(2, clipped.Count);
+        Assert.Equal(lines[0], clipped[0]);
+        Assert.EndsWith("…", clipped[1]);
+        Assert.All(clipped, line => Assert.True(PdfText.Width(line, PdfFont.Bold, 13) <= 120, line));
+        Assert.Same(lines, PdfText.Clip(lines, lines.Count, PdfFont.Bold, 13, 120));
+        Assert.Equal("Cambio de tubería del baño", PdfText.OneLine(" Cambio de\ntubería\r\n  del baño "));
     }
 
     [Fact]

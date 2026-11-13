@@ -57,14 +57,14 @@ internal sealed class TenantCfdiPdfLogos : ICfdiPdfLogos
             await using var variant = await storage.OpenReadAsync(logoUrl + Variant, TenantStorageFolders.Logos(tenantId), cancellationToken);
             if (variant is null)
             {
-                _logger.LogWarning("The logo of business {TenantId} is not in its folder: its CFDI PDF goes without it", tenantId);
+                _logger.LogWarning("The logo of business {TenantId} is not in its folder: its PDF goes without it", tenantId);
                 return null;
             }
             return await _images.ToPngAsync(variant, MaxWidth, MaxHeight, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogWarning("The logo of business {TenantId} could not be read ({Error}): its CFDI PDF goes without it",
+            _logger.LogWarning("The logo of business {TenantId} could not be read ({Error}): its PDF goes without it",
                 tenantId, ex.GetType().Name);
             return null;
         }

@@ -28,14 +28,14 @@ public interface IQuotePdfRenderer
 }
 
 /// <summary>
-/// What the PDF of a version says, as the customer reads it on its page: of the customer, only their name. Every amount is
-/// the server's; <see cref="Status"/> is the status on the business's day (a sent one whose validity passed reads expired).
+/// What the PDF of a version says, as the customer reads it on its page: of the customer, only their name; of the business,
+/// its name and its phone (its contact email starts as its owner's: the page does not show it either). Every amount is the
+/// server's; <see cref="Status"/> is the status on the business's day (a sent one whose validity passed reads expired).
 /// </summary>
 public sealed record QuotePdfModel(
     Guid TenantId,
     string BusinessName,
     string? BusinessPhone,
-    string? BusinessEmail,
     string Number,
     int Revision,
     QuoteStatus Status,
@@ -72,8 +72,7 @@ public static class QuotePdfs
     /// business's time zone, as its validity.
     /// </summary>
     public static QuotePdfModel Model(
-        Quote quote, string businessName, string? businessPhone, string? businessEmail, string? timeZone, DateOnly today,
-        decimal? stillPaidForTheVisit)
+        Quote quote, string businessName, string? businessPhone, string? timeZone, DateOnly today, decimal? stillPaidForTheVisit)
     {
         var status = quote.StatusOn(today);
         var replied = status is QuoteStatus.Accepted or QuoteStatus.Rejected;
@@ -81,7 +80,6 @@ public static class QuotePdfs
             quote.TenantId,
             businessName,
             string.IsNullOrWhiteSpace(businessPhone) ? null : businessPhone.Trim(),
-            string.IsNullOrWhiteSpace(businessEmail) ? null : businessEmail.Trim(),
             quote.Number,
             quote.Revision,
             status,
@@ -108,25 +106,30 @@ public static class QuotePdfs
     {
         var business = await context.Tenants.AsNoTracking()
             .Where(t => t.Id == quote.TenantId)
-            .Select(t => new { t.Name, t.ContactPhone, t.ContactEmail })
+            .Select(t => new { t.Name, t.ContactPhone })
             .FirstAsync(cancellationToken);
         var timeZone = (await TenantSalesSettings.ReadAsync(context, quote.TenantId, cancellationToken)).TimeZone;
         var stillPaid = await QuoteVisitCredits.StillPaidAsync(context, quote, cancellationToken);
-        return Model(quote, business.Name, business.ContactPhone, business.ContactEmail, timeZone,
-            QuoteCalendar.Today(timeZone, now), stillPaid);
+        return Model(quote, business.Name, business.ContactPhone, timeZone, QuoteCalendar.Today(timeZone, now), stillPaid);
     }
 
+    /// <summary>How long a message waits for its PDF (its logo comes from the storage) before it goes without it.</summary>
+    public static readonly TimeSpan MessageRenderTimeout = TimeSpan.FromSeconds(10);
+
     /// <summary>
-    /// The PDF to send with a message, or null when it could not be rendered: the message goes without it (with its link),
-    /// never late or missing because of it.
+    /// The PDF to send with a message, or null when it could not be rendered in <paramref name="timeout"/> (by default
+    /// <see cref="MessageRenderTimeout"/>): the message goes without it (with its link), never late or missing because of it.
     /// </summary>
     public static async Task<byte[]?> RenderForMessageAsync(
         IQuotePdfRenderer renderer, IApplicationDbContext context, Quote quote, DateTimeOffset now, ILogger logger,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, TimeSpan? timeout = null)
     {
+        var model = await ModelAsync(context, quote, now, cancellationToken);
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(timeout ?? MessageRenderTimeout);
         try
         {
-            return await renderer.RenderAsync(await ModelAsync(context, quote, now, cancellationToken), cancellationToken);
+            return await renderer.RenderAsync(model, limit.Token);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
@@ -236,13 +239,9 @@ public class GetPublicQuotePdfQueryHandler : IRequestHandler<GetPublicQuotePdfQu
         if (!quote.LinkOpensOn(today) || quote.SentAt is null)
             return null;
 
-        var contact = await _context.Tenants.AsNoTracking()
-            .Where(t => t.Id == found.TenantId)
-            .Select(t => t.ContactEmail)
-            .FirstOrDefaultAsync(cancellationToken);
         var stillPaid = await QuoteVisitCredits.StillPaidAsync(_context, quote, cancellationToken);
         var pdf = await _renderer.RenderAsync(
-            QuotePdfs.Model(quote, business.Name, business.ContactPhone, contact, business.TimeZone, today, stillPaid),
+            QuotePdfs.Model(quote, business.Name, business.ContactPhone, business.TimeZone, today, stillPaid),
             cancellationToken);
         return new PrivateFileDownload(new MemoryStream(pdf), QuotePdfs.ContentType, QuotePdfs.FileName(quote.Number, quote.Revision));
     }
@@ -280,7 +279,9 @@ public sealed class QuoteWhatsAppDocuments
 
     /// <summary>
     /// Sends <paramref name="message"/> of <paramref name="quote"/> (read with its lines) with its PDF; null when it does not
-    /// go this way (a template, a caption too long, or a PDF that could not be rendered): then it goes as before.
+    /// go this way (a template, a caption too long, a PDF that could not be rendered or that WhatsApp did not take): then it
+    /// goes as before. Once the PDF was taken, how the message went is its outcome: sending the text after it could reach the
+    /// customer twice.
     /// </summary>
     public async Task<MessageSendResult?> SendAsync(OutgoingMessage message, Quote quote, CancellationToken cancellationToken)
     {
@@ -290,7 +291,7 @@ public sealed class QuoteWhatsAppDocuments
         if (pdf is null)
             return null;
 
-        return await _sender.SendDocumentAsync(
+        var sent = await _sender.SendDocumentAsync(
             message.TenantId,
             message.Phone,
             new WhatsAppDocument(pdf, QuotePdfs.ContentType, QuotePdfs.FileName(quote.Number, quote.Revision)),
@@ -299,5 +300,10 @@ public sealed class QuoteWhatsAppDocuments
             message.LanguageCode,
             [],
             cancellationToken);
+        if (!sent.NotUploaded)
+            return sent;
+        // WhatsApp did not take the PDF, so nothing reached the customer: the text goes alone, and only once.
+        _logger.LogWarning("The PDF of quote {QuoteId} was not uploaded to WhatsApp: its message goes without it", quote.Id);
+        return null;
     }
 }

@@ -64,19 +64,26 @@ internal static class PdfText
         ['”'] = 0x94, ['•'] = 0x95, ['–'] = 0x96, ['—'] = 0x97, ['˜'] = 0x98, ['™'] = 0x99, ['š'] = 0x9A, ['›'] = 0x9B,
         ['œ'] = 0x9C, ['ž'] = 0x9E, ['Ÿ'] = 0x9F,
         // Not in the encoding, but drawn the same by its nearest character.
-        ['−'] = 0x96, ['‐'] = (byte)'-', ['‑'] = (byte)'-', ['′'] = (byte)'\'', ['″'] = (byte)'"'
+        ['−'] = 0x96, ['‐'] = (byte)'-', ['‑'] = (byte)'-', ['′'] = (byte)'\'', ['″'] = (byte)'"',
+        // Letters with a stroke or without a dot, which do not decompose into a letter and a mark.
+        ['ł'] = (byte)'l', ['Ł'] = (byte)'L', ['ı'] = (byte)'i', ['đ'] = (byte)'d', ['Đ'] = (byte)'D', ['ħ'] = (byte)'h',
+        ['Ħ'] = (byte)'H', ['ŧ'] = (byte)'t', ['Ŧ'] = (byte)'T'
     };
+
+    /// <summary>The mark of a text cut short.</summary>
+    public const string Ellipsis = "…";
 
     private const byte Unknown = (byte)'?';
 
     /// <summary>
     /// <paramref name="text"/> in WinAnsiEncoding, on one line: line breaks, tabs and other spaces are a space, invisible
-    /// characters and emoji are left out, a letter with a mark the encoding lacks is the letter without it, and anything
-    /// else is a question mark.
+    /// characters, emoji and other symbols are left out (with the space they leave doubled, once), a letter with a mark the
+    /// encoding lacks is the letter without it, and anything else (another alphabet) is a question mark.
     /// </summary>
     public static byte[] Encode(string text)
     {
         var bytes = new List<byte>(text.Length);
+        var dropped = false;
         var normalized = text.Normalize(NormalizationForm.FormC);
         for (var i = 0; i < normalized.Length; i++)
         {
@@ -85,6 +92,7 @@ internal static class PdfText
             {
                 // Outside the basic plane: an emoji or a script these fonts never had.
                 i++;
+                dropped = true;
                 continue;
             }
             if (TryEncode(c, out var code))
@@ -103,11 +111,43 @@ internal static class PdfText
             var nearest = Nearest(c);
             if (nearest.Count > 0)
                 bytes.AddRange(nearest);
+            else if (CharUnicodeInfo.GetUnicodeCategory(c) is UnicodeCategory.OtherSymbol or UnicodeCategory.MathSymbol)
+                // ✅ ❤ ★ ☎: a symbol these fonts lack says nothing missing, unlike a letter.
+                dropped = true;
             else
                 bytes.Add(Unknown);
         }
-        return bytes.ToArray();
+        if (!dropped)
+            return bytes.ToArray();
+        // What was left out leaves the spaces around it together: one, and none at either end.
+        var joined = new List<byte>(bytes.Count);
+        foreach (var code in bytes)
+            if (code != (byte)' ' || (joined.Count > 0 && joined[^1] != (byte)' '))
+                joined.Add(code);
+        if (joined.Count > 0 && joined[^1] == (byte)' ')
+            joined.RemoveAt(joined.Count - 1);
+        return joined.ToArray();
     }
+
+    /// <summary>
+    /// At most <paramref name="maxLines"/> of <paramref name="lines"/>; when there were more, the last one kept ends with an
+    /// ellipsis, cut so it still fits in <paramref name="maxWidth"/>.
+    /// </summary>
+    public static IReadOnlyList<string> Clip(IReadOnlyList<string> lines, int maxLines, PdfFont font, double size, double maxWidth)
+    {
+        if (lines.Count <= maxLines)
+            return lines;
+        var kept = lines.Take(maxLines).ToList();
+        var last = kept[^1].TrimEnd();
+        while (last.Length > 0 && Width(last + Ellipsis, font, size) > maxWidth)
+            last = last[..^1].TrimEnd();
+        kept[^1] = last + Ellipsis;
+        return kept;
+    }
+
+    /// <summary>A text meant for one line or one block: its line breaks and runs of spaces are one space.</summary>
+    public static string OneLine(string? text)
+        => string.Join(' ', (text ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     /// <summary>How wide <paramref name="text"/> is in points, in <paramref name="font"/> at <paramref name="size"/>.</summary>
     public static double Width(string text, PdfFont font, double size) => Width(Encode(text), font, size);

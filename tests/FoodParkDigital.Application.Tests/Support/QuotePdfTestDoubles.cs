@@ -30,11 +30,14 @@ internal sealed class RecordingWhatsAppDocuments : IWhatsAppDocumentSender
 {
     public List<(string Phone, WhatsAppDocument Document, string Caption, string? TemplateName)> Sent { get; } = [];
 
+    /// <summary>What WhatsApp answers from now on, instead of taking it.</summary>
+    public MessageSendResult? Answer { get; set; }
+
     public Task<MessageSendResult> SendDocumentAsync(
         Guid tenantId, string phoneNumber, WhatsAppDocument document, string caption, string? templateName, string languageCode,
         string[] parameters, CancellationToken cancellationToken = default)
     {
         Sent.Add((phoneNumber, document, caption, templateName));
-        return Task.FromResult(MessageSendResult.Sent($"wamid.doc.{Sent.Count}"));
+        return Task.FromResult(Answer ?? MessageSendResult.Sent($"wamid.doc.{Sent.Count}"));
     }
 }
