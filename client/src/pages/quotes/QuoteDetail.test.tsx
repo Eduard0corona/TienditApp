@@ -345,6 +345,19 @@ describe('QuoteDetail', () => {
     expect(screen.getByText('El cliente pagó el anticipo desde su enlace: la orden lo tiene como pago en línea.')).toBeInTheDocument();
   });
 
+  it('no longer shows the deposit of a version answered without paying it (Fase 31N)', async () => {
+    // The business recorded an acceptance it got by phone: nothing is left to pay online.
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({
+      status: QuoteStatus.Accepted, replyChannel: QuoteReplyChannel.WhatsApp, depositAmount: 348, depositPaid: false,
+    }));
+    renderAt();
+
+    expect(await screen.findByText('Aceptada')).toBeInTheDocument();
+    expect(screen.queryByText('Anticipo para aceptarla')).not.toBeInTheDocument();
+    expect(screen.queryByText('Anticipo pagado en línea')).not.toBeInTheDocument();
+    expect(screen.queryByText(/el cliente la acepta pagando el anticipo/)).not.toBeInTheDocument();
+  });
+
   it('shows what the server said when it refuses to finish it', async () => {
     vi.mocked(quotesApi.get).mockResolvedValue(quote({ lines: [] }));
     vi.mocked(quotesApi.send).mockRejectedValue(refusal('Agrega al menos un renglón con precio antes de enviarla.'));

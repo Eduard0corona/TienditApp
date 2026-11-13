@@ -492,8 +492,9 @@ function QuoteDetail({ id }: { id: string }) {
                       <dd className="col-5 text-end fw-semibold mb-0">{formatMoney(quote.toPay)}</dd>
                     </>
                   )}
-                  {/* Fase 31N: the deposit this version asks to accept it from its link, fixed when it was sent. */}
-                  {quote.depositAmount != null && (
+                  {/* Fase 31N: the deposit this version asks to accept it from its link, fixed when it was sent: while it waits for an
+                      answer, or once paying it accepted it (as the link and the PDF say it). */}
+                  {quote.depositAmount != null && (quote.status === QuoteStatus.Sent || quote.depositPaid) && (
                     <>
                       <dt className="col-7 text-muted fw-normal">{quote.depositPaid ? 'Anticipo pagado en línea' : 'Anticipo para aceptarla'}</dt>
                       <dd className="col-5 text-end mb-0">{formatMoney(quote.depositAmount)}</dd>
