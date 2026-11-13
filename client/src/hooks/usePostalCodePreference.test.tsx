@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountApi } from '../api/accountApi';
 import { AuthContext, type AuthContextType } from '../contexts/AuthContextDefinition';
-import { pendingPostalCode, readPostalCode, savePostalCode } from '../utils/postalCodePreference';
+import { markPostalCodePending, pendingPostalCode, readPostalCode, savePostalCode } from '../utils/postalCodePreference';
 import { usePostalCodePreference } from './usePostalCodePreference';
 
 vi.mock('../api/accountApi', () => ({ accountApi: { getPostalCode: vi.fn(), savePostalCode: vi.fn() } }));
@@ -81,5 +81,38 @@ describe('usePostalCodePreference (Fase 31J)', () => {
     expect(next.result.current[0]).toBe('01000');
     expect(readPostalCode()).toBe('01000');
     await waitFor(() => expect(pendingPostalCode()).toBeNull());
+  });
+
+  it('forgets the mark once the account keeps another code, or the device takes the account\'s', async () => {
+    const render = () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider value={customer}>{children}</AuthContext.Provider>
+        </QueryClientProvider>
+      );
+      return renderHook(() => usePostalCodePreference(), { wrapper });
+    };
+    // 01000 could not go (offline); then 02000 does: the account has the newest, and the mark goes.
+    savePostalCode('72000');
+    account.getPostalCode.mockResolvedValue({ postalCode: '72000' });
+    account.savePostalCode.mockRejectedValue(new Error('Sin conexión'));
+    const first = render();
+    await waitFor(() => expect(first.result.current[0]).toBe('72000'));
+    act(() => first.result.current[1]('01000'));
+    await waitFor(() => expect(pendingPostalCode()).toBe('01000'));
+    account.savePostalCode.mockImplementation(async (postalCode) => ({ postalCode }) as never);
+    act(() => first.result.current[1]('02000'));
+    await waitFor(() => expect(account.savePostalCode).toHaveBeenLastCalledWith('02000'));
+    await waitFor(() => expect(pendingPostalCode()).toBeNull());
+    first.unmount();
+
+    // A mark of a code that is not the device's is old: the account's wins and the mark goes.
+    savePostalCode('05000');
+    markPostalCodePending('01000');
+    account.getPostalCode.mockResolvedValue({ postalCode: '04000' });
+    const next = render();
+    await waitFor(() => expect(next.result.current[0]).toBe('04000'));
+    expect(pendingPostalCode()).toBeNull();
   });
 });

@@ -44,6 +44,8 @@ export function usePostalCodePreference(): [string, (postalCode: string) => void
     if (pendingPostalCode() === postalCode && kept !== postalCode) {
       setToAccount({ code: postalCode });
     } else if (kept && kept !== postalCode) {
+      // The account's wins: a mark of another code (one the account got from somewhere else since) is old.
+      markPostalCodePending(null);
       savePostalCode(kept);
       setPostalCode(kept);
     } else if (!kept && postalCode) {
@@ -53,10 +55,12 @@ export function usePostalCodePreference(): [string, (postalCode: string) => void
 
   useEffect(() => {
     if (toAccount === null) return;
+    const markedBefore = pendingPostalCode();
     void accountApi.savePostalCode(toAccount.code)
       .then((saved) => {
         client.setQueryData(ACCOUNT_POSTAL_CODE_KEY, saved);
-        if (pendingPostalCode() === toAccount.code) markPostalCodePending(null);
+        // The account has a code newer than any marked before (unless another failed meanwhile, newer than this one).
+        if (pendingPostalCode() === markedBefore) markPostalCodePending(null);
       })
       .catch(() => markPostalCodePending(toAccount.code));
   }, [toAccount, client]);
