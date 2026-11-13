@@ -194,12 +194,22 @@ public class WhatsAppMediaFlowTests
         await storage.SaveAsync(theirs, new MemoryStream("OggS"u8.ToArray()), "audio/ogg");
         Assert.Equal(GetPrivateOrderFileQueryHandler.NotFoundError, (await Query(tenantId, storage).Handle(new GetWhatsAppMediaFileQuery(theirs), CancellationToken.None)).Error);
 
-        // Another business's, a key the app never creates, or one that is gone: like a missing one.
+        // A key the app never creates, even kept (a way out of the folder, another kind of file): like a missing one.
+        foreach (var never in new[]
+                 {
+                     $"whatsapp/{tenantId}/202611/../{Guid.NewGuid()}.ogg",
+                     $"whatsapp/{tenantId}/202611/../../whatsapp/{Guid.NewGuid()}/202611/{Guid.NewGuid()}.ogg",
+                     $"whatsapp/{tenantId}/202611/{Guid.NewGuid()}.exe"
+                 })
+        {
+            await storage.SaveAsync(never, new MemoryStream("OggS"u8.ToArray()), "audio/ogg");
+            Assert.Equal(GetPrivateOrderFileQueryHandler.NotFoundError, (await Query(tenantId, storage).Handle(new GetWhatsAppMediaFileQuery(never), CancellationToken.None)).Error);
+        }
+
+        // Another business's or one that is gone: like a missing one.
         foreach (var other in new[]
                  {
                      key.Replace(tenantId.ToString(), Guid.NewGuid().ToString()),
-                     $"whatsapp/{tenantId}/202611/../{Guid.NewGuid()}.ogg",
-                     $"whatsapp/{tenantId}/202611/{Guid.NewGuid()}.exe",
                      $"whatsapp/{tenantId}/202611/{Guid.NewGuid()}.webp"
                  })
             Assert.Equal(GetPrivateOrderFileQueryHandler.NotFoundError, (await Query(tenantId, storage).Handle(new GetWhatsAppMediaFileQuery(other), CancellationToken.None)).Error);
@@ -239,6 +249,11 @@ public class WhatsAppMediaFlowTests
         Assert.Equal(tenantId, parsed);
         Assert.False(WhatsAppMediaRules.TryParseKey($"orders/{tenantId}/service-intake/202611/{Guid.NewGuid()}.webp", out _));
         Assert.False(WhatsAppMediaRules.TryParseKey($"whatsapp/{tenantId}/2026/{Guid.NewGuid()}.webp", out _));
+        // Only the app's own shape: no way out of the folder, no other kind of file, nothing after the name.
+        Assert.False(WhatsAppMediaRules.TryParseKey($"whatsapp/{tenantId}/202611/../{Guid.NewGuid()}.ogg", out _));
+        Assert.False(WhatsAppMediaRules.TryParseKey($"whatsapp/{tenantId}/202611/../../whatsapp/{Guid.NewGuid()}/202611/{Guid.NewGuid()}.ogg", out _));
+        Assert.False(WhatsAppMediaRules.TryParseKey($"whatsapp/{tenantId}/202611/{Guid.NewGuid()}.exe", out _));
+        Assert.False(WhatsAppMediaRules.TryParseKey($"whatsapp/{tenantId}/202611/{Guid.NewGuid()}.ogg/x", out _));
         Assert.Equal(WhatsAppMediaRules.MaxAudioBytes, WhatsAppMediaRules.MaxBytes(WhatsAppMediaKind.Audio));
     }
 
