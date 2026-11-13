@@ -44,6 +44,7 @@ public sealed class MessagingWorkerService : BackgroundService
                 {
                     await _worker.QueueAppointmentRemindersAsync(stoppingToken);
                     await _worker.QueueAnswerRemindersAsync(stoppingToken);
+                    await _worker.QueueOnlineOrderRemindersAsync(stoppingToken);
                     await _worker.QueueCreditRemindersAsync(stoppingToken);
                     nextReminderScan = DateTimeOffset.UtcNow.Add(reminderInterval);
                 }

@@ -44,7 +44,7 @@ public class PlatformOrderIdsMigrationSqlServerTests
         }
 
         // This version reads it without a long id, and writes one.
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeAccountCarts.CreateContext(database, tenant.Id))
         {
             var order = await LoadAsync(context, orderId);
             Assert.Null(order.PlatformDetail!.ExternalOrderId);
@@ -60,7 +60,7 @@ public class PlatformOrderIdsMigrationSqlServerTests
             order.TransitionTo(OrderStatus.InPreparation, new FoodOrderStateMachine(), "cocina");
             await context.SaveChangesAsync();
         }
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeAccountCarts.CreateContext(database, tenant.Id))
         {
             var order = await LoadAsync(context, orderId);
             Assert.Equal(OrderStatus.InPreparation, order.Status);
@@ -75,7 +75,7 @@ public class PlatformOrderIdsMigrationSqlServerTests
         await MigrateAsync(database);
         var tenant = await SeedAsync(database);
         Guid withLongId;
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeAccountCarts.CreateContext(database, tenant.Id))
         {
             var order = await NewPlatformOrderAsync(context, tenant.Id, "ORD-000001", "BC953", "c1a2b3d4-0000-4e5f-8a9b-1234567890ab");
             await NewPlatformOrderAsync(context, tenant.Id, "ORD-000002", "BC954");
@@ -87,14 +87,14 @@ public class PlatformOrderIdsMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeLongIds));
         Assert.Equal(50032, error.Number);
         Assert.Contains("long id of orders of the delivery platforms", error.Message);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeAccountCarts.CreateContext(database, tenant.Id))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal("C1A2B3D4-0000-4E5F-8A9B-1234567890AB", (await LoadAsync(context, withLongId)).PlatformDetail!.ExternalOrderId);
         }
 
         // Once the business clears it, the rollback drops the column, its check and its index, and nothing else.
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeAccountCarts.CreateContext(database, tenant.Id))
         {
             var order = await LoadAsync(context, withLongId);
             Assert.True(order.ChangePlatformOrderId(null, DateTimeOffset.UtcNow));
@@ -124,7 +124,7 @@ public class PlatformOrderIdsMigrationSqlServerTests
         // Forward again (to this migration; later ones apply on top): every order starts without a long id, and one can be
         // written.
         await MigrateAsync(database, Migration);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeAccountCarts.CreateContext(database, tenant.Id))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.All(await context.PlatformOrderDetails.ToListAsync(), detail => Assert.Null(detail.ExternalOrderId));
@@ -138,7 +138,7 @@ public class PlatformOrderIdsMigrationSqlServerTests
     {
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant("Cocina sin local", slug, BusinessType.Food, $"{slug}@demo.com");
-        await using var seed = database.CreateContext();
+        await using var seed = BeforeAccountCarts.CreateContext(database);
         seed.AddRange(
             tenant,
             new TenantSettings(tenant.Id, TenantCapability.Food),

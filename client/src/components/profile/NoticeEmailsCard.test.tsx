@@ -11,6 +11,7 @@ vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 const REQUESTS = '/api/v1/appointments/request-emails';
 const QUOTES = '/api/v1/quotes/reply-emails';
 const ORDERS = '/api/v1/orders/cancellation-emails';
+const REVIEWS = '/api/v1/reviews/emails';
 
 function apiError(status: number, detail: string): AxiosError {
   const headers = new AxiosHeaders();
@@ -18,7 +19,7 @@ function apiError(status: number, detail: string): AxiosError {
   return new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, response);
 }
 
-const renderCard = (props: { agenda?: boolean; quotes?: boolean; orders?: boolean; ownsBusiness?: boolean } = {}) =>
+const renderCard = (props: { agenda?: boolean; quotes?: boolean; orders?: boolean; reviews?: boolean; ownsBusiness?: boolean } = {}) =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <NoticeEmailsCard
@@ -26,6 +27,7 @@ const renderCard = (props: { agenda?: boolean; quotes?: boolean; orders?: boolea
         agenda={props.agenda ?? true}
         quotes={props.quotes ?? true}
         orders={props.orders}
+        reviews={props.reviews}
         ownsBusiness={props.ownsBusiness}
       />
     </QueryClientProvider>,
@@ -69,15 +71,15 @@ describe('NoticeEmailsCard (Fases 29N and 29O)', () => {
     expect(apiRequest).not.toHaveBeenCalledWith('put', REQUESTS, expect.anything());
   });
 
-  it('lets whoever confirms the orders choose the online orders their customers cancel (Fase 30B)', async () => {
+  it('lets whoever confirms the orders choose the online orders that wait or their customers cancel (Fases 30B and 31K)', async () => {
     const user = userEvent.setup();
     serve({ [ORDERS]: { enabled: false } });
     renderCard({ agenda: false, quotes: false, orders: true });
 
-    const orders = await screen.findByRole('switch', { name: 'Pedidos cancelados' });
+    const orders = await screen.findByRole('switch', { name: 'Pedidos en línea' });
     await waitFor(() => expect(orders).toBeEnabled());
     expect(orders).not.toBeChecked();
-    expect(orders).toHaveAccessibleDescription('Cada pedido en línea de Estética Luna que su cliente cancela antes de que lo aceptes, o que alguien más del equipo cancela porque el cliente lo pidió.');
+    expect(orders).toHaveAccessibleDescription('Cada pedido en línea de Estética Luna que lleva 15 minutos sin que nadie lo acepte o lo rechace, que su cliente cancela antes de que lo aceptes, o que alguien más del equipo cancela porque el cliente lo pidió.');
     expect(screen.queryByRole('switch', { name: 'Citas en línea' })).not.toBeInTheDocument();
 
     await user.click(orders);
@@ -85,6 +87,23 @@ describe('NoticeEmailsCard (Fases 29N and 29O)', () => {
     await waitFor(() => expect(orders).toBeChecked());
     expect(apiRequest).toHaveBeenCalledWith('put', ORDERS, { body: { enabled: true } });
     expect(apiRequest).not.toHaveBeenCalledWith('get', REQUESTS, expect.anything());
+  });
+
+  it('lets whoever answers the reviews choose the new ones (Fase 31K)', async () => {
+    const user = userEvent.setup();
+    serve({ [REVIEWS]: { enabled: true } });
+    renderCard({ agenda: false, quotes: false, reviews: true });
+
+    const reviews = await screen.findByRole('switch', { name: 'Reseñas' });
+    await waitFor(() => expect(reviews).toBeChecked());
+    expect(reviews).toHaveAccessibleDescription('Cada reseña nueva que un cliente escribe de Estética Luna, con sus estrellas y su comentario.');
+    expect(screen.queryByRole('switch', { name: 'Pedidos en línea' })).not.toBeInTheDocument();
+
+    await user.click(reviews);
+
+    await waitFor(() => expect(reviews).not.toBeChecked());
+    expect(apiRequest).toHaveBeenCalledWith('put', REVIEWS, { body: { enabled: false } });
+    expect(apiRequest).not.toHaveBeenCalledWith('get', ORDERS, expect.anything());
   });
 
   it('shows only the notices the person may choose', async () => {

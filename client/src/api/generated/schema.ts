@@ -8923,6 +8923,171 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/carts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyCartDto"][];
+                        "application/json": components["schemas"]["MyCartDto"][];
+                        "text/json": components["schemas"]["MyCartDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/carts/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveMyCartRequest"];
+                    "text/json": components["schemas"]["SaveMyCartRequest"];
+                    "application/*+json": components["schemas"]["SaveMyCartRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyCartDto"];
+                        "application/json": components["schemas"]["MyCartDto"];
+                        "text/json": components["schemas"]["MyCartDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/postal-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyPostalCodeDto"];
+                        "application/json": components["schemas"]["MyPostalCodeDto"];
+                        "text/json": components["schemas"]["MyPostalCodeDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["MyPostalCodeRequest"];
+                    "text/json": components["schemas"]["MyPostalCodeRequest"];
+                    "application/*+json": components["schemas"]["MyPostalCodeRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyPostalCodeDto"];
+                        "application/json": components["schemas"]["MyPostalCodeDto"];
+                        "text/json": components["schemas"]["MyPostalCodeDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/reviews": {
         parameters: {
             query?: never;
@@ -14517,6 +14682,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviews/emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewEmailsDto"];
+                        "application/json": components["schemas"]["ReviewEmailsDto"];
+                        "text/json": components["schemas"]["ReviewEmailsDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateReviewEmailsCommand"];
+                    "text/json": components["schemas"]["UpdateReviewEmailsCommand"];
+                    "application/*+json": components["schemas"]["UpdateReviewEmailsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewEmailsDto"];
+                        "application/json": components["schemas"]["ReviewEmailsDto"];
+                        "text/json": components["schemas"]["ReviewEmailsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{id}/reply": {
         parameters: {
             query?: never;
@@ -16920,6 +17149,9 @@ export interface components {
             status: string;
             /** Format: date-time */
             sentAt: string;
+            mediaKind?: string | null;
+            mediaState?: string | null;
+            mediaPath?: string | null;
         };
         ChatMessageDtoPaginatedList: {
             items: components["schemas"]["ChatMessageDto"][];
@@ -17204,6 +17436,7 @@ export interface components {
             requestEmails?: boolean | null;
             quoteReplyEmails?: boolean | null;
             orderCancellationEmails?: boolean | null;
+            reviewEmails?: boolean | null;
         };
         CreateInventoryLocationCommand: {
             name: string;
@@ -18140,6 +18373,7 @@ export interface components {
             requests: boolean;
             quoteReplies: boolean;
             orderCancellations: boolean;
+            reviews: boolean;
             emailConfirmed: boolean;
         };
         EmployeePermissionOptionDto: {
@@ -19264,6 +19498,25 @@ export interface components {
          * @enum {integer}
          */
         MyAppointmentsScope: 0 | 1;
+        MyCartDto: {
+            slug: string;
+            businessName: string;
+            /** Format: date-time */
+            savedAt: string;
+            lines: components["schemas"]["MyCartLineDto"][];
+            /** Format: int32 */
+            reorderOf?: number | null;
+            /** Format: int32 */
+            skipped?: number | null;
+        };
+        MyCartLineDto: {
+            /** Format: uuid */
+            productId: string;
+            optionIds: string[];
+            /** Format: int32 */
+            quantity: number;
+            notes?: string | null;
+        };
         MyFavoriteBusinessDto: {
             slug: string;
             name: string;
@@ -19358,6 +19611,12 @@ export interface components {
          * @enum {integer}
          */
         MyOrdersScope: 0 | 1 | 2;
+        MyPostalCodeDto: {
+            postalCode?: string | null;
+        };
+        MyPostalCodeRequest: {
+            postalCode?: string | null;
+        };
         MyReviewDto: {
             slug: string;
             businessName: string;
@@ -21808,6 +22067,11 @@ export interface components {
          * @enum {integer}
          */
         ReviewConcern: 1 | 2 | 3 | 4 | 5;
+        ReviewEmailsDto: {
+            enabled: boolean;
+            email?: string | null;
+            emailConfirmed: boolean;
+        };
         ReviewReplyRequest: {
             text?: string | null;
         };
@@ -21898,6 +22162,13 @@ export interface components {
             isActive: boolean;
             /** Format: int32 */
             revision: number;
+        };
+        SaveMyCartRequest: {
+            lines?: components["schemas"]["MyCartLineDto"][] | null;
+            /** Format: int32 */
+            reorderOf?: number | null;
+            /** Format: int32 */
+            skipped?: number | null;
         };
         SavePlatformPricesRequest: {
             products: components["schemas"]["PlatformProductPriceRequest"][];
@@ -22679,6 +22950,7 @@ export interface components {
             requestEmails?: boolean | null;
             quoteReplyEmails?: boolean | null;
             orderCancellationEmails?: boolean | null;
+            reviewEmails?: boolean | null;
         };
         UpdateHomeVisitRequestsSettingsCommand: {
             enabled: boolean;
@@ -22868,6 +23140,9 @@ export interface components {
             onlineReplies?: boolean | null;
         };
         UpdateRequestEmailsCommand: {
+            enabled: boolean;
+        };
+        UpdateReviewEmailsCommand: {
             enabled: boolean;
         };
         UpdateSalesPolicyCommand: {

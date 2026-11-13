@@ -13,6 +13,7 @@ import { getBusinessTheme } from '../../utils/businessThemes';
 import { goToExternalPage } from '../../utils/externalNavigation';
 import { onlineCheckoutReturnKey } from '../../utils/onlineCheckouts';
 import { readCart, saveCart } from '../../utils/savedCart';
+import { cancelAccountCartSaves } from '../../utils/accountCartSync';
 import { applyBusinessTheme } from '../../utils/theme';
 import PublicMenuPage from './PublicMenuPage';
 
@@ -36,6 +37,7 @@ vi.mock('../../api/accountApi', () => ({
   accountApi: {
     getAddresses: vi.fn(), saveAddress: vi.fn(), updateAddress: vi.fn(), deleteAddress: vi.fn(),
     getFavorites: vi.fn(), saveFavorite: vi.fn(), removeFavorite: vi.fn(),
+    getCarts: vi.fn(), saveCart: vi.fn(),
   },
 }));
 
@@ -128,11 +130,14 @@ function renderPage(path = '/m/cafe-luna', auth?: Partial<AuthContextType>, from
       </Routes>
     </MemoryRouter>
   );
-  return render(
+  const tree = (session?: Partial<AuthContextType>) => (
     <QueryClientProvider client={queryClient}>
-      {auth ? <AuthContext.Provider value={auth as AuthContextType}>{page}</AuthContext.Provider> : page}
-    </QueryClientProvider>,
+      {session ? <AuthContext.Provider value={session as AuthContextType}>{page}</AuthContext.Provider> : page}
+    </QueryClientProvider>
   );
+  const view = render(tree(auth));
+  // The same page with another session (a sign-out here or in another tab), and the cache it shares with Explorar.
+  return { ...view, queryClient, withSession: (session: Partial<AuthContextType>) => view.rerender(tree(session)) };
 }
 
 /** Signed in with a customer account (Fase 24B), or with one of a business's team. */
@@ -154,6 +159,8 @@ describe('PublicMenuPage', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    // A cart waiting to go to the account does not go in the next test.
+    cancelAccountCartSaves();
   });
 
   it('shows the menu in the colors of its business, and gives the browser back its own when leaving', async () => {
@@ -664,6 +671,181 @@ describe('PublicMenuPage', () => {
       expect(readCart('cafe-luna')?.skipped).toBeUndefined();
     });
 
+    // Fase 31J (ADR 0090): the cart of a customer account follows them to another device.
+    const accountCart = (quantity: number, savedAt: string) => ({
+      slug: 'cafe-luna', businessName: 'Café Luna', savedAt, lines: [{ productId: 'p1', optionIds: [], quantity, notes: null }],
+    });
+
+    it('brings back the cart the account left on another device when it changed later, and keeps there what changes', async () => {
+      // Within the week a cart lasts: here two hours ago, on the other device an hour ago.
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 1 }] }, new Date(Date.now() - 2 * 3_600_000));
+      const accountSavedAt = new Date(Date.now() - 3_600_000).toISOString();
+      account.getCarts.mockResolvedValue([accountCart(3, accountSavedAt)]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 3/ })).toBeInTheDocument();
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: [], quantity: 3 }]);
+      // With the account's time, not this device's: a clock ahead does not make it newer than what the account keeps later.
+      expect(readCart('cafe-luna')?.savedAt).toBe(accountSavedAt);
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 4 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+      // What came from the account is not sent back to it as it was.
+      expect(account.saveCart).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps what the customer adds while the account\'s carts are read, with the cart that comes back', async () => {
+      let answer: (carts: ReturnType<typeof accountCart>[]) => void = () => undefined;
+      account.getCarts.mockReturnValue(new Promise((resolve) => { answer = resolve; }) as never);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+      // The menu shows before the account answers: a Latte is added meanwhile.
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      expect(screen.getByRole('button', { name: /^Ver pedido · 1/ })).toBeInTheDocument();
+      answer([accountCart(2, new Date(Date.now() - 3_600_000).toISOString())]);
+
+      // The two the account kept, and the one added.
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 3/ })).toBeInTheDocument();
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: [], quantity: 3 }]);
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 3 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+    });
+
+    it('keeps what the menu does not have now when the store just opens, here and in the account, until something changes', async () => {
+      // Chilaquiles are sold for breakfast only: not now.
+      const latte = menu().categories[0].products[0];
+      const chilaquiles = { ...latte, id: 'p2', name: 'Chilaquiles', price: 90, availableNow: false };
+      account.getCarts.mockResolvedValue([{
+        slug: 'cafe-luna', businessName: 'Café Luna', savedAt: new Date(Date.now() - 3_600_000).toISOString(),
+        lines: [{ productId: 'p1', optionIds: [], quantity: 2, notes: null }, { productId: 'p2', optionIds: [], quantity: 1, notes: null }],
+      }]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu({ categories: [{ id: 'c1', name: 'Bebidas', products: [latte, chilaquiles] }] }));
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toBeInTheDocument();
+      // A visit takes them out of neither the account nor this device.
+      await new Promise((resolve) => { setTimeout(resolve, 1000); });
+      expect(account.saveCart).not.toHaveBeenCalled();
+      expect(readCart('cafe-luna')?.lines.map((line) => [line.productId, line.quantity])).toEqual([['p1', 2], ['p2', 1]]);
+      // A change made here sends what the page shows.
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 3 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+    });
+
+    it('keeps the cart of the device when it changed later, and gives it to the account', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 2 }] });
+      account.getCarts.mockResolvedValue([accountCart(5, '2020-01-01T00:00:00Z')]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toBeInTheDocument();
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 2 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+    });
+
+    it('forgets the cart of the device when the account ordered or emptied it later on another device', async () => {
+      // Kept two hours ago here; ordered an hour ago on another device (both within the week a cart lasts).
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 2 }] }, new Date(Date.now() - 2 * 3_600_000));
+      account.getCarts.mockResolvedValue([{ ...accountCart(1, new Date(Date.now() - 3_600_000).toISOString()), lines: [] }]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+      expect(await screen.findByRole('heading', { name: 'Café Luna', level: 1 })).toBeInTheDocument();
+      await waitFor(() => expect(readCart('cafe-luna')).toBeNull());
+      expect(screen.queryByRole('button', { name: /^Ver pedido/ })).not.toBeInTheDocument();
+      // Nothing to send back: the account already has it empty.
+      await new Promise((resolve) => { setTimeout(resolve, 1000); });
+      expect(account.saveCart).not.toHaveBeenCalled();
+    });
+
+    it('keeps the cart of the device without sending it when the account\'s carts cannot be read, until it changes here', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 2 }] });
+      account.getCarts.mockRejectedValue(new Error('Sin conexión'));
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toBeInTheDocument();
+      // Not over a cart of the account that may be newer.
+      await new Promise((resolve) => { setTimeout(resolve, 1000); });
+      expect(account.saveCart).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p1', optionIds: [], quantity: 3 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+    });
+
+    it('lets a customer who signs out (here or in another tab) take the cart, without keeping it again on the device', async () => {
+      account.getCarts.mockResolvedValue([]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+      const page = renderPage('/m/cafe-luna', signedInAs('Customer'));
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: [], quantity: 1 }]);
+
+      // The other tab signed out: it forgot the carts of this device, and this tab hears of it.
+      window.localStorage.removeItem('tienditapp.carts');
+      page.withSession({ isAuthenticated: false, isLoading: false, user: null });
+
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Ver pedido/ })).not.toBeInTheDocument());
+      expect(readCart('cafe-luna')).toBeNull();
+    });
+
+    it('tells Explorar what the account keeps once a save arrives, an emptied cart included', async () => {
+      account.getCarts.mockResolvedValue([accountCart(1, new Date(Date.now() - 3_600_000).toISOString())]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue(undefined as never);
+      api.getMenu.mockResolvedValue(menu());
+      const page = renderPage('/m/cafe-luna', signedInAs('Customer'));
+      await userEvent.click(await screen.findByRole('button', { name: /^Ver pedido · 1/ }));
+
+      // Emptied here: the account keeps it empty (204), and the carts Explorar reads no longer offer it.
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Tu pedido' })).getByRole('button', { name: 'Quitar Latte' }));
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith('cafe-luna', { lines: [], reorderOf: null, skipped: null }), { timeout: 3000 });
+      await waitFor(() => expect(page.queryClient.getQueryData(['me', 'carts'])).toEqual([]));
+    });
+
+    it('waits for the session before bringing back a cart, and a business\'s team keeps it only on the device', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p1', optionIds: [], quantity: 2 }] });
+      api.getMenu.mockResolvedValue(menu());
+
+      const { unmount } = renderPage('/m/cafe-luna', { isAuthenticated: false, isLoading: true, user: null });
+      expect(await screen.findByRole('heading', { name: 'Café Luna', level: 1 })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Ver pedido/ })).not.toBeInTheDocument();
+      unmount();
+
+      renderPage('/m/cafe-luna', signedInAs('TenantAdmin'));
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: [], quantity: 3 }]);
+      expect(account.getCarts).not.toHaveBeenCalled();
+      expect(account.saveCart).not.toHaveBeenCalled();
+    });
+
     it('keeps the cart open and what goes in it while the order is on its way', async () => {
       const user = userEvent.setup();
       api.getMenu.mockResolvedValue(menu());
@@ -731,6 +913,8 @@ describe('PublicMenuPage', () => {
         { id: 'a2', label: 'Oficina', postalCode: '72160', addressLine: 'Calle 5 de Mayo 8', references: null, lastUsedAt: null },
       ]);
       api.placeOrder.mockResolvedValue(receipt({ linkedToAccount: true, trackingToken: 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE' }) as never);
+      account.getCarts.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
 
       renderPage('/m/cafe-luna', signedInAs('Customer'));
       await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
@@ -764,6 +948,8 @@ describe('PublicMenuPage', () => {
       // The account finds it in Mis pedidos: it follows it, with nothing to keep.
       expect(screen.getByRole('link', { name: 'Seguir tu pedido' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Copiar enlace de seguimiento' })).not.toBeInTheDocument();
+      // Its cart was emptied in the account too: the carts are read again (Explorar no longer offers it).
+      await waitFor(() => expect(account.getCarts).toHaveBeenCalledTimes(2));
     });
 
     it('lets a business\'s team order as a guest, without its name or addresses', async () => {

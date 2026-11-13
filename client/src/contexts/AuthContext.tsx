@@ -6,6 +6,7 @@ import { queryKeys } from '../api/queries';
 import { queryClient } from '../api/queryClient';
 import { apiRequest } from '../api/typedClient';
 import type { LoginRequest, TwoFactorLoginRequest, UserProfileDto } from '../types';
+import { forgetCustomerDevice, rememberCustomerDevice } from '../utils/customerDevice';
 import { AuthContext, type AcceptInvitationRequest, type LoginResult } from './AuthContextDefinition';
 import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
@@ -36,6 +37,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const clearSession = useCallback(() => {
+    // A customer account keeps its carts and postal code (Fase 31J): the device forgets them, however the session ends.
+    forgetCustomerDevice();
     setAccessToken(null);
     setUser(null);
     setSessionMarker(false);
@@ -51,9 +54,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // The token's role and permission claims can be older than a change made by an admin: the server's current
       // access wins when it answers (menus and guards only; the API checks every request itself).
       const access = await apiRequest('get', '/api/v1/me/access').catch(() => null);
-      setUser(access?.isMember
+      const profile = access?.isMember
         ? { ...data, role: access.role ?? data.role, permissions: access.permissions ?? data.permissions }
-        : data);
+        : data;
+      rememberCustomerDevice(profile);
+      setUser(profile);
       queryClient.removeQueries({ queryKey: queryKeys.myAccess });
     } catch {
       setUser(null);
@@ -77,7 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await refreshProfile();
         }
       } catch {
-        // No valid refresh cookie; user needs to log in.
+        // No valid refresh cookie; user needs to log in. One the server refused ended the session (`expired`, which forgets
+        // a customer account's carts); a passing failure (offline) keeps them for when it comes back.
         setUser(null);
         setSessionMarker(false);
       } finally {

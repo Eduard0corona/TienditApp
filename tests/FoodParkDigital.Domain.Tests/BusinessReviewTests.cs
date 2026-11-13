@@ -1,6 +1,7 @@
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Domain.Reviews.Enums;
+using FoodParkDigital.Domain.Reviews.Events;
 
 namespace FoodParkDigital.Domain.Tests;
 
@@ -22,6 +23,21 @@ public class BusinessReviewTests
         Assert.Null(review.EditedAt);
         // Stars alone are a review too.
         Assert.Null(Review(comment: "   ").Comment);
+    }
+
+    [Fact]
+    public void Write_ShouldTellItsBusiness_AndEditingShouldNotTellItAgain()
+    {
+        var business = Guid.NewGuid();
+        var review = BusinessReview.Write(business, Guid.NewGuid(), "Mariana O.", 5, "Muy ricos.", Now);
+
+        var written = Assert.IsType<BusinessReviewWrittenEvent>(Assert.Single(review.DomainEvents));
+        Assert.Equal((review.Id, business), (written.ReviewId, written.TenantId));
+
+        review.ClearDomainEvents();
+        review.Edit("Mariana O.", 2, "Ya no tan ricos.", Now.AddDays(1));
+        review.ReplyWith("Gracias, lo revisamos.", Now.AddDays(1));
+        Assert.Empty(review.DomainEvents);
     }
 
     [Theory]

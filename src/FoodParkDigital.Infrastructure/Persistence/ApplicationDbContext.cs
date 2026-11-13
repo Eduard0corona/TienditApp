@@ -167,6 +167,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<CustomerBalanceEntry> CustomerBalanceEntries => Set<CustomerBalanceEntry>();
     public DbSet<AccountAddress> AccountAddresses => Set<AccountAddress>();
     public DbSet<FavoriteBusiness> FavoriteBusinesses => Set<FavoriteBusiness>();
+    public DbSet<AccountCart> AccountCarts => Set<AccountCart>();
     public DbSet<BusinessReview> BusinessReviews => Set<BusinessReview>();
     public DbSet<OnlinePaymentAccount> OnlinePaymentAccounts => Set<OnlinePaymentAccount>();
     public DbSet<OnlinePaymentAuthorization> OnlinePaymentAuthorizations => Set<OnlinePaymentAuthorization>();

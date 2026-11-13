@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Offcanvas } from 'react-bootstrap';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress } from '../../api/accountApi';
+import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress, type MyCart } from '../../api/accountApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicMenuApi, type PlacePublicOrder, type PublicMenuProduct, type PublicOrderReceipt } from '../../api/publicMenuApi';
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
@@ -37,15 +37,20 @@ import { getOptionsLabel, getPriceWithOptions } from '../../utils/productOptions
 import { localPhone } from '../../utils/phones';
 import { readPostalCode } from '../../utils/postalCodePreference';
 import {
+  cartLineKey,
+  fromAccountCart,
+  joinLines,
+  lineNotes,
   MAX_CART_LINES,
   MAX_LINE_QUANTITY,
-  cartLineKey,
-  lineNotes,
+  newerCart,
   readCart,
   restoreLines,
   saveCart,
   type CartLine,
+  type SavedCartLine,
 } from '../../utils/savedCart';
+import { cartSignature, scheduleAccountCartSave, type AccountCartPayload } from '../../utils/accountCartSync';
 import { bookingPath } from '../../utils/onlineBooking';
 import { featuredProducts, mapsUrl, optionGroupsOf, searchMenu, storePageTitle } from '../../utils/storeMenu';
 import { previewBusinessTheme } from '../../utils/theme';
@@ -59,6 +64,16 @@ import PublicDeliveryFields, { type PublicDeliveryAddress } from './PublicDelive
 import './PublicMenuPage.css';
 
 type MenuLine = CartLine<PublicMenuProduct>;
+
+/** The lines as this device and the account keep them: what was chosen, never a price. */
+function savedLinesOf(lines: readonly MenuLine[]): SavedCartLine[] {
+  return lines.map((line) => ({
+    productId: line.product.id,
+    optionIds: line.optionIds,
+    quantity: line.quantity,
+    ...(line.notes ? { notes: line.notes } : {}),
+  }));
+}
 
 /** The element of a category's section, for its tab. */
 const sectionId = (categoryId: string) => `pm-cat-${categoryId}`;
@@ -169,7 +184,7 @@ export default function PublicMenuPage() {
   const [toAddress, setToAddress] = useState(false);
   const [address, setAddress] = useState<PublicDeliveryAddress>(NO_ADDRESS);
   const queryClient = useQueryClient();
-  const { customer, signedIn } = useCustomerAccount();
+  const { customer, signedIn, checking } = useCustomerAccount();
   // At a table there is no heart: the favorites are not asked for.
   const favorites = useFavoriteBusinesses(undefined, { enabled: !atTable });
   // The product of the link, once its menu is fresh (a copy kept from a moment ago may not have it yet, or still have it).
@@ -202,6 +217,8 @@ export default function PublicMenuPage() {
   const [restoredFor, setRestoredFor] = useState<string | null>(null);
   const [restoredNotice, setRestoredNotice] = useState('');
   const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
+  // The customer account whose cart this page holds, while its session lasts.
+  const [cartOwner, setCartOwner] = useState<string | null>(null);
   // The key of the order being sent: the same order sent again (an answer lost) keeps it, and the server places it once.
   const attempt = useRef<{ signature: string; key: string } | null>(null);
 
@@ -225,16 +242,59 @@ export default function PublicMenuPage() {
     setName((current) => current || `${customer.firstName} ${customer.lastName}`.trim());
     setPhone((current) => current || localPhone(customer.phoneNumber));
   }
+  // A customer who leaves, here or in another tab of this browser (Fase 31J), takes the cart: the device already forgot
+  // it, and it is not kept again on it for whoever comes next.
+  if (customer && cartOwner !== customer.id) setCartOwner(customer.id);
+  if (!customer && !checking && cartOwner !== null) {
+    setCartOwner(null);
+    setLines([]);
+    setRestoredNotice('');
+  }
 
-  // The cart this device kept for this store, with what its menu has now (and «Pedir otra vez»), once per store.
-  if (data && restoredFor !== slug) {
+  // The carts the customer account left (Fase 31J): its cart here may come from another device.
+  const accountCarts = useQuery({
+    queryKey: ['me', 'carts'],
+    queryFn: ({ signal }) => accountApi.getCarts(signal),
+    enabled: !!customer && !checking,
+    // Read each time the store opens: one remembered from a moment ago may miss what another device changed since.
+    staleTime: 0,
+  });
+  // What the account received last of this store's cart: the same cart is not sent again.
+  const accountCartSent = useRef<string | null>(null);
+  // The cart restored as it was kept (also what the menu does not have now) and when (the server's time, from the account).
+  const restoredCart = useRef<{ signature: string; kept: AccountCartPayload; savedAt: Date } | null>(null);
+  // Who the session is, and with an account its carts read now, are known (or could not be read: the device's then).
+  const accountKnown = !checking && (!customer || accountCarts.isFetchedAfterMount);
+
+  // The cart this device kept for this store, or the account's when it changed later, with what its menu has now (and
+  // «Pedir otra vez»), once per store. The account's may be empty (ordered or emptied on another device later): this
+  // device's then goes too.
+  if (data && restoredFor !== slug && accountKnown) {
     setRestoredFor(slug);
-    const saved = readCart(slug);
-    if (saved) {
-      const restored = restoreLines(saved.lines, data.categories.flatMap((item) => item.products));
-      setLines(restored.lines);
+    const accountRead = !!customer && accountCarts.isSuccess;
+    const kept = accountRead ? accountCarts.data?.find((cart) => cart.slug === slug) ?? null : null;
+    const fromAccount = kept ? fromAccountCart(kept) : null;
+    const saved = newerCart(readCart(slug), fromAccount);
+    const restored = saved && saved.lines.length > 0
+      ? restoreLines(saved.lines, data.categories.flatMap((item) => item.products))
+      : null;
+    restoredCart.current = saved && restored
+      ? {
+          signature: cartSignature({ lines: savedLinesOf(restored.lines) }),
+          kept: { lines: saved.lines, reorderOf: saved.reorderOf, skipped: saved.skipped },
+          savedAt: new Date(saved.savedAt),
+        }
+      : null;
+    if (saved && restored) {
+      // The menu shows while the session and the account's carts are read: what was added meanwhile stays, with it.
+      setLines((added) => joinLines(restored.lines, added));
       setRestoredNotice(restoredMessage(restored.lines.length, restored.dropped, saved.skipped ?? 0, saved.reorderOf !== undefined));
     }
+    // What the account has: the same cart is not sent again. When it could not be read, what this device restores: only
+    // a change made here goes then, never this device's cart over a newer one of the account.
+    accountCartSent.current = accountRead
+      ? cartSignature(fromAccount ?? { lines: [] })
+      : cartSignature(restoredCart.current?.kept ?? { lines: [] });
   }
 
   // The first time the order goes to an address: the account's last one used, or the postal code given in Explorar.
@@ -313,20 +373,30 @@ export default function PublicMenuPage() {
     tabsRow.scrollTo?.({ left: tab.offsetLeft - (tabsRow.clientWidth - tab.offsetWidth) / 2 });
   }, [activeSection, tabsRow]);
 
-  // The cart stays on this device until it is sent or emptied.
+  // The cart stays on this device until it is sent or emptied, and with a customer account in the account too (Fase 31J),
+  // a moment after its last change: it follows the customer to another device.
   const businessName = data?.businessName;
+  const customerId = customer?.id;
   useEffect(() => {
     if (restoredFor !== slug || !businessName) return;
-    saveCart(slug, {
-      businessName,
-      lines: lines.map((line) => ({
-        productId: line.product.id,
-        optionIds: line.optionIds,
-        quantity: line.quantity,
-        ...(line.notes ? { notes: line.notes } : {}),
-      })),
+    const shown = savedLinesOf(lines);
+    // Unchanged since it came back, it stays as it was kept and when: what the menu does not have now (a product out of its
+    // hours) is not taken out of it by a visit, and a device clock ahead does not make it newer than the account's.
+    const unchanged = restoredCart.current?.signature === cartSignature({ lines: shown }) ? restoredCart.current : null;
+    const kept = unchanged?.kept ?? { lines: shown };
+    saveCart(slug, { businessName, ...kept }, unchanged?.savedAt);
+    if (!customerId) return;
+    const signature = cartSignature(kept);
+    if (signature === accountCartSent.current) return;
+    accountCartSent.current = signature;
+    scheduleAccountCartSave(slug, kept, (saved) => {
+      // Explorar reads the same carts: it offers what the account keeps now, not what it had when this store opened.
+      queryClient.setQueryData<MyCart[]>(['me', 'carts'], (carts) => carts && [
+        ...(saved ? [saved] : []),
+        ...carts.filter((cart) => cart.slug !== slug),
+      ]);
     });
-  }, [lines, restoredFor, slug, businessName]);
+  }, [lines, restoredFor, slug, businessName, customerId, queryClient]);
 
   const add = (product: PublicMenuProduct, optionIds: string[], note?: string, quantity = 1) => {
     const lineNote = lineNotes(note);
@@ -418,6 +488,8 @@ export default function PublicMenuPage() {
       setCartOpen(false);
       setRestoredNotice('');
       if (customer && delivering) void queryClient.invalidateQueries({ queryKey: ['me', 'addresses'] });
+      // Its cart was emptied in the account too: Explorar no longer offers it.
+      if (customer) void queryClient.invalidateQueries({ queryKey: ['me', 'carts'] });
       if (result.linkedToAccount) void queryClient.invalidateQueries({ queryKey: ['me', 'orders'] });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo enviar el pedido. Intenta de nuevo.'));

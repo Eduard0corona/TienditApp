@@ -238,6 +238,9 @@ public class ArchitectureTests
             // The businesses a customer account keeps among its favorites (Fase 24F): read only by the account's own id; the
             // business it points to (BusinessId) is not its owner.
             "FavoriteBusiness",
+            // The cart a customer account leaves in a store (Fase 31J, ADR 0090): read only by the account's own id, like a
+            // favorite; the business it is for (BusinessId) is not its owner and never sees it.
+            "AccountCart",
             // A child of a tenant-scoped aggregate, filtered through it (its conversation's business).
             "WhatsAppMessage"
         };

@@ -42,6 +42,12 @@ export interface ChatMessageDto {
   body: string;
   status: string;
   sentAt: string;
+  /** A photo ("Image") or an audio ("Audio") the customer sent, which the chat shows (Fase 31L). */
+  mediaKind?: string | null;
+  /** "Pending" while it downloads, "Saved" once kept, "Unavailable" when only its marker stays. */
+  mediaState?: string | null;
+  /** The private file ("/files/whatsapp/..."), opened with the session, once kept. */
+  mediaPath?: string | null;
 }
 
 export interface SendChatMessageRequest {

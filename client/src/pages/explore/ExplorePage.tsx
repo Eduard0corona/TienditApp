@@ -8,14 +8,16 @@ import DirectoryProducts from '../../components/explore/DirectoryProducts';
 import DirectoryServices from '../../components/explore/DirectoryServices';
 import FavoriteBusinesses from '../../components/explore/FavoriteBusinesses';
 import FavoriteButton from '../../components/explore/FavoriteButton';
+import { accountApi } from '../../api/accountApi';
+import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useFavoriteBusinesses, type FavoriteBusinesses as Favorites } from '../../hooks/useFavoriteBusinesses';
 import { useNearMe, type NearMe } from '../../hooks/useNearMe';
+import { usePostalCodePreference } from '../../hooks/usePostalCodePreference';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { BUSINESS_CATEGORIES, categoryBySlug } from '../../utils/businessCategories';
-import { readPostalCode, savePostalCode } from '../../utils/postalCodePreference';
 import { isPostalCode } from '../../utils/postalCodes';
-import { latestCart } from '../../utils/savedCart';
+import { latestCart, latestPendingCart } from '../../utils/savedCart';
 import './ExplorePage.css';
 
 const PAGE_SIZE = 24;
@@ -89,8 +91,8 @@ function useMorePagesArrived(search: DirectorySearch, pagesShown: number, slugs:
 }
 
 /**
- * «Entregar en…» (Fase 24B): the postal code the cards answer for, asked once and remembered on this device. Never sent
- * anywhere but to Explorar's own search.
+ * «Entregar en…» (Fase 24B): the postal code the cards answer for, asked once and remembered on this device, and with a
+ * customer account in the account (Fase 31J). Never sent anywhere else but to Explorar's own search.
  */
 function PostalCodeChip({ postalCode, onChange }: { postalCode: string; onChange: (postalCode: string) => void }) {
   const inputId = useId();
@@ -196,9 +198,23 @@ function NearMeChip({ near, onToggle, onRetry }: { near: NearMe; onToggle: () =>
  */
 export default function ExplorePage() {
   const searchId = useId();
-  const [postalCode, setPostalCode] = useState(readPostalCode);
+  const [postalCode, setPostalCode] = usePostalCodePreference();
   const favorites = useFavoriteBusinesses(postalCode || undefined);
-  const [pendingCart] = useState(() => latestCart());
+  // A cart left without sending, on this device or, with a customer account, on another one (Fase 31J).
+  const [devicePending, setDevicePending] = useState(() => latestCart());
+  const { customer, checking } = useCustomerAccount();
+  // A customer left (here or in another tab) and the device forgot their carts: neither does the page keep one.
+  const [cartsOf, setCartsOf] = useState(customer?.id ?? null);
+  if ((customer?.id ?? null) !== cartsOf) {
+    setCartsOf(customer?.id ?? null);
+    setDevicePending(latestCart());
+  }
+  const accountCarts = useQuery({
+    queryKey: ['me', 'carts'],
+    queryFn: ({ signal }) => accountApi.getCarts(signal),
+    enabled: !!customer && !checking,
+  });
+  const pendingCart = latestPendingCart(devicePending, customer ? accountCarts.data ?? [] : []);
   const { categoria } = useParams();
   const [params, setParams] = useSearchParams();
   const category = categoryBySlug(categoria);
@@ -349,10 +365,7 @@ export default function ExplorePage() {
         </form>
         <PostalCodeChip
           postalCode={postalCode}
-          onChange={(code) => {
-            savePostalCode(code);
-            setPostalCode(code);
-          }}
+          onChange={setPostalCode}
         />
         <NearMeChip near={near} onToggle={toggleNear} onRetry={() => setNearAttempt((attempt) => attempt + 1)} />
       </section>

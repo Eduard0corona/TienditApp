@@ -3,6 +3,7 @@ import { Offcanvas } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import CustomerCardPanel from '../../components/customers/CustomerCardPanel';
+import ChatMedia from '../../components/whatsapp/ChatMedia';
 import { chatApi } from '../../api/chatApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useChatSignalR } from '../../hooks/useChatSignalR';
@@ -55,7 +56,7 @@ export default function WhatsAppChat() {
   const [newChatMessage, setNewChatMessage] = useState('');
   const [startingChat, setStartingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { onNewMessage, onConversationUpdated, onMessageStatus } = useChatSignalR();
+  const { onNewMessage, onConversationUpdated, onMessageStatus, onMessageMedia } = useChatSignalR();
   const [now, setNow] = useState(() => Date.now());
   const [togglingReplies, setTogglingReplies] = useState(false);
   const { user } = useAuth();
@@ -196,6 +197,16 @@ export default function WhatsAppChat() {
       setMessages((prev) => prev.map((m) => (m.id === update.messageId ? { ...m, status: update.status } : m)));
     });
   }, [onMessageStatus]);
+
+  // SignalR: the photo or audio of a customer was kept, or given up (Fase 31L).
+  useEffect(() => {
+    return onMessageMedia((update) => {
+      if (update.conversationId !== selectedIdRef.current) return;
+      setMessages((prev) => prev.map((m) => (
+        m.id === update.messageId ? { ...m, mediaState: update.mediaState, mediaPath: update.mediaPath ?? null } : m
+      )));
+    });
+  }, [onMessageMedia]);
 
   const pausedUntil = selectedConvo?.autoRepliesPausedUntil ? new Date(selectedConvo.autoRepliesPausedUntil) : null;
   const repliesPaused = !!pausedUntil && pausedUntil.getTime() > now;
@@ -528,6 +539,7 @@ export default function WhatsAppChat() {
                           className={`d-flex mb-2 ${isOutbound ? 'justify-content-end' : 'justify-content-start'}`}
                         >
                           <div className={`wa-message-bubble ${isOutbound ? 'wa-message-out' : 'wa-message-in'} rounded p-2 position-relative`}>
+                            {msg.mediaKind && <ChatMedia message={msg} />}
                             <p className="mb-1" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                               {msg.body}
                             </p>

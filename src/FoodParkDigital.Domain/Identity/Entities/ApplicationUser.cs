@@ -14,6 +14,11 @@ public class ApplicationUser : IdentityUser<Guid>
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     /// <summary>When the last SMS code of this account was sent: one per minute, whatever the screen asking.</summary>
     public DateTimeOffset? SmsCodeSentAt { get; set; }
+    /// <summary>
+    /// The postal code a customer account gives in Explorar («Entregar en…», Fase 31J, ADR 0090), five digits, so it follows
+    /// the customer to another device; null without one. Only a customer account keeps one.
+    /// </summary>
+    public string? PostalCode { get; set; }
 
     public string FullName => $"{FirstName} {LastName}";
 }

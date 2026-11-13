@@ -51,6 +51,9 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Ignore(o => o.IsOpenTab);
         builder.Ignore(o => o.CurrentRound);
         builder.Ignore(o => o.IsDeliveryPlatformOrder);
+        builder.Ignore(o => o.WaitsForConfirmation);
+        // Fase 31K (ADR 0091): when its business was reminded that it still waited; null for every other order.
+        builder.Property(o => o.ConfirmReminderSentAt);
         builder.Property(o => o.IsTab).HasDefaultValue(false).ValueGeneratedNever();
         builder.Property(o => o.SoldOnCredit).HasDefaultValue(false).ValueGeneratedNever();
         builder.Property(o => o.TenantId).IsRequired();

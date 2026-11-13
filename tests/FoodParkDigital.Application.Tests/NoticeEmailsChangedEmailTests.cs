@@ -139,11 +139,35 @@ public class NoticeEmailsChangedEmailTests
         var (_, _, on) = Assert.Single(await SendAsync(fixture, salon, cashier, owner, orderCancellationEmails: true));
         var (_, _, off) = Assert.Single(await SendAsync(fixture, salon, waiter, owner, orderCancellationEmails: false));
 
-        Assert.Contains("<li>Ahora te llegan los pedidos en línea que sus clientes cancelan o piden cancelar.</li>", on);
+        // Since the Fase 31K they also bring the reminder of the one still waiting 15 minutes.
+        Assert.Contains("<li>Ahora te llegan los pedidos en línea que llevan 15 minutos sin confirmar y los que sus clientes cancelan o piden cancelar.</li>", on);
         Assert.DoesNotContain("cotizaciones", on);
-        Assert.Contains("<li>Ya no te llegan los pedidos en línea que sus clientes cancelan o piden cancelar.</li>", off);
+        Assert.Contains("<li>Ya no te llegan los pedidos en línea que llevan 15 minutos sin confirmar ni los que sus clientes cancelan o piden cancelar.</li>", off);
         // Turned off again since: this one no longer says what they get.
         Assert.Empty(await SendAsync(fixture, salon, waiter, owner, orderCancellationEmails: true));
+    }
+
+    [Fact]
+    public async Task TheNewReviews_ShouldBeSaidToo_OnlyToWhoAnswersThem_WhileTheyStillGetThem()
+    {
+        // Fase 31K (ADR 0091).
+        await using var fixture = SalesTestFixture.Create();
+        var salon = await SalonAsync(fixture, "Estética Luna");
+        var owner = await MemberAsync(fixture, salon, "Mariana", TenantUserRole.Owner);
+        var admin = await MemberAsync(fixture, salon, "Rosa", TenantUserRole.Admin, chooseReviews: true);
+        var manager = await MemberAsync(fixture, salon, "Lucía", TenantUserRole.Admin, chooseReviews: false);
+        var clerk = await MemberAsync(fixture, salon, "Pepe", TenantUserRole.Staff, chooseReviews: true);
+
+        var (_, _, on) = Assert.Single(await SendAsync(fixture, salon, admin, owner, reviewEmails: true));
+        var (_, _, off) = Assert.Single(await SendAsync(fixture, salon, manager, owner, reviewEmails: false));
+
+        Assert.Contains("<li>Ahora te llegan las reseñas nuevas de sus clientes.</li>", on);
+        Assert.DoesNotContain("pedidos", on);
+        Assert.Contains("<li>Ya no te llegan las reseñas nuevas de sus clientes.</li>", off);
+        // Staff do not answer the reviews: theirs would not arrive, so nothing is said.
+        Assert.Empty(await SendAsync(fixture, salon, clerk, owner, reviewEmails: true));
+        // Turned off again since: this one no longer says what they get.
+        Assert.Empty(await SendAsync(fixture, salon, manager, owner, reviewEmails: true));
     }
 
     private static async Task<Tenant> SalonAsync(SalesTestFixture fixture, string name)
@@ -163,7 +187,7 @@ public class NoticeEmailsChangedEmailTests
 
     private static async Task<List<(string To, string Subject, string Body)>> SendAsync(
         SalesTestFixture fixture, Tenant tenant, Guid memberUserId, Guid changedBy, bool? requestEmails = null,
-        bool? quoteReplyEmails = null, Tenant? membershipOf = null, bool? orderCancellationEmails = null)
+        bool? quoteReplyEmails = null, Tenant? membershipOf = null, bool? orderCancellationEmails = null, bool? reviewEmails = null)
     {
         var membership = await fixture.Context.TenantUsers.IgnoreQueryFilters()
             .SingleAsync(m => m.UserId == memberUserId && m.TenantId == (membershipOf ?? tenant).Id);
@@ -171,7 +195,8 @@ public class NoticeEmailsChangedEmailTests
         var emails = new Emails();
         await new NoticeEmailsChangedEmailHandler(fixture.Context, new MembersAccess(fixture.Context), emails, new Links(AppUrl))
             .HandleAsync(
-                new TenantUserNoticeEmailsChangedEvent(membership.Id, changedBy, requestEmails, quoteReplyEmails, orderCancellationEmails),
+                new TenantUserNoticeEmailsChangedEvent(
+                    membership.Id, changedBy, requestEmails, quoteReplyEmails, orderCancellationEmails, reviewEmails),
                 Context(tenant),
                 CancellationToken.None);
         return emails.Sent;

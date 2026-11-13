@@ -37,7 +37,7 @@ public class AccountAddressesMigrationSqlServerTests
         }
 
         await ExecuteAsync(database, $"DELETE FROM [AspNetUsers] WHERE [Id] = {userId}");
-        await using var check = database.CreateContext();
+        await using var check = BeforeAccountCarts.CreateContext(database);
         Assert.Equal(0, await CountAsync(check, $"SELECT COUNT(*) AS [Value] FROM [AccountAddresses]"));
     }
 
@@ -51,7 +51,7 @@ public class AccountAddressesMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeAddresses));
         Assert.Equal(50017, error.Number);
         Assert.Contains("Customer accounts saved addresses", error.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [AccountAddresses]"));
@@ -59,7 +59,7 @@ public class AccountAddressesMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeAddresses);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             Assert.Equal(BeforeAddresses, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 1), (
@@ -71,7 +71,7 @@ public class AccountAddressesMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the table and the index are back.
         await MigrateAsync(database, BeforeAddresses);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext();
+        await using var forward = BeforeAccountCarts.CreateContext(database);
         Assert.Equal((1, 1), (
             await CountAsync(forward, $"SELECT COUNT(*) AS [Value] FROM sys.tables WHERE [name] = N'AccountAddresses'"),
             await CountAsync(forward, $"SELECT COUNT(*) AS [Value] FROM sys.indexes WHERE [name] = N'IX_DeliveryZonePostalCodes_PostalCode'")));
@@ -80,7 +80,7 @@ public class AccountAddressesMigrationSqlServerTests
     /// <summary>A customer account with its home saved.</summary>
     private static async Task<Guid> SeedAccountWithAnAddressAsync(SqlServerTestDatabase database)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeAccountCarts.CreateContext(database);
         var user = new ApplicationUser
         {
             Id = Guid.NewGuid(),
@@ -109,7 +109,7 @@ public class AccountAddressesMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, FormattableString sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeAccountCarts.CreateContext(database);
         await context.Database.ExecuteSqlInterpolatedAsync(sql);
     }
 

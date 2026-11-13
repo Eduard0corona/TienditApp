@@ -46,6 +46,7 @@ public interface IApplicationDbContext
     DbSet<CustomerBalanceEntry> CustomerBalanceEntries { get; }
     DbSet<AccountAddress> AccountAddresses { get; }
     DbSet<FavoriteBusiness> FavoriteBusinesses { get; }
+    DbSet<AccountCart> AccountCarts { get; }
     DbSet<BusinessReview> BusinessReviews { get; }
     DbSet<OnlinePaymentAccount> OnlinePaymentAccounts { get; }
     DbSet<OnlinePaymentAuthorization> OnlinePaymentAuthorizations { get; }

@@ -34,4 +34,11 @@ public class WhatsAppNotificationService : IWhatsAppNotificationService
             .Group($"chat_{tenantId}")
             .SendAsync("MessageStatus", new { ConversationId = conversationId, MessageId = messageId, Status = status });
     }
+
+    public async Task NotifyMessageMedia(Guid tenantId, Guid conversationId, Guid messageId, string mediaState, string? mediaPath)
+    {
+        await _hubContext.Clients
+            .Group($"chat_{tenantId}")
+            .SendAsync("MessageMedia", new { ConversationId = conversationId, MessageId = messageId, MediaState = mediaState, MediaPath = mediaPath });
+    }
 }

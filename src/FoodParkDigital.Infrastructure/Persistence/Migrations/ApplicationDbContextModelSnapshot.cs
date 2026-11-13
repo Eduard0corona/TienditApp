@@ -1207,6 +1207,54 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.AccountCart", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("BusinessId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("ReorderOf")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("SavedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("Skipped")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("_lines")
+                        .IsRequired()
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("Lines");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessId");
+
+                    b.HasIndex("UserId", "BusinessId")
+                        .IsUnique();
+
+                    b.ToTable("AccountCarts", (string)null);
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.Customer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2944,6 +2992,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("bit");
 
+                    b.Property<string>("PostalCode")
+                        .HasMaxLength(5)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(5)");
+
                     b.Property<int>("Role")
                         .HasColumnType("int");
 
@@ -4562,6 +4615,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("ClientRequestId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ConfirmReminderSentAt")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -7101,6 +7157,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool?>("RequestEmails")
                         .HasColumnType("bit");
 
+                    b.Property<bool?>("ReviewEmails")
+                        .HasColumnType("bit");
+
                     b.Property<int>("Role")
                         .HasColumnType("int");
 
@@ -7278,6 +7337,22 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(200)");
 
+                    b.Property<string>("MediaId")
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<int?>("MediaKind")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MediaPath")
+                        .HasMaxLength(300)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(300)");
+
+                    b.Property<int?>("MediaState")
+                        .HasColumnType("int");
+
                     b.Property<DateTimeOffset>("SentAt")
                         .HasColumnType("datetimeoffset");
 
@@ -7292,7 +7367,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConversationId", "SentAt");
 
-                    b.ToTable("WhatsAppMessages", (string)null);
+                    b.ToTable("WhatsAppMessages", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_WhatsAppMessages_Media", "([MediaKind] IS NULL AND [MediaId] IS NULL AND [MediaPath] IS NULL AND [MediaState] IS NULL) OR ([MediaKind] IN (1, 2) AND [MediaId] IS NOT NULL AND (([MediaState] IN (0, 2) AND [MediaPath] IS NULL) OR ([MediaState] = 1 AND [MediaPath] IS NOT NULL)))");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Infrastructure.BackgroundJobs.Inbox.InboxMessage", b =>
@@ -7707,6 +7785,21 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.AccountAddress", b =>
                 {
+                    b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.AccountCart", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("BusinessId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")

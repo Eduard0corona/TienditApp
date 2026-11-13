@@ -29,6 +29,9 @@ public class TenantUserConfiguration : IEntityTypeConfiguration<TenantUser>
         // Fase 30B (ADR 0082): null until they choose, when only the owners get them.
         builder.Property(x => x.OrderCancellationEmails);
         builder.Ignore(x => x.GetsOrderCancellationEmails);
+        // Fase 31K (ADR 0091): the new reviews; null until they choose, when only the owners get them.
+        builder.Property(x => x.ReviewEmails);
+        builder.Ignore(x => x.GetsReviewEmails);
 
         builder.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
         builder.HasIndex(x => x.TenantId);

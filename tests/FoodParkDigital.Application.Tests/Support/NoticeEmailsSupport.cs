@@ -26,6 +26,7 @@ internal static class NoticeEmailsSupport
     /// <param name="choose">What they chose for the agenda's notices (Fase 29N), if they chose.</param>
     /// <param name="chooseQuotes">What they chose for the answers to quotes (Fase 29O), if they chose.</param>
     /// <param name="chooseOrderCancellations">What they chose for the online orders their customers cancel (Fase 30B), if they chose.</param>
+    /// <param name="chooseReviews">What they chose for the new reviews (Fase 31K), if they chose.</param>
     public static async Task<Guid> MemberAsync(
         SalesTestFixture fixture,
         Tenant tenant,
@@ -37,7 +38,8 @@ internal static class NoticeEmailsSupport
         bool emailConfirmed = true,
         bool accountActive = true,
         bool? chooseQuotes = null,
-        bool? chooseOrderCancellations = null)
+        bool? chooseOrderCancellations = null,
+        bool? chooseReviews = null)
     {
         var email = $"{name}.{tenant.Slug}@demo.com";
         var account = new ApplicationUser
@@ -60,6 +62,8 @@ internal static class NoticeEmailsSupport
             member.ChooseQuoteReplyEmails(chosenForQuotes);
         if (chooseOrderCancellations is { } chosenForOrders)
             member.ChooseOrderCancellationEmails(chosenForOrders);
+        if (chooseReviews is { } chosenForReviews)
+            member.ChooseReviewEmails(chosenForReviews);
         fixture.Context.Users.Add(account);
         fixture.Context.TenantUsers.Add(member);
         await fixture.Context.SaveChangesAsync();

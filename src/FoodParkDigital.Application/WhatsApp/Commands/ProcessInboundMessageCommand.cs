@@ -25,6 +25,10 @@ public record ProcessInboundMessageCommand : IRequest<Result<ChatMessageDto>>
     public string ExternalMessageId { get; init; } = null!;
     /// <summary>A photo, voice note, location... stored as a marker ("📷 Foto"): the automatic replies skip it.</summary>
     public bool IsMedia { get; init; }
+    /// <summary>A photo or an audio the chat downloads and shows (Fase 31L), with <see cref="MediaId"/>; null for the rest.</summary>
+    public WhatsAppMediaKind? MediaKind { get; init; }
+    /// <summary>The id WhatsApp gave the photo or audio, to download it.</summary>
+    public string? MediaId { get; init; }
 }
 
 public class ProcessInboundMessageCommandHandler
@@ -115,9 +119,10 @@ public class ProcessInboundMessageCommandHandler
                 conversation.UpdateCustomerName(request.ProfileName);
             }
 
-            // Add inbound message
-            var message = conversation.AddMessage(
-                MessageDirection.Inbound, request.Body, request.ExternalMessageId);
+            // Add inbound message; a photo or an audio is downloaded in the background (Fase 31L).
+            var message = request.MediaKind is { } kind && WhatsAppMessage.IsMediaId(request.MediaId)
+                ? conversation.AddInboundMedia(request.Body, request.ExternalMessageId, kind, request.MediaId!)
+                : conversation.AddMessage(MessageDirection.Inbound, request.Body, request.ExternalMessageId);
 
             try
             {

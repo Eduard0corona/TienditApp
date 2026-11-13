@@ -11,8 +11,11 @@ namespace FoodParkDigital.Domain.Tenants.Events;
 /// <param name="RequestEmails">The agenda's notices (each request online and each cancellation), now on or off.</param>
 /// <param name="QuoteReplyEmails">The answers to quotes, now on or off.</param>
 /// <param name="OrderCancellationEmails">
-/// The online orders their customers cancel (Fase 30B), now on or off; missing in the messages stored before.
+/// The online orders their customers cancel (Fase 30B) and, since the Fase 31K, those still waiting to be accepted, now on or
+/// off; missing in the messages stored before.
 /// </param>
+/// <param name="ReviewEmails">The new reviews (Fase 31K, ADR 0091), now on or off; missing in the messages stored before.</param>
 public sealed record TenantUserNoticeEmailsChangedEvent(
-    Guid TenantUserId, Guid ChangedByUserId, bool? RequestEmails, bool? QuoteReplyEmails, bool? OrderCancellationEmails = null)
+    Guid TenantUserId, Guid ChangedByUserId, bool? RequestEmails, bool? QuoteReplyEmails, bool? OrderCancellationEmails = null,
+    bool? ReviewEmails = null)
     : DomainEvent;

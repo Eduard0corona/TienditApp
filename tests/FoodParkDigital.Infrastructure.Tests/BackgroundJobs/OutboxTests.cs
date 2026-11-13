@@ -367,7 +367,14 @@ public class OutboxTests
             new FoodParkDigital.Domain.Quotes.Events.QuoteAnsweredFromLinkEvent(Guid.NewGuid(), TenantA, Accepted: true),
             new FoodParkDigital.Domain.Quotes.Events.QuoteReplyEmailEvent(Guid.NewGuid(), Guid.NewGuid()),
             new FoodParkDigital.Domain.Tenants.Events.TenantUserNoticeEmailsChangedEvent(Guid.NewGuid(), Guid.NewGuid(), true, null, false),
-            new OrderCancellationEmailEvent(Guid.NewGuid(), Guid.NewGuid())
+            new FoodParkDigital.Domain.Tenants.Events.TenantUserNoticeEmailsChangedEvent(
+                Guid.NewGuid(), Guid.NewGuid(), null, null, null, ReviewEmails: true),
+            new OrderCancellationEmailEvent(Guid.NewGuid(), Guid.NewGuid()),
+            new OnlineOrderWaitingEvent(Guid.NewGuid(), TenantA),
+            new OnlineOrderWaitingEmailEvent(Guid.NewGuid(), Guid.NewGuid()),
+            new FoodParkDigital.Domain.Reviews.Events.BusinessReviewWrittenEvent(Guid.NewGuid(), TenantA),
+            new FoodParkDigital.Domain.Reviews.Events.BusinessReviewEmailEvent(Guid.NewGuid(), Guid.NewGuid()),
+            new FoodParkDigital.Domain.WhatsApp.Events.WhatsAppMediaReceivedEvent(Guid.NewGuid(), TenantA)
         };
 
         foreach (var domainEvent in events)

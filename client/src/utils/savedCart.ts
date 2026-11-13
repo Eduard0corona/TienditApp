@@ -1,4 +1,5 @@
 import type { ProductOptionGroupDto } from '../types';
+import { CARTS_STORAGE_KEY } from './customerDevice';
 import { getLineKey, getOptionsLabel, getPriceWithOptions, getSelectionError } from './productOptions';
 
 /** A line of a cart as the device keeps it: what was chosen, never a price (the menu says it when opened). */
@@ -42,7 +43,7 @@ export interface CartLine<P extends CartMenuProduct> {
   notes?: string;
 }
 
-const STORAGE_KEY = 'tienditapp.carts';
+const STORAGE_KEY = CARTS_STORAGE_KEY;
 /** A cart left longer than this is not offered again. */
 export const CART_DAYS = 7;
 /** The carts one device keeps, the most recent ones. */
@@ -116,6 +117,14 @@ export function readCart(slug: string, now = new Date()): SavedCart | null {
   return fresh({ ...cart, lines }, now) ? { ...cart, lines, skipped } : null;
 }
 
+/** The carts this device keeps, one per store: fresh and with something in them. */
+export function deviceCarts(now = new Date()): { slug: string; cart: SavedCart }[] {
+  return Object.keys(readAll()).flatMap((slug) => {
+    const cart = readCart(slug, now);
+    return cart ? [{ slug, cart }] : [];
+  });
+}
+
 /** Keeps the cart of a store; an empty one is forgotten. */
 export function saveCart(slug: string, cart: Omit<SavedCart, 'savedAt'>, now = new Date()): void {
   const carts = readAll();
@@ -131,8 +140,30 @@ export function clearCart(slug: string): void {
   writeAll(carts);
 }
 
+/**
+ * The account kept this cart (Fase 31J): the device takes the account's time for it, so «the one changed last» compares the
+ * server's clock with the server's, never this device's (which may run ahead). Only while the cart is still the one sent.
+ */
+export function adoptAccountSavedAt(slug: string, lines: readonly SavedCartLine[], savedAt: string): void {
+  const time = Date.parse(savedAt);
+  const carts = readAll();
+  const cart = carts[slug];
+  if (!cart || !Number.isFinite(time) || JSON.stringify(cart.lines) !== JSON.stringify(lines)) return;
+  carts[slug] = { ...cart, savedAt: new Date(time).toISOString() };
+  writeAll(carts);
+}
+
+/** A cart left without sending, for «Tienes un pedido sin enviar en…». */
+export interface PendingCart {
+  slug: string;
+  businessName: string;
+  itemCount: number;
+  /** When it last changed (ISO). */
+  savedAt: string;
+}
+
 /** The cart left the most recently in any store, for «Tienes un pedido sin enviar en…»; null without one. */
-export function latestCart(now = new Date()): { slug: string; businessName: string; itemCount: number } | null {
+export function latestCart(now = new Date()): PendingCart | null {
   const [latest] = Object.keys(readAll())
     .map((slug) => ({ slug, cart: readCart(slug, now) }))
     .filter((entry): entry is { slug: string; cart: SavedCart } => entry.cart !== null)
@@ -142,8 +173,63 @@ export function latestCart(now = new Date()): { slug: string; businessName: stri
       slug: latest.slug,
       businessName: latest.cart.businessName,
       itemCount: latest.cart.lines.reduce((sum, line) => sum + line.quantity, 0),
+      savedAt: latest.cart.savedAt,
     }
     : null;
+}
+
+/** A cart as a customer account keeps it (Fase 31J): its store, when it changed, its lines and «Pedir otra vez». */
+export interface AccountCartLike {
+  slug: string;
+  businessName: string;
+  savedAt: string;
+  lines: Array<{ productId: string; optionIds: string[]; quantity: number; notes?: string | null }>;
+  reorderOf?: number | null;
+  skipped?: number | null;
+}
+
+/** The account's cart as the device keeps it. */
+export function fromAccountCart(cart: AccountCartLike): SavedCart {
+  return {
+    businessName: cart.businessName,
+    savedAt: cart.savedAt,
+    lines: cart.lines.map((line) => ({
+      productId: line.productId,
+      optionIds: [...line.optionIds],
+      quantity: line.quantity,
+      ...(line.notes ? { notes: line.notes } : {}),
+    })).filter(isLine),
+    ...(cart.reorderOf ? { reorderOf: cart.reorderOf } : {}),
+    ...(cart.skipped ? { skipped: cart.skipped } : {}),
+  };
+}
+
+/**
+ * Of the cart of this device and the account's, the one changed last (the device's when both changed at once). The
+ * account's may be empty: ordered or emptied on another device after this one kept its cart, which then goes too.
+ */
+export function newerCart(device: SavedCart | null, account: SavedCart | null): SavedCart | null {
+  if (!device || !account) return device ?? account;
+  return Date.parse(account.savedAt) > Date.parse(device.savedAt) ? account : device;
+}
+
+/**
+ * Of the cart left on this device and the account's, the one changed last, for «Tienes un pedido sin enviar en…». The
+ * device's does not count when the account changed the same store's later (ordered or emptied on another device).
+ */
+export function latestPendingCart(device: PendingCart | null, account: readonly AccountCartLike[]): PendingCart | null {
+  const candidates: PendingCart[] = account
+    .filter((cart) => cart.lines.length > 0)
+    .map((cart) => ({
+      slug: cart.slug,
+      businessName: cart.businessName,
+      itemCount: cart.lines.reduce((sum, line) => sum + line.quantity, 0),
+      savedAt: cart.savedAt,
+    }));
+  const replaced = device !== null && account.some((cart) => cart.slug === device.slug
+    && Date.parse(cart.savedAt) > Date.parse(device.savedAt));
+  if (device && !replaced) candidates.push(device);
+  return candidates.sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt))[0] ?? null;
 }
 
 /**
@@ -172,6 +258,20 @@ export function linesOfOrder(
     });
   }
   return { lines: [...lines.values()].slice(0, MAX_CART_LINES), skipped };
+}
+
+/**
+ * The lines restored, and then what the customer added while they were read (Fase 31J): nothing chosen is lost. The same
+ * product with the same options and note adds its quantity (up to what a line takes); another goes last while there is room.
+ */
+export function joinLines<L extends { key: string; quantity: number }>(restored: L[], added: L[]): L[] {
+  const joined = [...restored];
+  for (const line of added) {
+    const index = joined.findIndex((existing) => existing.key === line.key);
+    if (index >= 0) joined[index] = { ...joined[index], quantity: Math.min(joined[index].quantity + line.quantity, MAX_LINE_QUANTITY) };
+    else if (joined.length < MAX_CART_LINES) joined.push(line);
+  }
+  return joined;
 }
 
 /**

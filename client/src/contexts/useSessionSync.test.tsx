@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../hooks/useTenant';
-import { reloadForTenantChange } from './useSessionSync';
+import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
 vi.mock('../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../hooks/useTenant', () => ({ useTenant: vi.fn() }));
@@ -37,5 +37,18 @@ describe('reloadForTenantChange', () => {
     // The page for businesses is lazy: at / its fallback would show instead.
     expect(screen.queryByText('Cargando…')).not.toBeInTheDocument();
     expect(window.location.pathname).toBe(path);
+  });
+});
+
+describe('useSessionSync', () => {
+  it('ends the session when another tab signs out (Fase 31J: ending it stops the cart saves of this one)', async () => {
+    const clearSession = vi.fn();
+    const { unmount } = renderHook(() => useSessionSync(clearSession));
+
+    // Another tab of this browser signed out.
+    broadcastSessionChange({ type: 'logout' });
+
+    await waitFor(() => expect(clearSession).toHaveBeenCalledTimes(1));
+    unmount();
   });
 });

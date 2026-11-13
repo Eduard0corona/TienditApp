@@ -34,9 +34,15 @@ public record UpdateEmployeeCommand : IRequest<Result<EmployeeDto>>
     /// <summary>Whether they get an email with each answer to a quote from its link; null leaves what they have.</summary>
     public bool? QuoteReplyEmails { get; init; }
     /// <summary>
-    /// Whether they get an email with each online order its customer cancels (Fase 30B, ADR 0082); null leaves what they have.
+    /// Whether they get an email with each online order its customer cancels (Fase 30B, ADR 0082), and the reminder of the one
+    /// still waiting to be accepted (Fase 31K); null leaves what they have.
     /// </summary>
     public bool? OrderCancellationEmails { get; init; }
+    /// <summary>
+    /// Whether they get an email with each new review (Fase 31K, ADR 0091), which only owners and admins answer; null leaves
+    /// what they have.
+    /// </summary>
+    public bool? ReviewEmails { get; init; }
 }
 
 public class UpdateEmployeeCommandValidator : AbstractValidator<UpdateEmployeeCommand>
@@ -98,7 +104,8 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
             return Result.Failure<EmployeeDto>("Empleado no encontrado.");
 
         // Before anything changes: a refused change of the owner's notices leaves their name and permissions as they were.
-        var asked = new NoticeChoices(request.RequestEmails, request.QuoteReplyEmails, request.OrderCancellationEmails);
+        var asked = new NoticeChoices(
+            request.RequestEmails, request.QuoteReplyEmails, request.OrderCancellationEmails, request.ReviewEmails);
         if (EmployeeNoticeEmails.RefusalFor(tenantUser, asked) is { } noticesRefused)
             return Result.Failure<EmployeeDto>(noticesRefused);
 
@@ -166,7 +173,8 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
         if (changed.Any && Guid.TryParse(_currentUserService.UserId, out var changedBy) && changedBy != tenantUser.UserId)
             _outbox.Add(
                 new TenantUserNoticeEmailsChangedEvent(
-                    tenantUser.Id, changedBy, changed.RequestEmails, changed.QuoteReplyEmails, changed.OrderCancellationEmails),
+                    tenantUser.Id, changedBy, changed.RequestEmails, changed.QuoteReplyEmails, changed.OrderCancellationEmails,
+                    changed.ReviewEmails),
                 _tenantService.TenantId);
 
         await _context.SaveChangesAsync(cancellationToken);

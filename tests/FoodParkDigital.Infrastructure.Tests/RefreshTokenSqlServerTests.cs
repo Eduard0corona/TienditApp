@@ -40,7 +40,7 @@ public class RefreshTokenSqlServerTests
         var clock = new MutableClock { UtcNow = DateTimeOffset.UtcNow };
         var userId = await SeedUserAsync(database);
         var signIn = new JwtTokenService(Options.Create(Settings), clock).GenerateRefreshToken(userId, Guid.NewGuid());
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             context.RefreshTokens.Add(signIn.Token);
             await context.SaveChangesAsync();
@@ -54,7 +54,7 @@ public class RefreshTokenSqlServerTests
         Assert.True(beforeSave.Fired);
         Assert.True(first!.IsSuccess, first.Error);
         Assert.Equal(RefreshTokenCommandHandler.ConcurrentRenewalError, second.Error);
-        await using var check = database.CreateContext();
+        await using var check = BeforeAccountCarts.CreateContext(database);
         var tokens = await check.RefreshTokens.AsNoTracking().ToListAsync();
         // The losing request saved nothing: neither its revocation nor its new token.
         Assert.Equal(2, tokens.Count);
@@ -71,7 +71,7 @@ public class RefreshTokenSqlServerTests
         await MigrateAsync(database, LastMigrationOfPhase8);
         var userId = await SeedUserAsync(database);
         var now = DateTimeOffset.UtcNow;
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             foreach (var (value, hash, revokedAt, replacement) in new[]
                      {
@@ -94,7 +94,7 @@ public class RefreshTokenSqlServerTests
 
         // Phase 9: the plain values get their hash and are emptied; the columns stay for Phase 8.
         await MigrateAsync(database, HashingMigration);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             // The hash computed in SQL is the one this version computes for the value presented.
             var active = await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None);
@@ -113,7 +113,7 @@ public class RefreshTokenSqlServerTests
 
         // Phase 10: the columns and their index go; the sessions stay.
         await MigrateAsync(database);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             Assert.Equal((0, 0), await PlainValueSchemaAsync(context));
             Assert.True((await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None))!.IsActive);
@@ -124,14 +124,14 @@ public class RefreshTokenSqlServerTests
         // Rolling both back gives the columns back, empty (Phase 8 reads a null Token as no plain value), and applying
         // them again ends the same way.
         await MigrateAsync(database, LastMigrationOfPhase8);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             Assert.Equal((2, 1), await PlainValueSchemaAsync(context));
             Assert.Equal(0, await PlainValuesAsync(context));
         }
 
         await MigrateAsync(database);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeAccountCarts.CreateContext(database))
         {
             Assert.Equal((0, 0), await PlainValueSchemaAsync(context));
             Assert.True((await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None))!.IsActive);
@@ -198,7 +198,7 @@ public class RefreshTokenSqlServerTests
 
     private static async Task<Guid> SeedUserAsync(SqlServerTestDatabase database)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeAccountCarts.CreateContext(database);
         var user = new ApplicationUser
         {
             Id = Guid.NewGuid(),
