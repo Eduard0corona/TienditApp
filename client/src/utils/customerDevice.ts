@@ -5,19 +5,39 @@ import { getAccess } from './access';
 export const CARTS_STORAGE_KEY = 'tienditapp.carts';
 /** Where this device keeps the postal code given in Explorar or a store. */
 export const POSTAL_CODE_STORAGE_KEY = 'tienditapp.postalCode';
-/** Said to the window when a customer account leaves this device: a cart waiting to go to the account does not go. */
+/** Said to the window when the session ends on this device: a cart waiting to go to the account does not go. */
 export const CUSTOMER_LEFT_EVENT = 'tienditapp:customer-left';
 
+/** The customer account whose carts and postal code this device keeps (Fase 31J). */
+export const CUSTOMER_STORAGE_KEY = 'tienditapp.customer';
+
 /**
- * A customer account leaves this device (Fase 31J): its carts and postal code are kept in the account, so the device forgets
- * them and does not send what was waiting, and whoever signs in next here does not take them into their own account. A
- * session of a business's team keeps them: its carts were only ever on this device.
+ * The session of a customer account starts on this device, which keeps its carts and postal code from now on. Those of
+ * another account that left without the device forgetting them (a session that could not be recovered while it was
+ * closed) go first: whoever signs in does not take them into their own account. A session of a business's team changes
+ * nothing: its carts are only ever on this device.
  */
-export function forgetCustomerDevice(user: UserProfileDto): void {
+export function rememberCustomerDevice(user: UserProfileDto): void {
   if (!getAccess(user, null).myOrders) return;
   try {
-    window.localStorage.removeItem(CARTS_STORAGE_KEY);
-    window.localStorage.removeItem(POSTAL_CODE_STORAGE_KEY);
+    const kept = window.localStorage.getItem(CUSTOMER_STORAGE_KEY);
+    if (kept && kept !== user.id) forgetCustomerDevice();
+    window.localStorage.setItem(CUSTOMER_STORAGE_KEY, user.id);
+  } catch {
+    // Storage blocked: there is nothing kept.
+  }
+}
+
+/**
+ * The session ends on this device, however it ends (signing out here or in another tab, expired, revoked or not
+ * recovered), and nothing waiting goes to the account. When it was a customer account's, the device forgets its carts and
+ * postal code (the account keeps them), so whoever comes next does not take them into their own account.
+ */
+export function forgetCustomerDevice(): void {
+  try {
+    if (window.localStorage.getItem(CUSTOMER_STORAGE_KEY)) {
+      for (const key of [CARTS_STORAGE_KEY, POSTAL_CODE_STORAGE_KEY, CUSTOMER_STORAGE_KEY]) window.localStorage.removeItem(key);
+    }
   } catch {
     // Storage blocked: there was nothing kept.
   }

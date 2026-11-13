@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../hooks/useTenant';
-import { CUSTOMER_LEFT_EVENT } from '../utils/customerDevice';
 import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
 vi.mock('../hooks/useAuth', () => ({ useAuth: vi.fn() }));
@@ -42,18 +41,14 @@ describe('reloadForTenantChange', () => {
 });
 
 describe('useSessionSync', () => {
-  it('ends the session when another tab signs out, and stops the cart saves of this one', async () => {
+  it('ends the session when another tab signs out (Fase 31J: ending it stops the cart saves of this one)', async () => {
     const clearSession = vi.fn();
-    const customerLeft = vi.fn();
-    window.addEventListener(CUSTOMER_LEFT_EVENT, customerLeft);
     const { unmount } = renderHook(() => useSessionSync(clearSession));
 
-    // Another tab of this browser signed out (Fase 31J: it forgot the carts of the device).
+    // Another tab of this browser signed out.
     broadcastSessionChange({ type: 'logout' });
 
     await waitFor(() => expect(clearSession).toHaveBeenCalledTimes(1));
-    expect(customerLeft).toHaveBeenCalledTimes(1);
     unmount();
-    window.removeEventListener(CUSTOMER_LEFT_EVENT, customerLeft);
   });
 });

@@ -6,7 +6,7 @@ import { queryKeys } from '../api/queries';
 import { queryClient } from '../api/queryClient';
 import { apiRequest } from '../api/typedClient';
 import type { LoginRequest, TwoFactorLoginRequest, UserProfileDto } from '../types';
-import { forgetCustomerDevice } from '../utils/customerDevice';
+import { forgetCustomerDevice, rememberCustomerDevice } from '../utils/customerDevice';
 import { AuthContext, type AcceptInvitationRequest, type LoginResult } from './AuthContextDefinition';
 import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
@@ -37,6 +37,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const clearSession = useCallback(() => {
+    // A customer account keeps its carts and postal code (Fase 31J): the device forgets them, however the session ends.
+    forgetCustomerDevice();
     setAccessToken(null);
     setUser(null);
     setSessionMarker(false);
@@ -52,9 +54,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // The token's role and permission claims can be older than a change made by an admin: the server's current
       // access wins when it answers (menus and guards only; the API checks every request itself).
       const access = await apiRequest('get', '/api/v1/me/access').catch(() => null);
-      setUser(access?.isMember
+      const profile = access?.isMember
         ? { ...data, role: access.role ?? data.role, permissions: access.permissions ?? data.permissions }
-        : data);
+        : data;
+      rememberCustomerDevice(profile);
+      setUser(profile);
       queryClient.removeQueries({ queryKey: queryKeys.myAccess });
     } catch {
       setUser(null);
@@ -79,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         // No valid refresh cookie; user needs to log in.
+        forgetCustomerDevice();
         setUser(null);
         setSessionMarker(false);
       } finally {
@@ -123,9 +128,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    // A customer account keeps its carts and postal code (Fase 31J): this device forgets them, so whoever signs in next on
-    // it does not take them into their own account.
-    if (user) forgetCustomerDevice(user);
     try {
       await authApi.logout();
     } finally {
