@@ -20,6 +20,7 @@ using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -155,6 +156,7 @@ public class BookingDepositFlowTests
     public async Task AnApprovedDeposit_ShouldBookTheRequest_WithTheDepositHeld_AndTheBusinessHearsOfIt()
     {
         await using var shop = await Shop.OpenAsync(percent: 30);
+        await shop.ConnectWhatsAppAsync();
         var key = Guid.NewGuid();
         var started = (await shop.StartAsync(shop.Haircut.Id, MondayTen, key: key)).Value!;
         var payment = shop.Gateway.Approve(started.CheckoutId, 45m, SalesTestFixture.Now.AddMinutes(5));
@@ -173,6 +175,11 @@ public class BookingDepositFlowTests
         Assert.Equal("Corte de cabello", status.Receipt.ServiceName);
         var checkout = await shop.Context.OnlineCheckouts.AsNoTracking().SingleAsync();
         Assert.Equal(((Guid?)appointment.Id, payment.Id, (string?)null), (checkout.AppointmentId, checkout.PaymentId, checkout.Request));
+        // The business hears of it as of any request of the booking page (ADR 0068), and the customer gets its notice.
+        var requested = Assert.Single(shop.Events.Published.OfType<AppointmentRequestedEvent>());
+        Assert.Equal((appointment.Id, shop.Tenant.Id, false, false), (requested.AppointmentId, requested.TenantId, requested.HomeVisit, requested.FromTeam));
+        var notice = await shop.Context.OutgoingMessages.AsNoTracking().SingleAsync(m => m.Purpose == MessagePurpose.AppointmentNotice);
+        Assert.Contains("recibimos tu solicitud de cita de Corte de cabello el lunes 5 de octubre a las 10:00 a. m.", notice.Body);
 
         // Without this browser's return key it says it was booked, but not the link; applying it again changes nothing.
         Assert.Null((await shop.ConfirmAsync(started.CheckoutId, payment.Id, null))!.Receipt);
@@ -524,14 +531,17 @@ public class BookingDepositFlowTests
     /// <summary>A barbershop that books online, its Mercado Pago account connected and its share asked.</summary>
     private sealed class Shop : IAsyncDisposable, ISender
     {
-        private Shop(SalesTestFixture fixture, Tenant tenant, Product haircut)
+        private Shop(SalesTestFixture fixture, SqliteTestHost.RecordingMediator events, Tenant tenant, Product haircut)
         {
             Fixture = fixture;
+            Events = events;
             Tenant = tenant;
             Haircut = haircut;
         }
 
         public SalesTestFixture Fixture { get; }
+        /// <summary>The events of what was saved, as the business's screens and emails hear them.</summary>
+        public SqliteTestHost.RecordingMediator Events { get; }
         public Tenant Tenant { get; }
         /// <summary>«Corte de cabello», $150, 45 minutes.</summary>
         public Product Haircut { get; }
@@ -547,7 +557,8 @@ public class BookingDepositFlowTests
 
         public static async Task<Shop> OpenAsync(int? percent, bool connect = true)
         {
-            var fixture = SalesTestFixture.Create();
+            var events = new SqliteTestHost.RecordingMediator();
+            var fixture = SalesTestFixture.Create(events);
             var tenant = await fixture.AddTenantAsync(
                 BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, pricesIncludeTax: true, slug: Slug);
             var settings = await fixture.Context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
@@ -563,7 +574,7 @@ public class BookingDepositFlowTests
             fixture.Context.Products.Add(haircut);
             await fixture.Context.SaveChangesAsync();
 
-            var shop = new Shop(fixture, tenant, haircut);
+            var shop = new Shop(fixture, events, tenant, haircut);
             if (connect)
                 await shop.ConnectAsync();
             if (percent is not null)
@@ -591,6 +602,15 @@ public class BookingDepositFlowTests
                 liveMode,
                 Guid.NewGuid(),
                 SalesTestFixture.Now));
+            await Context.SaveChangesAsync();
+        }
+
+        /// <summary>WhatsApp connected, so the customer's notices are queued.</summary>
+        public async Task ConnectWhatsAppAsync()
+        {
+            var config = new WhatsAppConfig(Tenant.Id);
+            config.Update(true, "token", "123456", "waba", "+52 55 0000 0000");
+            Context.WhatsAppConfigs.Add(config);
             await Context.SaveChangesAsync();
         }
 

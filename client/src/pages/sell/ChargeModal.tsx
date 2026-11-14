@@ -24,6 +24,8 @@ interface ChargeModalProps {
 export default function ChargeModal(props: ChargeModalProps) {
   const titleId = useId();
   const { show, submitting } = props;
+  // A deposit that covers the whole sale leaves nothing to charge, and so no payment for a tip to go with.
+  const paidInFull = props.paidOnline != null && props.amountDue <= 0;
   return (
     <Modal show={show} onHide={() => !submitting && props.onClose()} centered size="lg" fullscreen="sm-down" aria-labelledby={titleId}>
       <Modal.Header closeButton={!submitting}>
@@ -33,8 +35,10 @@ export default function ChargeModal(props: ChargeModalProps) {
         {show && props.paidOnline != null && (
           <p className="small mb-3" role="note">
             <i className="ri-secure-payment-line me-1" aria-hidden="true"></i>
-            El cliente ya pagó en línea un anticipo de <span className="ta-money">{formatMoney(props.paidOnline)}</span>: entra a la venta como
-            pago «En línea» y aquí cobras el resto.
+            El cliente ya pagó en línea un anticipo de <span className="ta-money">{formatMoney(props.paidOnline)}</span>
+            {paidInFull
+              ? <>, que cubre toda la venta: entra como pago «En línea», no queda nada por cobrar y en este cobro no hay propina.</>
+              : <>: entra a la venta como pago «En línea» y aquí cobras el resto.</>}
           </p>
         )}
         {show && (
@@ -42,7 +46,7 @@ export default function ChargeModal(props: ChargeModalProps) {
             amountDue={props.amountDue}
             submitting={submitting}
             error={props.error}
-            allowTip={props.allowTip}
+            allowTip={props.allowTip && !paidInFull}
             tipBase={props.paidOnline != null ? props.total : undefined}
             credit={props.credit}
             balance={props.balance}

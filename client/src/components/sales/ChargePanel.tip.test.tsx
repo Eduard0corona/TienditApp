@@ -24,4 +24,20 @@ describe('ChargePanel tip', () => {
     // The cashier charges the rest, and the tip of 10 % of the $400 of the service.
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ tip: 40 }));
   });
+
+  it('lets that tip be more than the rest, never more than the whole sale', async () => {
+    const onSubmit = vi.fn();
+    render(<ChargePanel amountDue={40} tipBase={400} submitting={false} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+    // A deposit of 90 %: the 15 % of the service is more than the $40 left to charge, and still fits in the sale.
+    await userEvent.click(screen.getByRole('radio', { name: '15 %' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Cobrar/ }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ tip: 60 }));
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Otra' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Monto de la propina' }), '400');
+    expect(screen.getByRole('button', { name: /^Cobrar/ })).toBeEnabled();
+    await userEvent.type(screen.getByRole('textbox', { name: 'Monto de la propina' }), '.01');
+    expect(screen.getByRole('button', { name: /^Cobrar/ })).toBeDisabled();
+  });
 });

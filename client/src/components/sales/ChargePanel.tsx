@@ -168,8 +168,9 @@ export default function ChargePanel({
   const keepsChange = allowChangeInFavor && changeInFavor && isCash && changeCents > 0;
   const coveredCents = addedCents + (currentIsValid ? currentCents : 0);
   const missingCents = Math.max(0, dueCents - coveredCents);
-  // More tip than bill is a typing mistake (the server refuses it too).
-  const tipFits = tipCents <= dueCents;
+  // More tip than bill is a typing mistake (the server refuses it too). With a deposit paid online taken off it, the bill
+  // is the whole sale, as for the percentages.
+  const tipFits = tipCents <= toCents(tipBase ?? amountDue);
   const canSubmit = !submitting && !uploading && currentIsValid && tipIsValid && tipFits && !tipWithBalance
     && (allowPartial ? coveredCents > 0 : missingCents === 0);
   const canAddAnother = currentIsValid && currentCents > 0 && currentCents < remainingCents;
