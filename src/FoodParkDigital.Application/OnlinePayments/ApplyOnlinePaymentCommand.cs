@@ -283,8 +283,9 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
             if (_bookings.NoticeQueued)
                 _signal?.Notify();
             // The cart the account left in this store, once the order is saved (Fase 31J): the order never fails for it. As it
-            // was when the customer went to pay: one saved since (a payment applied late) is another cart, and stays.
-            if (checkout.CustomerUserId is { } account)
+            // was when the customer went to pay: one saved since (a payment applied late) is another cart, and stays. A deposit
+            // of an appointment or a quote orders nothing of the menu: the cart stays as it is.
+            if (checkout.CustomerUserId is { } account && !checkout.ForAppointment && !checkout.IsForQuote)
                 await new PublicOrderPlacement(_context).ForgetCartAsync(account, checkout.TenantId, now, checkout.StartedAt, cancellationToken);
             return Result.Success(OnlinePaymentApplication.Placed);
         }

@@ -17,6 +17,9 @@ using FoodParkDigital.Domain.Appointments.Events;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -199,6 +202,65 @@ public class BookingDepositFlowTests
         Assert.Equal(BookingDepositOffer.StoppedBookingMessage, (await shop.Context.OnlineCheckouts.AsNoTracking().SingleAsync(c => c.Id == stopped.CheckoutId)).FailureMessage);
         // Only the team's appointment exists.
         Assert.Equal(AppointmentChannel.Business, (await shop.Context.Appointments.AsNoTracking().SingleAsync()).Channel);
+    }
+
+    [Fact]
+    public async Task TheFirstTimeOffered_ShouldBeBooked_ByItsPaymentMinutesLater_ButNeverOnceItBegan()
+    {
+        await using var shop = await Shop.OpenAsync(percent: 30);
+        // At 9:00 the first time offered is 10:00, an hour ahead; the customer pays it in a few minutes.
+        shop.Clock.UtcNow = Local(Monday, "09:00");
+        var first = (await shop.StartAsync(shop.Haircut.Id, MondayTen)).Value!;
+        var eleven = (await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(1))).Value!;
+        var payment = shop.Gateway.Approve(first.CheckoutId, 45m, Local(Monday, "09:05"));
+        shop.Clock.UtcNow = Local(Monday, "09:06");
+
+        // The hour of notice counts from when they went to pay: nobody took 10:00.
+        var booked = await shop.ConfirmAsync(first.CheckoutId, payment.Id, first.ReturnKey);
+        Assert.Equal(OnlineCheckoutStatus.Placed, booked!.Status);
+        Assert.Equal(MondayTen, (await shop.Context.Appointments.AsNoTracking().SingleAsync()).StartAt);
+
+        // Paid in time, but applied once its time began (a notification that came late): it goes back.
+        var late = shop.Gateway.Approve(eleven.CheckoutId, 45m, Local(Monday, "09:20"));
+        shop.Clock.UtcNow = Local(Monday, "11:01");
+        var refused = await shop.ConfirmAsync(eleven.CheckoutId, late.Id, eleven.ReturnKey);
+        Assert.Equal((OnlineCheckoutStatus.NotPlaced, RequestPublicAppointmentCommandHandler.TimeTakenMessage),
+            (refused!.Status, refused.FailureMessage));
+        Assert.Single(await shop.Context.Appointments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ADepositPaidFromAnAccount_ShouldKeepTheRequestInIt_WhileItIsActive_AndLeaveItsCartAlone()
+    {
+        await using var shop = await Shop.OpenAsync(percent: 30);
+        var mariana = new ApplicationUser { UserName = "mariana@demo.com", Email = "mariana@demo.com", FirstName = "Mariana", LastName = "Ortiz", Role = UserRole.Customer, IsActive = true };
+        var pedro = new ApplicationUser { UserName = "pedro@demo.com", Email = "pedro@demo.com", FirstName = "Pedro", LastName = "Luna", Role = UserRole.Customer, IsActive = true };
+        shop.Context.Users.AddRange(mariana, pedro);
+        // Mariana left something in the store's cart before booking.
+        shop.Context.AccountCarts.Add(AccountCart.Create(mariana.Id, shop.Tenant.Id, [new AccountCartLine(shop.Haircut.Id, [], 1, null)], null, null, SalesTestFixture.Now));
+        await shop.Context.SaveChangesAsync();
+
+        shop.Fixture.CurrentUser.UserId = mariana.Id.ToString();
+        shop.Fixture.CurrentUser.Role = "CUSTOMER";
+        var hers = (await shop.StartAsync(shop.Haircut.Id, MondayTen)).Value!;
+        shop.Fixture.CurrentUser.UserId = pedro.Id.ToString();
+        var his = (await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(1))).Value!;
+        // Pedro's account is closed while he pays: the request is booked, but not into an account no longer his.
+        (await shop.Context.Users.SingleAsync(u => u.Id == pedro.Id)).IsActive = false;
+        await shop.Context.SaveChangesAsync();
+        var herPayment = shop.Gateway.Approve(hers.CheckoutId, 45m, SalesTestFixture.Now.AddMinutes(5));
+        var hisPayment = shop.Gateway.Approve(his.CheckoutId, 45m, SalesTestFixture.Now.AddMinutes(5));
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddMinutes(6);
+
+        Assert.Equal(OnlineCheckoutStatus.Placed, (await shop.ConfirmAsync(his.CheckoutId, hisPayment.Id, his.ReturnKey))!.Status);
+        // Back with her session, her return says it is in her account.
+        shop.Fixture.CurrentUser.UserId = mariana.Id.ToString();
+        Assert.True((await shop.ConfirmAsync(hers.CheckoutId, herPayment.Id, hers.ReturnKey))!.Receipt!.LinkedToAccount);
+
+        var appointments = await shop.Context.Appointments.AsNoTracking().OrderBy(a => a.StartAt).ToListAsync();
+        Assert.Equal([(Guid?)mariana.Id, null], appointments.Select(a => a.CustomerUserId));
+        // A deposit orders nothing of the menu: her cart stays.
+        Assert.Single((await shop.Context.AccountCarts.AsNoTracking().SingleAsync()).Lines);
     }
 
     [Fact]

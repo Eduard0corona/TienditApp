@@ -766,6 +766,11 @@ internal static class PublicAppointmentPlacement
     /// The request for <paramref name="ask"/>, not added yet, with who attends it; or why the time cannot be booked now.
     /// </summary>
     /// <param name="deposit">What its customer already paid to book it (Fase 31O), or none.</param>
+    /// <param name="askedAt">
+    /// When the customer asked for it, if before <paramref name="now"/>: a deposit paid in Mercado Pago books the time the page
+    /// offered when they went to pay (Fase 31O). The hour of notice and the days ahead count from then, never into the past;
+    /// whether the time is free is decided now.
+    /// </param>
     public static async Task<(Appointment? Appointment, BookableStaff? Attends, string? Refusal)> PlaceAsync(
         IApplicationDbContext context,
         PublicBookingBusiness business,
@@ -774,12 +779,14 @@ internal static class PublicAppointmentPlacement
         Guid? accountId,
         decimal? deposit,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTimeOffset? askedAt = null)
     {
         var tenantId = business.Tenant.Id;
         var settings = business.Settings;
         var zone = TenantDateTimeResolver.Resolve(settings.TimeZone);
-        var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(now, settings.TimeZone));
+        var asked = askedAt is { } then && then < now ? then : now;
+        var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(asked, settings.TimeZone));
         var lastDay = today.AddDays(OnlineBookingRules.DaysAhead - 1);
         var startAt = ask.StartAt;
         // The last day offered may end after midnight, in the day after it.
@@ -789,7 +796,8 @@ internal static class PublicAppointmentPlacement
 
         var hours = await BusinessHours.ReadAsync(context, tenantId, settings.OpeningHours, settings.TimeZone, now, cancellationToken);
         var endAt = startAt + service.Duration;
-        var earliest = now.AddMinutes(OnlineBookingRules.MinNoticeMinutes);
+        var noticeFrom = asked.AddMinutes(OnlineBookingRules.MinNoticeMinutes);
+        var earliest = noticeFrom > now ? noticeFrom : now;
         var takenMessage = startDate > lastDay ? RequestPublicAppointmentCommandHandler.TooFarMessage : RequestPublicAppointmentCommandHandler.TimeTakenMessage;
         var staff = await OnlineBookingCalendar.StaffAsync(context, tenantId, cancellationToken);
         BookableStaff? attends = null;

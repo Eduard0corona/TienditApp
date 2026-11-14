@@ -470,8 +470,9 @@ internal sealed class AppointmentDepositPlacement
                 : (Guid?)null;
         try
         {
+            // The time the page offered when they went to pay, still free now (the hour of notice counts from then).
             var (appointment, _, refusal) = await PublicAppointmentPlacement.PlaceAsync(
-                _context, business, service, ask, accountId, checkout.Amount, now, cancellationToken);
+                _context, business, service, ask, accountId, checkout.Amount, now, cancellationToken, askedAt: checkout.StartedAt);
             if (appointment is null)
                 return (OnlineCheckoutFailure.OrderRefused, refusal);
 
