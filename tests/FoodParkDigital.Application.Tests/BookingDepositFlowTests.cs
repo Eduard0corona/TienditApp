@@ -358,6 +358,24 @@ public class BookingDepositFlowTests
     }
 
     [Fact]
+    public async Task ASaleOfAnAppointmentWhosePaymentIsMissing_ShouldBeRefused_KeepingItsDepositHeld()
+    {
+        await using var shop = await Shop.OpenAsync(percent: 30);
+        var (appointmentId, _, _) = await shop.BookedAsync(MondayTen);
+        Assert.True((await shop.Requests.Handle(new AcceptAppointmentRequestCommand(appointmentId), CancellationToken.None)).IsSuccess);
+        // Its deposit says held, but the payment that paid it is not found (fixed by hand in the database, say).
+        shop.Context.OnlineCheckouts.Remove(await shop.Context.OnlineCheckouts.SingleAsync());
+        await shop.Context.SaveChangesAsync();
+
+        var sold = await shop.SellAsync(appointmentId, cash: 150m);
+
+        // Charging it whole would leave the deposit as taken by a sale that never registered it.
+        Assert.Equal(Orders.AppointmentSalePlacement.DepositNotFoundMessage, sold.Error);
+        Assert.Empty(await shop.Context.Orders.ToListAsync());
+        Assert.Equal(AppointmentDepositStatus.Held, (await shop.Context.Appointments.AsNoTracking().SingleAsync()).DepositStatus);
+    }
+
+    [Fact]
     public async Task MercadoPago_ShouldNotGo_WhileADepositIsAskedOrHeld()
     {
         await using var shop = await Shop.OpenAsync(percent: 30);
