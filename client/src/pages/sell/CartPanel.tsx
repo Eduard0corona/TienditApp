@@ -87,6 +87,9 @@ export default function CartPanel(props: CartPanelProps) {
   const showOrigin = !tabTarget && !chatOrigin && !props.appointment && props.activePlatforms.length > 0;
   const platformName = platform ? getPlatformName(platform) : '';
   const platformCharged = platform !== null && props.details.collectedBy === PlatformCollectedBy.Platform;
+  // What is charged now: the total, less the deposit paid online to book the appointment (Fase 31O); the server decides it.
+  const deposit = props.appointment?.deposit ?? null;
+  const due = deposit != null ? Math.max(0, totals.total - deposit) : totals.total;
 
   return (
     <div className="sell-cart-panel">
@@ -226,15 +229,15 @@ export default function CartPanel(props: CartPanelProps) {
           <span className="ta-money">{formatMoney(totals.total)}</span>
         </div>
         {/* The deposit the customer paid online to book the appointment (Fase 31O): the sale takes it, the rest is charged. */}
-        {props.appointment?.deposit != null && (
+        {deposit != null && (
           <>
             <div className="d-flex justify-content-between small">
               <span>Anticipo pagado en línea</span>
-              <span className="ta-money">−{formatMoney(props.appointment.deposit)}</span>
+              <span className="ta-money">−{formatMoney(deposit)}</span>
             </div>
             <div className="d-flex justify-content-between fw-semibold">
               <span>Por cobrar</span>
-              <span className="ta-money">{formatMoney(Math.max(0, totals.total - props.appointment.deposit))}</span>
+              <span className="ta-money">{formatMoney(due)}</span>
             </div>
           </>
         )}
@@ -311,7 +314,7 @@ export default function CartPanel(props: CartPanelProps) {
             onClick={props.onOpenCharge}
             disabled={blocked}
           >
-            Cobrar {formatMoney(totals.total)} <span className="sell-kbd">F9</span>
+            Cobrar {formatMoney(due)} <span className="sell-kbd">F9</span>
           </button>
           <button
             type="button"

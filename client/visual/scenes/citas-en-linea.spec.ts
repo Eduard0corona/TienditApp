@@ -2,7 +2,9 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap, snapElement } from '../helpers';
 import {
-  AGENDA_SOLICITUD_DEL_EQUIPO, AGENDA_SOLICITUDES, AGENDA_SOLICITUDES_A_TIEMPO, APPOINTMENT_LINK, CITAS_CON_PERSONAS, CITAS_PRENDIDAS, CITAS_ROUTES, EXPLORAR_AGENDA, MENU_AGENDA, QUIEN_ATIENDE,
+  AGENDA_ANTICIPOS, AGENDA_SOLICITUD_DEL_EQUIPO, AGENDA_SOLICITUDES, AGENDA_SOLICITUDES_A_TIEMPO, APPOINTMENT_LINK, CITAS_CON_ANTICIPO, CITAS_CON_PERSONAS,
+  CITAS_PRENDIDAS, CITAS_ROUTES, DEPOSIT_APPOINTMENT_ID, DEPOSIT_APPOINTMENT_LINK, DEPOSIT_CHECKOUT_ID, DEPOSIT_RETURN_KEY, EXPLORAR_AGENDA,
+  LATE_DEPOSIT_CHECKOUT_ID, MENU_AGENDA, QUIEN_ATIENDE,
 } from './citas-en-linea.mocks';
 import { ACCOUNT_PROFILE } from './cuenta-cliente.mocks';
 
@@ -351,5 +353,111 @@ test.describe('Citas en línea en Configuración', () => {
       await expect(card.getByRole('link', { name: 'Ver tu página de citas' })).toBeVisible();
       await snapElement(card, 'configuracion-citas-prendidas-telefono');
     });
+  });
+});
+
+// ------------------------------------------------------------------ The deposit to book (Fase 31O, ADR 0095)
+
+// Café La Esquina asks 30 % of the price to book online, with its Mercado Pago account: its booking page says the deposit
+// of each service and what happens to it, the request goes by paying it, and the return page shows the request booked (or
+// why it could not be, and that the money goes back). The appointment's link says where the deposit stands.
+test.describe('Anticipo para reservar', () => {
+  test.use({ signedIn: false, extraRoutes: CITAS_ROUTES, prepareData: CITAS_CON_ANTICIPO });
+
+  test('agendar servicios con anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/m/cafe-la-esquina/agendar');
+    await expect(page.getByText('Anticipo para reservar:').first()).toBeVisible();
+    await snap(page, 'agendar-anticipo-servicios-telefono');
+  });
+
+  test('agendar pagar anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await openCata(page);
+    const sheet = await pickMondayAfternoon(page);
+    await sheet.getByLabel('Tu nombre').fill('Valeria Ruiz');
+    await sheet.getByLabel('Teléfono (WhatsApp)').fill('55 6620 1408');
+    await expect(sheet.getByRole('button', { name: 'Pagar anticipo de $105.00' })).toBeVisible();
+    await snap(page, 'agendar-pagar-anticipo-telefono', { fullPage: false });
+  });
+
+  test('agendar anticipo pagado', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    // This device went to pay it from the booking page: the return page reads the request with the key it kept.
+    await page.addInitScript(({ checkoutId, returnKey }) => {
+      window.localStorage.setItem('tienditapp.onlineCheckouts', JSON.stringify({ [checkoutId]: { returnKey, savedAt: new Date().toISOString() } }));
+    }, { checkoutId: DEPOSIT_CHECKOUT_ID, returnKey: DEPOSIT_RETURN_KEY });
+    await open(page, `/m/cafe-la-esquina/cita/pago/${DEPOSIT_CHECKOUT_ID}?payment_id=1234567890&status=approved`);
+    await expect(page.getByRole('heading', { name: '¡Anticipo pagado!' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Ver tu cita' })).toBeVisible();
+    await snap(page, 'agendar-anticipo-pagado-telefono');
+  });
+
+  test('agendar anticipo que llegó tarde', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/m/cafe-la-esquina/cita/pago/${LATE_DEPOSIT_CHECKOUT_ID}?payment_id=1234567891&status=approved`);
+    await expect(page.getByRole('heading', { name: 'No pudimos reservar tu cita' })).toBeVisible();
+    await snap(page, 'agendar-anticipo-tarde-telefono');
+  });
+
+  test('tu cita con anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/cita#${DEPOSIT_APPOINTMENT_LINK}`);
+    await expect(page.getByText(/Pagaste un anticipo de \$105\.00/)).toBeVisible();
+    await snap(page, 'tu-cita-anticipo-telefono');
+  });
+
+  test('tu cita cancelar con anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/cita#${DEPOSIT_APPOINTMENT_LINK}`);
+    await page.getByRole('button', { name: /Cancelar la cita de Cata de café de especialidad/ }).click();
+    const confirm = await dialog(page, 'Cancelar cita');
+    await expect(confirm.getByText(/Te devolvemos tu anticipo de \$105\.00/)).toBeVisible();
+    await snap(page, 'tu-cita-anticipo-cancelar-telefono', { fullPage: false });
+  });
+});
+
+test.describe('Anticipo en Configuración', () => {
+  test.use({ prepareData: CITAS_CON_ANTICIPO });
+
+  test('configuracion citas en linea con anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/settings/business');
+    const card = page.getByRole('region', { name: 'Citas en línea' });
+    await expect(card.getByLabel('Anticipo para reservar')).toHaveValue('30');
+    await snapElement(card, 'configuracion-citas-anticipo-escritorio');
+  });
+});
+
+// The business with the deposits in its agenda: María Fernanda's request paid hers, Rodrigo's went back, and Valeria's cata,
+// confirmed, is charged in Vender with hers taken off.
+test.describe('Anticipos en la agenda', () => {
+  test.use({ prepareData: AGENDA_ANTICIPOS });
+
+  test('agenda anticipos', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/appointments');
+    await page.getByLabel('Estado', { exact: true }).selectOption({ label: 'Todos' });
+    // Only the catas: the three with a deposit, and the one of today without.
+    await page.getByRole('searchbox', { name: /^Cliente, teléfono, servicio/ }).fill('Cata de café');
+    await expect(page.getByText('Juan Carlos Hernández')).toHaveCount(0);
+    await expect(page.getByText('Anticipo de $105.00 devuelto al cliente')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Devolver el anticipo de Valeria Ruiz' })).toBeVisible();
+    await snap(page, 'agenda-anticipos-escritorio');
+  });
+
+  test('agenda devolver anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/appointments');
+    await page.getByRole('button', { name: 'Devolver el anticipo de Valeria Ruiz' }).click();
+    await dialog(page, 'Devolver el anticipo');
+    await snap(page, 'agenda-devolver-anticipo-escritorio', { fullPage: false });
+  });
+
+  test('vender cita con anticipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, `/sell?appointment=${DEPOSIT_APPOINTMENT_ID}`);
+    await expect(page.getByText('Anticipo pagado en línea')).toBeVisible();
+    await snap(page, 'vender-cita-anticipo-escritorio');
   });
 });
