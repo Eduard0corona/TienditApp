@@ -138,6 +138,60 @@ public sealed class CrossTenantBookingDepositsSqlServerTests
         Assert.Equal((OnlinePaymentRefundReason.NotPlaced, 100m), (refund.Reason, refund.Amount));
     }
 
+    [SqlServerFact]
+    public async Task Cancelling_ShouldDoWhatThePageSaid_OrNothing_ByTheLinkAndFromTheAccount()
+    {
+        var mine = await _api.SignUpAsync("reserva-cancela");
+        var (slug, service) = await CrossTenantOnlineBookingSqlServerTests.BookingAsync(mine.Client, "Corte que se cancela");
+        var account = await ConnectAsync(mine.Client);
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync(Settings, new { enabled = true, capacity = 1, depositPercent = 30 }));
+        using var customer = _api.AnonymousClient();
+        var ana = await _api.SignUpCustomerAsync("reserva-ana");
+        // Two requests booked paying their deposit: one followed by its link, the other from Ana's account.
+        var link = (await PaidRequestAsync(customer, slug, service, "5512340004", account)).GetProperty("trackingToken").GetString()!;
+        await PaidRequestAsync(ana.Client, slug, service, "5512340005", account);
+        var anas = Assert.Single((await TwoBusinessesApi.ReadAsync(await ana.Client.GetAsync("/api/v1/me/appointments"))).GetProperty("items").EnumerateArray());
+        var anasId = anas.GetProperty("id").GetGuid();
+        // Still requests, cancelling gives the deposit back whatever the hour.
+        Assert.True(anas.GetProperty("cancelReturnsDeposit").GetBoolean());
+
+        // A page that said the business keeps it (opened before, or another rule): nothing is cancelled, and it says why.
+        var stale = await customer.PostAsJsonAsync($"{CrossTenantOnlineBookingSqlServerTests.Tracking}/cancel", new { token = link, expectDepositBack = false });
+        Assert.Equal(HttpStatusCode.BadRequest, stale.StatusCode);
+        Assert.Contains("te devolvemos tu anticipo", await stale.Content.ReadAsStringAsync());
+        var staleFromAccount = await ana.Client.PostAsJsonAsync($"/api/v1/me/appointments/{anasId}/cancel", new { expectDepositBack = false });
+        Assert.Equal(HttpStatusCode.BadRequest, staleFromAccount.StatusCode);
+        Assert.All(await _api.QueryAsync(mine.TenantId, db => db.Appointments.ToListAsync()), appointment =>
+            Assert.Equal((AppointmentStatus.Requested, (AppointmentDepositStatus?)AppointmentDepositStatus.Held), (appointment.Status, appointment.DepositStatus)));
+        // A link nobody has is not found, whatever it says of the deposit.
+        Assert.Equal(HttpStatusCode.NotFound, (await customer.PostAsJsonAsync($"{CrossTenantOnlineBookingSqlServerTests.Tracking}/cancel",
+            new { token = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE", expectDepositBack = true })).StatusCode);
+
+        // With what the server holds, both are cancelled and their deposits go back.
+        var byLink = await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync(
+            $"{CrossTenantOnlineBookingSqlServerTests.Tracking}/cancel", new { token = link, expectDepositBack = true }));
+        var fromAccount = await TwoBusinessesApi.ReadAsync(await ana.Client.PostAsJsonAsync(
+            $"/api/v1/me/appointments/{anasId}/cancel", new { expectDepositBack = true }));
+        Assert.All(new[] { byLink, fromAccount }, cancelled => Assert.Equal(
+            ("La cancelaste", (int)AppointmentDepositStatus.Returned),
+            (cancelled.GetProperty("statusLabel").GetString(), cancelled.GetProperty("depositStatus").GetInt32())));
+    }
+
+    /// <returns>The receipt of a request booked by paying its deposit, from the customer's return.</returns>
+    private async Task<JsonElement> PaidRequestAsync(HttpClient customer, string slug, Guid service, string phone, long account)
+    {
+        var startAt = await CrossTenantOnlineBookingSqlServerTests.FirstFreeAsync(customer, slug, service);
+        var started = await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync(
+            $"/api/v1/public/menu/{slug}/appointments/deposit", CrossTenantOnlineBookingSqlServerTests.Request(service, startAt, phone)));
+        var checkoutId = started.GetProperty("checkoutId").GetGuid();
+        var payment = _api.OnlinePayments.Approve(checkoutId, started.GetProperty("amount").GetDecimal(), account);
+        var status = await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync(
+            $"/api/v1/public/menu/{slug}/appointments/deposit/{checkoutId}/confirm",
+            new { paymentId = payment.Id, returnKey = started.GetProperty("returnKey").GetString() }));
+        Assert.Equal((int)OnlineCheckoutStatus.Placed, status.GetProperty("status").GetInt32());
+        return status.GetProperty("receipt");
+    }
+
     /// <returns>The account Mercado Pago connected.</returns>
     private static async Task<long> ConnectAsync(HttpClient owner)
     {
