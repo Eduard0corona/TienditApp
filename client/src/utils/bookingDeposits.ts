@@ -70,6 +70,14 @@ export function cancelDepositSentence(appointment: WithDeposit & { cancelReturns
     : ` Faltan menos de ${cancelHours} horas: el negocio se queda con tu anticipo de ${amount}.`;
 }
 
+/**
+ * What the customer was told cancelling does with a deposit held, sent with the cancellation so the server refuses it if
+ * that changed (the 24 hours passed while the page was open); nothing without one.
+ */
+export function expectedDepositBack(appointment: WithDeposit & { cancelReturnsDeposit?: boolean }): boolean | undefined {
+  return holdsDeposit(appointment) ? !!appointment.cancelReturnsDeposit : undefined;
+}
+
 /** What happens to the deposit, as the booking page says it before paying. */
 export function depositPolicy(cancelHours = DEPOSIT_CANCEL_HOURS): string {
   return 'Se te devuelve si el negocio no acepta tu cita o no la responde antes de su hora, '

@@ -85,7 +85,7 @@ describe('MyAppointments', () => {
     await user.click(upcoming.getByRole('button', { name: 'Cancelar la cita de Corte de cabello del lunes 5 de octubre' }));
     await user.click(within(await screen.findByRole('dialog', { name: 'Cancelar cita' })).getByRole('button', { name: 'Cancelar cita' }));
 
-    await waitFor(() => expect(api.cancelAppointment).toHaveBeenCalledWith('a1'));
+    await waitFor(() => expect(api.cancelAppointment).toHaveBeenCalledWith('a1', undefined));
     expect(toast.success).toHaveBeenCalledWith('Cancelaste tu cita.');
     expect(await screen.findByText('La cancelaste')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Próximas' })).not.toBeInTheDocument();

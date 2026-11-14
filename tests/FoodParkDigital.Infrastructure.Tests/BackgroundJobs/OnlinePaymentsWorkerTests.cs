@@ -19,6 +19,19 @@ namespace FoodParkDigital.Infrastructure.Tests.BackgroundJobs;
 public class OnlinePaymentsWorkerTests
 {
     [Fact]
+    public void EachKindOfWork_ShouldGetItsTurn_InAPass()
+    {
+        Guid[] payments = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
+        Guid[] keys = [Guid.NewGuid()];
+        Guid[] deposits = [Guid.NewGuid(), Guid.NewGuid()];
+
+        // Fase 31O: a busy hour of payments does not leave the keys to renew or the deposits to give back out of a pass.
+        Assert.Equal([payments[0], keys[0], deposits[0], payments[1], deposits[1], payments[2]],
+            OnlinePaymentsWorkerService.InTurns(payments, keys, deposits));
+        Assert.Equal(payments, OnlinePaymentsWorkerService.InTurns(payments, [], []));
+    }
+
+    [Fact]
     public async Task Pass_ShouldReview_TheAccountsNotReviewedLately_WhoseKeyWorks_InTheirOwnScope()
     {
         var sent = new SentCommands();

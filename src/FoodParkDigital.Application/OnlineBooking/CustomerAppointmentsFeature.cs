@@ -258,7 +258,11 @@ public class GetMyAppointmentsQueryHandler : IRequestHandler<GetMyAppointmentsQu
 
 /// <summary>The customer cancels one of the account's appointments before it starts (Fase 24D); any other is not found.</summary>
 [RequiresAuthentication]
-public record CancelMyAppointmentCommand(Guid AppointmentId) : IRequest<Result<CustomerAppointmentDto>>;
+/// <param name="ExpectDepositBack">
+/// Whether the page said cancelling gives its deposit back (Fase 31O): when that changed since (the 24 hours passed, say),
+/// nothing is cancelled and the customer reads why. Optional.
+/// </param>
+public record CancelMyAppointmentCommand(Guid AppointmentId, bool? ExpectDepositBack = null) : IRequest<Result<CustomerAppointmentDto>>;
 
 public class CancelMyAppointmentCommandHandler : IRequestHandler<CancelMyAppointmentCommand, Result<CustomerAppointmentDto>>
 {
@@ -291,7 +295,7 @@ public class CancelMyAppointmentCommandHandler : IRequestHandler<CancelMyAppoint
             ?? throw new EntityNotFoundException("Appointment", request.AppointmentId);
 
         _tenantService.SetTenant(tenantId);
-        return await CustomerCancellation.CancelAsync(_context, request.AppointmentId, _clock.UtcNow, cancellationToken);
+        return await CustomerCancellation.CancelAsync(_context, request.AppointmentId, _clock.UtcNow, request.ExpectDepositBack, cancellationToken);
     }
 }
 
@@ -338,7 +342,8 @@ public class GetPublicAppointmentQueryHandler : IRequestHandler<GetPublicAppoint
 
 /// <summary>The customer cancels with its link an appointment booked online, before it starts (Fase 24D).</summary>
 [AllowAnonymousRequest("Cancelar con el enlace imposible de adivinar de su recibo una cita en línea que no ha empezado.")]
-public record CancelPublicAppointmentCommand(string Token) : IRequest<Result<CustomerAppointmentDto>>;
+/// <param name="ExpectDepositBack">As in <see cref="CancelMyAppointmentCommand"/>: what the page said of its deposit.</param>
+public record CancelPublicAppointmentCommand(string Token, bool? ExpectDepositBack = null) : IRequest<Result<CustomerAppointmentDto>>;
 
 public class CancelPublicAppointmentCommandValidator : AbstractValidator<CancelPublicAppointmentCommand>
 {
@@ -369,7 +374,7 @@ public class CancelPublicAppointmentCommandHandler : IRequestHandler<CancelPubli
             return Result.Failure<CustomerAppointmentDto>(CustomerAppointments.NotFoundMessage);
 
         _tenantService.SetTenant(found.Value.TenantId);
-        return await CustomerCancellation.CancelAsync(_context, found.Value.Id, now, cancellationToken);
+        return await CustomerCancellation.CancelAsync(_context, found.Value.Id, now, request.ExpectDepositBack, cancellationToken);
     }
 }
 
@@ -401,11 +406,19 @@ internal static class PublicAppointmentLink
 /// <summary>Its customer cancels an appointment of the business in context (Fase 24D): the domain decides whether it may.</summary>
 internal static class CustomerCancellation
 {
+    public const string DepositKeptNowMessage =
+        "Ya faltan menos de 24 horas para tu cita: si la cancelas, el negocio se queda con tu anticipo. Revísalo antes de cancelar.";
+    public const string DepositBackNowMessage = "Si cancelas tu cita ahora, te devolvemos tu anticipo. Revísalo antes de cancelar.";
+
+    /// <param name="expectDepositBack">What the page said cancelling does with its deposit, if it said; null cancels as it is.</param>
     public static async Task<Result<CustomerAppointmentDto>> CancelAsync(
-        IApplicationDbContext context, Guid appointmentId, DateTimeOffset now, CancellationToken cancellationToken)
+        IApplicationDbContext context, Guid appointmentId, DateTimeOffset now, bool? expectDepositBack, CancellationToken cancellationToken)
     {
         var appointment = await context.Appointments.FirstOrDefaultAsync(a => a.Id == appointmentId, cancellationToken)
             ?? throw new EntityNotFoundException("Appointment", appointmentId);
+        // Fase 31O: the deposit goes back or stays as the customer read it, or nothing changes.
+        if (expectDepositBack is { } expected && appointment.HoldsDeposit && appointment.CustomerCancelReturnsDeposit(now) != expected)
+            return Result.Failure<CustomerAppointmentDto>(expected ? DepositKeptNowMessage : DepositBackNowMessage);
         appointment.CancelByCustomer(now);
         await context.SaveChangesAsync(cancellationToken);
         return Result.Success((await CustomerAppointments.ReadAsync(context, appointmentId, now, cancellationToken))!);

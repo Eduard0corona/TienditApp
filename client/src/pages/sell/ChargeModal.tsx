@@ -9,6 +9,8 @@ interface ChargeModalProps {
   amountDue: number;
   /** What the customer already paid online for the appointment the sale charges (Fase 31O), out of the total; null otherwise. */
   paidOnline?: number | null;
+  /** The sale's total: with a deposit paid online, the tip's percentages are of it, not of the rest. */
+  total?: number;
   submitting: boolean;
   error: string;
   allowTip: boolean;
@@ -41,6 +43,7 @@ export default function ChargeModal(props: ChargeModalProps) {
             submitting={submitting}
             error={props.error}
             allowTip={props.allowTip}
+            tipBase={props.paidOnline != null ? props.total : undefined}
             credit={props.credit}
             balance={props.balance}
             onSubmit={props.onSubmit}

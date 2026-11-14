@@ -128,7 +128,8 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
                 .Select(g => g.Key)
                 .Take(max)
                 .ToListAsync(cancellationToken);
-            tenants = withCheckouts.Concat(renewing).Concat(unanswered).Distinct().Take(max).ToList();
+            // In turns, so a busy hour of payments never leaves the keys to renew or the deposits to give back out of a pass.
+            tenants = InTurns(withCheckouts, renewing, unanswered).Distinct().Take(max).ToList();
             // The accounts whose payments were not reviewed lately and whose key works: the ones this process has not
             // reviewed yet first, the longest waiting (or never reviewed) first, and then the ones it reviewed, the longest
             // ago first. Reading as many more as the accounts it reviewed always finds the max that go first.
@@ -192,5 +193,18 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
         }
 
         return tenants.Union(reviewed).Count();
+    }
+
+    /// <summary>The first of each list, then the second of each, and so on: each kind of work gets its share of a pass.</summary>
+    internal static IEnumerable<Guid> InTurns(params IReadOnlyList<Guid>[] lists)
+    {
+        for (var turn = 0; lists.Any(list => turn < list.Count); turn++)
+        {
+            foreach (var list in lists)
+            {
+                if (turn < list.Count)
+                    yield return list[turn];
+            }
+        }
     }
 }

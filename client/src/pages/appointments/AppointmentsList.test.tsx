@@ -478,12 +478,18 @@ describe('AppointmentsList', () => {
     let row = (await screen.findByText('Valeria')).closest('tr')!;
     expect(within(row).getByText('Anticipo de $45.00 pagado en línea: entra al cobrarla')).toBeInTheDocument();
     // Without ProcessRefunds nothing goes back from here.
-    expect(within(row).queryByRole('button', { name: 'Devolver el anticipo de Valeria' })).not.toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Devolver anticipo de Valeria' })).not.toBeInTheDocument();
 
     // Cancelling says the deposit goes back, and «Volver» changes nothing.
     await user.selectOptions(within(row).getByRole('combobox', { name: 'Estado de la cita de Valeria' }), String(AppointmentStatus.Cancelled));
     let dialog = within(await screen.findByRole('dialog', { name: 'Cancelar la cita' }));
     expect(dialog.getByText(/su anticipo de \$45\.00 se le devuelve/)).toBeInTheDocument();
+    await user.click(dialog.getByRole('button', { name: 'Volver' }));
+    expect(appointmentsApi.updateStatus).not.toHaveBeenCalled();
+    // Done without its sale, it says the deposit stays held until it is charged or given back.
+    await user.selectOptions(within(row).getByRole('combobox', { name: 'Estado de la cita de Valeria' }), String(AppointmentStatus.Completed));
+    dialog = within(await screen.findByRole('dialog', { name: 'Marcar como completada' }));
+    expect(dialog.getByText(/sigue retenido hasta que la cobres en Vender o se lo devuelvas/)).toBeInTheDocument();
     await user.click(dialog.getByRole('button', { name: 'Volver' }));
     expect(appointmentsApi.updateStatus).not.toHaveBeenCalled();
     // «No asistió» says the business keeps it.
@@ -505,9 +511,9 @@ describe('AppointmentsList', () => {
     // One already in its sale does not go back from the agenda.
     const applied = screen.getByText('Mario').closest('tr')!;
     expect(within(applied).getByText('Anticipo de $30.00 en su venta')).toBeInTheDocument();
-    expect(within(applied).queryByRole('button', { name: /Devolver el anticipo/ })).not.toBeInTheDocument();
+    expect(within(applied).queryByRole('button', { name: /Devolver anticipo de/ })).not.toBeInTheDocument();
 
-    await user.click(within(row).getByRole('button', { name: 'Devolver el anticipo de Valeria' }));
+    await user.click(within(row).getByRole('button', { name: 'Devolver anticipo de Valeria' }));
     dialog = within(await screen.findByRole('dialog', { name: 'Devolver el anticipo' }));
     expect(dialog.getByText(/al cobrar la cita se cobra completa/)).toBeInTheDocument();
     await user.click(dialog.getByRole('button', { name: 'Devolver' }));

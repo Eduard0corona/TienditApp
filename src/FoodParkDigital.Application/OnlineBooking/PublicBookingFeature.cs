@@ -556,8 +556,9 @@ internal static class PublicAppointmentReceipts
     /// the Fase 30A (ADR 0081), a customer signed in to its account (<paramref name="accountId"/>) also counts the requests and
     /// cancellations of that account made with its other phones: changing the phone does not start the count again.
     /// </summary>
+    /// <param name="alsoPending">Deposits of this phone still being paid (Fase 31O): they count as requests waiting.</param>
     public static async Task<string?> RefusalForPhoneAsync(
-        IApplicationDbContext context, string phone, Guid? accountId, DateTimeOffset now, CancellationToken cancellationToken)
+        IApplicationDbContext context, string phone, Guid? accountId, DateTimeOffset now, CancellationToken cancellationToken, int alsoPending = 0)
     {
         var key = MessagingPhone.ToKey(phone);
         var fakeSince = ResponseTimes.Since(now);
@@ -573,7 +574,7 @@ internal static class PublicAppointmentReceipts
             : context.Appointments.Where(a => a.RequestPhone == key);
         var counted = await ofTheCustomer.CountAsync(a => a.Channel == AppointmentChannel.Online
             && ((a.Status == AppointmentStatus.Requested && a.StartAt > now) || a.CancelledByCustomerAt >= since), cancellationToken);
-        return counted >= OnlineBookingRules.MaxPendingPerPhone
+        return counted + alsoPending >= OnlineBookingRules.MaxPendingPerPhone
             ? RequestPublicAppointmentCommandHandler.TooManyPendingMessage
             : null;
     }

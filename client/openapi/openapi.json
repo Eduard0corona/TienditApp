@@ -10407,6 +10407,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelMyAppointmentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelMyAppointmentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelMyAppointmentRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -14934,17 +14953,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PublicAppointmentRequest"
+                "$ref": "#/components/schemas/CancelPublicAppointmentRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/PublicAppointmentRequest"
+                "$ref": "#/components/schemas/CancelPublicAppointmentRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/PublicAppointmentRequest"
+                "$ref": "#/components/schemas/CancelPublicAppointmentRequest"
               }
             }
           }
@@ -21496,6 +21515,16 @@
         },
         "additionalProperties": false
       },
+      "CancelMyAppointmentRequest": {
+        "type": "object",
+        "properties": {
+          "expectDepositBack": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "CancelOrderInvoiceRequest": {
         "required": [
           "motive"
@@ -21520,6 +21549,22 @@
             "nullable": true
           },
           "atCustomerRequest": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CancelPublicAppointmentRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "expectDepositBack": {
             "type": "boolean",
             "nullable": true
           }
@@ -24105,6 +24150,11 @@
           "appointmentId": {
             "type": "string",
             "format": "uuid",
+            "nullable": true
+          },
+          "expectedAppointmentDeposit": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           },
           "onCredit": {

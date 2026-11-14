@@ -122,9 +122,12 @@ export const publicMenuApi = {
   trackAppointment: (token: string, signal?: AbortSignal) =>
     apiRequest('post', '/api/v1/public/appointments/tracking', { body: { token }, signal }),
 
-  /** The customer cancels it from its link, before it starts. */
-  cancelAppointmentByLink: (token: string) =>
-    apiRequest('post', '/api/v1/public/appointments/tracking/cancel', { body: { token } }),
+  /**
+   * The customer cancels it from its link, before it starts. With its deposit held (Fase 31O), what the page said cancelling
+   * does with it: when that changed, nothing is cancelled and the answer says why.
+   */
+  cancelAppointmentByLink: (token: string, expectDepositBack?: boolean) =>
+    apiRequest('post', '/api/v1/public/appointments/tracking/cancel', { body: { token, expectDepositBack: expectDepositBack ?? null } }),
 
   /**
    * A photo of what happens for the visit of its link (Fase 29H): the link goes in the form, never in the address. Answers the

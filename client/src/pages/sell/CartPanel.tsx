@@ -80,16 +80,18 @@ interface CartPanelProps {
 /** The ticket of the sale: where it came from and where it goes, its lines, the customer, the totals and what to do with it. */
 export default function CartPanel(props: CartPanelProps) {
   const { tabTarget, tabOrder, chatOrigin, cart, totals, submitting, platform, pricesPending } = props;
+  // What is charged now: the total, less the deposit paid online to book the appointment (Fase 31O); the server decides it.
+  const deposit = props.appointment?.deposit ?? null;
+  const due = deposit != null ? Math.max(0, totals.total - deposit) : totals.total;
+  // A sale of less than that deposit is refused: the difference would have nowhere to go.
+  const depositAboveSale = deposit != null && cart.length > 0 && deposit > totals.total;
   // Nothing is charged, registered or sent at prices that are about to change.
-  const blocked = cart.length === 0 || submitting || pricesPending;
+  const blocked = cart.length === 0 || submitting || pricesPending || depositAboveSale;
   // A chat is a WhatsApp order, a tab goes to a table and an appointment is charged at the counter: none comes from a
   // platform's app.
   const showOrigin = !tabTarget && !chatOrigin && !props.appointment && props.activePlatforms.length > 0;
   const platformName = platform ? getPlatformName(platform) : '';
   const platformCharged = platform !== null && props.details.collectedBy === PlatformCollectedBy.Platform;
-  // What is charged now: the total, less the deposit paid online to book the appointment (Fase 31O); the server decides it.
-  const deposit = props.appointment?.deposit ?? null;
-  const due = deposit != null ? Math.max(0, totals.total - deposit) : totals.total;
 
   return (
     <div className="sell-cart-panel">
@@ -239,6 +241,11 @@ export default function CartPanel(props: CartPanelProps) {
               <span>Por cobrar</span>
               <span className="ta-money">{formatMoney(due)}</span>
             </div>
+            {depositAboveSale && (
+              <div className="small text-danger" role="status">
+                La venta es menor que el anticipo que el cliente pagó en línea: cobra al menos <span className="ta-money">{formatMoney(deposit)}</span>.
+              </div>
+            )}
           </>
         )}
         {platform && !pricesPending && <div className="small text-muted">Con tus precios de {platformName}</div>}

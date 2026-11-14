@@ -113,6 +113,12 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
     /// </summary>
     public Guid? AppointmentId { get; init; }
     /// <summary>
+    /// The deposit paid online that the screen took off the appointment's sale (Fase 31O), 0 when it showed none: when the
+    /// appointment no longer holds that deposit (given back, or taken by another sale meanwhile), the sale is refused instead
+    /// of being saved short of it. Optional: without it the sale takes whatever deposit the appointment holds.
+    /// </summary>
+    public decimal? ExpectedAppointmentDeposit { get; init; }
+    /// <summary>
     /// Sold on credit (Fase 26A): what the payments leave unpaid is what the customer owes, and the sale is handed over as
     /// a paid one. Only a counter sale of the business, with connection, to a customer the business sells to on credit
     /// whose limit takes it.
@@ -209,6 +215,8 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
     public const string AppointmentNotFoundMessage = "La cita no existe.";
     public const string AppointmentDepositPaymentsMessage =
         "Los pagos y el anticipo que el cliente pagó en línea suman más que el total de la venta.";
+    public const string AppointmentDepositChangedMessage =
+        "El anticipo de esta cita cambió (se devolvió o ya entró a otra venta): revisa la venta antes de cobrar.";
     public const string CreditWithConnectionMessage = "Una venta fiada se registra con conexión: el límite del cliente se revisa al venderla.";
     public const string CustomerBalanceSaleMessage = "El saldo a favor se usa en una venta del negocio en el mostrador.";
     public const string CustomerBalanceWithConnectionMessage =
@@ -292,6 +300,11 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             .GreaterThanOrEqualTo(0)
             .PrecisionScale(18, 2, ignoreTrailingZeros: true)
             .When(x => x.ExpectedTotal.HasValue);
+        RuleFor(x => x.ExpectedAppointmentDeposit)
+            .GreaterThanOrEqualTo(0)
+            .PrecisionScale(18, 2, ignoreTrailingZeros: true)
+            .When(x => x.ExpectedAppointmentDeposit.HasValue);
+        RuleFor(x => x.ExpectedAppointmentDeposit).Null().When(x => x.AppointmentId is null).WithMessage(AppointmentNotFoundMessage);
 
         When(x => x.OpenTab, () =>
         {
@@ -627,6 +640,9 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 _context, order, appointmentId, salesSettings.DefaultTaxRate, now, cancellationToken);
             if (appointmentError is not null)
                 return Result.Failure<OrderDto>(appointmentError);
+            // The deposit the screen took off is the one the sale took: the cashier charged only the rest.
+            if (request.ExpectedAppointmentDeposit is { } expectedDeposit && expectedDeposit != order.PaidAmount)
+                return Result.Failure<OrderDto>(CreateOrderCommandValidator.AppointmentDepositChangedMessage);
         }
 
         // 9. The status the team starts it with.

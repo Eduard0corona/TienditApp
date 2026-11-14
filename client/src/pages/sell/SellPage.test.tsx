@@ -1459,8 +1459,22 @@ describe('SellPage with a platform order and no connection', () => {
 
       // The server takes the deposit into the sale: the cashier's payment is only the rest, of the whole total.
       await waitFor(() => expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({
-        appointmentId: 'a1', expectedTotal: 400, payments: [expect.objectContaining({ amount: 280 })],
+        appointmentId: 'a1', expectedTotal: 400, expectedAppointmentDeposit: 120, payments: [expect.objectContaining({ amount: 280 })],
       })));
+    });
+
+    it('charges nothing while the sale is less than the deposit paid online (Fase 31O)', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);
+      vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, haircut], totalCount: 2 } } as never);
+      vi.mocked(appointmentsApi.getById).mockResolvedValue({
+        data: { ...appointment, visit: null, channel: 1, depositAmount: 450, depositStatus: 1 },
+      } as never);
+      renderAt('/sell?appointment=a1');
+
+      expect(await ticket().findByText(/Cobro de la cita de/)).toHaveTextContent('Ana Ruiz');
+      expect(ticket().getByText(/La venta es menor que el anticipo que el cliente pagó en línea/)).toHaveTextContent('$450.00');
+      expect(ticket().getByRole('button', { name: 'Cobrar $0.00 F9' })).toBeDisabled();
+      expect(ticket().getByRole('button', { name: 'Guardar sin cobrar' })).toBeDisabled();
     });
 
     it('stops being the charge of the appointment when the cashier says so', async () => {

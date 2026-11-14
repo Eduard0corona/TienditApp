@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -210,6 +210,11 @@ describe('PublicBookingPage', () => {
       expect(JSON.parse(window.localStorage.getItem('tienditapp.onlineCheckouts') ?? '{}').c1.returnKey).toBe('llave-1');
       // While the browser leaves for Mercado Pago, nothing else is sent.
       expect(sheet.getByRole('button', { name: 'Abriendo Mercado Pago…' })).toBeDisabled();
+      // Back with the browser's back button, the page as it was left works again.
+      act(() => {
+        window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+      });
+      expect(await sheet.findByRole('button', { name: 'Pagar anticipo de $45.00' })).toBeEnabled();
     } finally {
       Object.defineProperty(window, 'location', { configurable: true, value: location });
       window.localStorage.clear();

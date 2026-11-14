@@ -417,8 +417,8 @@ public class SweepOnlinePaymentsCommandHandler : IRequestHandler<SweepOnlinePaym
 
     /// <summary>
     /// The requests booked with a deposit that the business did not answer before their time (Fase 31O, ADR 0095): their
-    /// deposit goes back (the queue asks Mercado Pago for it). One the business answers meanwhile collides on its version and
-    /// waits for the next pass, as it is then.
+    /// deposit goes back (the queue asks Mercado Pago for it), each on its own. One the business answers meanwhile collides
+    /// on its version and is read again in the next pass, as it is then; the others are not held back by it.
     /// </summary>
     private async Task<int> ReturnUnansweredDepositsAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -426,21 +426,28 @@ public class SweepOnlinePaymentsCommandHandler : IRequestHandler<SweepOnlinePaym
         var due = await _context.Appointments
             .Where(a => a.DepositStatus == AppointmentDepositStatus.Held && a.Status == AppointmentStatus.Requested && a.StartAt <= now)
             .OrderBy(a => a.StartAt)
+            .Select(a => a.Id)
             .Take(MaxPerSweep)
             .ToListAsync(cancellationToken);
-        var returned = due.Count(appointment => appointment.ReturnUnansweredDeposit(now));
-        if (returned == 0)
-            return 0;
-        try
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-            return returned;
-        }
-        catch (DbUpdateConcurrencyException)
+        var returned = 0;
+        foreach (var id in due)
         {
             _context.ChangeTracker.Clear();
-            return 0;
+            var appointment = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+            if (appointment is null || !appointment.ReturnUnansweredDeposit(now))
+                continue;
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                returned++;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Answered meanwhile: the next pass reads it as it is then.
+            }
         }
+        _context.ChangeTracker.Clear();
+        return returned;
     }
 
     private async Task<bool> ExpireAsync(Guid checkoutId, DateTimeOffset now, CancellationToken cancellationToken)

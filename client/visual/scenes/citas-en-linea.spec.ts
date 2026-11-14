@@ -387,7 +387,7 @@ test.describe('Anticipo para reservar', () => {
     await page.addInitScript(({ checkoutId, returnKey }) => {
       window.localStorage.setItem('tienditapp.onlineCheckouts', JSON.stringify({ [checkoutId]: { returnKey, savedAt: new Date().toISOString() } }));
     }, { checkoutId: DEPOSIT_CHECKOUT_ID, returnKey: DEPOSIT_RETURN_KEY });
-    await open(page, `/m/cafe-la-esquina/cita/pago/${DEPOSIT_CHECKOUT_ID}?payment_id=1234567890&status=approved`);
+    await open(page, '/m/cafe-la-esquina/cita/pago/7a3e9c51-4b2d-4f8a-9e6c-1d5b8f2a0c47?payment_id=1234567890&status=approved');
     await expect(page.getByRole('heading', { name: '¡Anticipo pagado!' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Ver tu cita' })).toBeVisible();
     await snap(page, 'agendar-anticipo-pagado-telefono');
@@ -395,7 +395,7 @@ test.describe('Anticipo para reservar', () => {
 
   test('agendar anticipo que llegó tarde', async ({ page }) => {
     await page.setViewportSize(SIZES.phone);
-    await open(page, `/m/cafe-la-esquina/cita/pago/${LATE_DEPOSIT_CHECKOUT_ID}?payment_id=1234567891&status=approved`);
+    await open(page, '/m/cafe-la-esquina/cita/pago/3c8f1a92-6e4b-4d7c-a1f5-9b2e0d6c8a14?payment_id=1234567891&status=approved');
     await expect(page.getByRole('heading', { name: 'No pudimos reservar tu cita' })).toBeVisible();
     await snap(page, 'agendar-anticipo-tarde-telefono');
   });
@@ -442,14 +442,14 @@ test.describe('Anticipos en la agenda', () => {
     await page.getByRole('searchbox', { name: /^Cliente, teléfono, servicio/ }).fill('Cata de café');
     await expect(page.getByText('Juan Carlos Hernández')).toHaveCount(0);
     await expect(page.getByText('Anticipo de $105.00 devuelto al cliente')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Devolver el anticipo de Valeria Ruiz' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Devolver anticipo de Valeria Ruiz' })).toBeVisible();
     await snap(page, 'agenda-anticipos-escritorio');
   });
 
   test('agenda devolver anticipo', async ({ page }) => {
     await page.setViewportSize(SIZES.desktop);
     await open(page, '/appointments');
-    await page.getByRole('button', { name: 'Devolver el anticipo de Valeria Ruiz' }).click();
+    await page.getByRole('button', { name: 'Devolver anticipo de Valeria Ruiz' }).click();
     await dialog(page, 'Devolver el anticipo');
     await snap(page, 'agenda-devolver-anticipo-escritorio', { fullPage: false });
   });
@@ -460,4 +460,9 @@ test.describe('Anticipos en la agenda', () => {
     await expect(page.getByText('Anticipo pagado en línea')).toBeVisible();
     await snap(page, 'vender-cita-anticipo-escritorio');
   });
+});
+
+test('the deposit scenes open the payments the mocks answer', () => {
+  // The coverage of the routes reads the paths as written: the ids go literally in them.
+  expect([DEPOSIT_CHECKOUT_ID, LATE_DEPOSIT_CHECKOUT_ID]).toEqual(['7a3e9c51-4b2d-4f8a-9e6c-1d5b8f2a0c47', '3c8f1a92-6e4b-4d7c-a1f5-9b2e0d6c8a14']);
 });

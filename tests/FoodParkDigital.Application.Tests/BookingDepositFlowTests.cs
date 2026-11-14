@@ -139,6 +139,19 @@ public class BookingDepositFlowTests
     }
 
     [Fact]
+    public async Task ThePhonesRequestsWaiting_AndItsDepositsInCourse_ShouldCountTogether()
+    {
+        await using var shop = await Shop.OpenAsync(percent: 30);
+        var cheap = await shop.ServiceAsync("Ceja", 20m);
+        // One request waiting (a service that asks no deposit) and two deposits in course: three, the limit.
+        Assert.True((await shop.RequestAsync(cheap.Id, MondayTen)).IsSuccess);
+        Assert.True((await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(1))).IsSuccess);
+        Assert.True((await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(2))).IsSuccess);
+
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage, (await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(3))).Error);
+    }
+
+    [Fact]
     public async Task AnApprovedDeposit_ShouldBookTheRequest_WithTheDepositHeld_AndTheBusinessHearsOfIt()
     {
         await using var shop = await Shop.OpenAsync(percent: 30);
@@ -191,7 +204,12 @@ public class BookingDepositFlowTests
             (refused!.Status, refused.FailureMessage, refused.RefundStatus));
         Assert.Null(refused.Receipt);
         Assert.Equal(ApplyOnlinePaymentCommandHandler.PaidLateMessage, paidLate!.FailureMessage);
-        Assert.Equal(2, await shop.Context.OnlinePaymentRefunds.CountAsync(r => r.Reason == OnlinePaymentRefundReason.NotPlaced));
+        // A payment of another amount is not the deposit, said as one.
+        var other = (await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(3))).Value!;
+        var wrong = shop.Gateway.Approve(other.CheckoutId, 44m, other.ExpiresAt.AddMinutes(-1));
+        Assert.Equal(ApplyOnlinePaymentCommandHandler.DepositMismatchMessage,
+            (await shop.ConfirmAsync(other.CheckoutId, wrong.Id, other.ReturnKey))!.FailureMessage);
+        Assert.Equal(3, await shop.Context.OnlinePaymentRefunds.CountAsync(r => r.Reason == OnlinePaymentRefundReason.NotPlaced));
 
         // The business stopped booking online while the customer paid.
         var settings = await shop.Context.TenantSettings.SingleAsync();
@@ -322,13 +340,17 @@ public class BookingDepositFlowTests
         var view = (await shop.PublicAsync(lateToken))!;
         Assert.Equal((45m, (AppointmentDepositStatus?)AppointmentDepositStatus.Held, false, true),
             (view.DepositAmount!.Value, view.DepositStatus, view.CancelReturnsDeposit, view.CanCancel));
-        var late = await shop.CancelAsync(lateToken);
+        // A page read earlier said it went back: nothing is cancelled, and the customer reads why.
+        Assert.Equal(CustomerCancellation.DepositKeptNowMessage, (await shop.CancelAsync(lateToken, expectDepositBack: true)).Error);
+        Assert.Equal(AppointmentDepositStatus.Held, (await shop.Context.Appointments.AsNoTracking().SingleAsync(a => a.Id == lateId)).DepositStatus);
+        var late = await shop.CancelAsync(lateToken, expectDepositBack: false);
         Assert.Equal(AppointmentDepositStatus.Kept, late.Value!.DepositStatus);
 
         // Agendada for Tuesday: more than a day away.
         var (earlyId, _, earlyToken) = await shop.BookedAsync(Local(Monday.AddDays(1), "10:00"));
         Assert.True((await shop.Requests.Handle(new AcceptAppointmentRequestCommand(earlyId), CancellationToken.None)).IsSuccess);
-        Assert.Equal(AppointmentDepositStatus.Returned, (await shop.CancelAsync(earlyToken)).Value!.DepositStatus);
+        Assert.Equal(CustomerCancellation.DepositBackNowMessage, (await shop.CancelAsync(earlyToken, expectDepositBack: false)).Error);
+        Assert.Equal(AppointmentDepositStatus.Returned, (await shop.CancelAsync(earlyToken, expectDepositBack: true)).Value!.DepositStatus);
 
         await shop.DeliverReturnsAsync();
         Assert.Equal(2, await shop.Context.OnlinePaymentRefunds.CountAsync(r => r.Reason == OnlinePaymentRefundReason.AppointmentDeposit));
@@ -403,6 +425,47 @@ public class BookingDepositFlowTests
         Assert.Equal(order.Id, (await shop.Context.OnlineCheckouts.AsNoTracking().SingleAsync()).OrderId);
         // Taken by its sale, it is not given back from the appointment.
         await Assert.ThrowsAsync<Domain.Exceptions.DomainException>(() => shop.ReturnAsync(appointmentId));
+    }
+
+    [Fact]
+    public async Task TheDepositRefundedFromItsSale_ShouldSayHowMercadoPagoHasIt()
+    {
+        await using var shop = await Shop.OpenAsync(percent: 30);
+        var (appointmentId, paymentId, _) = await shop.BookedAsync(MondayTen);
+        Assert.True((await shop.Requests.Handle(new AcceptAppointmentRequestCommand(appointmentId), CancellationToken.None)).IsSuccess);
+        await shop.Fixture.OpenCashSessionAsync(shop.Tenant);
+        var sold = (await shop.SellAsync(appointmentId, cash: 105m)).Value!;
+
+        var refunded = await new RefundOrderCommandHandler(
+                shop.Context, shop.Fixture.CurrentUser, new OrderCashService(shop.Context, shop.Fixture.CurrentUser), shop.Clock,
+                NoOpOrderInventoryService.Instance)
+            .Handle(new RefundOrderCommand { OrderId = sold.Id, Amount = 45m, Method = OrderPaymentMethod.Online, Reason = "No llegó la barbera" },
+                CancellationToken.None);
+
+        // A sale at the counter, but its deposit was paid online: its refund says it was asked to Mercado Pago.
+        Assert.True(refunded.IsSuccess, refunded.Error);
+        var refund = Assert.Single(refunded.Value!.Refunds);
+        Assert.Equal((OrderPaymentMethod.Online, (OnlinePaymentRefundStatus?)OnlinePaymentRefundStatus.Requested), (refund.Method, refund.OnlineStatus));
+        Assert.Equal(paymentId, (await shop.Context.OnlinePaymentRefunds.AsNoTracking().SingleAsync()).PaymentId);
+    }
+
+    [Fact]
+    public async Task ASaleThatTookOffADepositGivenBackMeanwhile_ShouldBeRefused_NotSavedShort()
+    {
+        await using var shop = await Shop.OpenAsync(percent: 30);
+        var (appointmentId, _, _) = await shop.BookedAsync(MondayTen);
+        Assert.True((await shop.Requests.Handle(new AcceptAppointmentRequestCommand(appointmentId), CancellationToken.None)).IsSuccess);
+        await shop.Fixture.OpenCashSessionAsync(shop.Tenant);
+        // Vender showed the deposit of $45; meanwhile someone gave it back.
+        Assert.True((await shop.ReturnAsync(appointmentId)).IsSuccess);
+        shop.Context.ChangeTracker.Clear();
+
+        var sold = await shop.SellAsync(appointmentId, cash: 105m, expectedDeposit: 45m);
+
+        Assert.Equal(CreateOrderCommandValidator.AppointmentDepositChangedMessage, sold.Error);
+        Assert.Empty(await shop.Context.Orders.ToListAsync());
+        // Read again, the screen charges it whole.
+        Assert.True((await shop.SellAsync(appointmentId, cash: 150m, expectedDeposit: 0m)).IsSuccess);
     }
 
     [Fact]
@@ -603,8 +666,9 @@ public class BookingDepositFlowTests
         public Task<CustomerAppointmentDto?> PublicAsync(string token)
             => new GetPublicAppointmentQueryHandler(Context, Fixture.TenantService, Clock).Handle(new GetPublicAppointmentQuery(token), CancellationToken.None);
 
-        public Task<Result<CustomerAppointmentDto>> CancelAsync(string token)
-            => new CancelPublicAppointmentCommandHandler(Context, Fixture.TenantService, Clock).Handle(new CancelPublicAppointmentCommand(token), CancellationToken.None);
+        public Task<Result<CustomerAppointmentDto>> CancelAsync(string token, bool? expectDepositBack = null)
+            => new CancelPublicAppointmentCommandHandler(Context, Fixture.TenantService, Clock)
+                .Handle(new CancelPublicAppointmentCommand(token, expectDepositBack), CancellationToken.None);
 
         public Task<Result<Appointments.DTOs.AppointmentDto>> ReturnAsync(Guid appointmentId)
             => new ReturnAppointmentDepositCommandHandler(Context, Fixture.CurrentUser).Handle(new ReturnAppointmentDepositCommand(appointmentId), CancellationToken.None);
@@ -628,7 +692,7 @@ public class BookingDepositFlowTests
             => new DisconnectOnlinePaymentAccountCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, Gateway, Protector, Clock)
                 .Handle(new DisconnectOnlinePaymentAccountCommand(), CancellationToken.None);
 
-        public async Task<Result<Orders.DTOs.OrderDto>> SellAsync(Guid appointmentId, decimal cash, Product? service = null)
+        public async Task<Result<Orders.DTOs.OrderDto>> SellAsync(Guid appointmentId, decimal cash, Product? service = null, decimal? expectedDeposit = null)
         {
             var result = await Fixture.CreateOrderHandler(new OrderInventoryService(Context, Clock, new FolioGenerator(Context), NullLogger<OrderInventoryService>.Instance))
                 .Handle(new CreateOrderCommand
@@ -638,6 +702,7 @@ public class BookingDepositFlowTests
                     CreatedByBusiness = true,
                     Items = [new CreateOrderItemDto { ProductId = (service ?? Haircut).Id, Quantity = 1 }],
                     AppointmentId = appointmentId,
+                    ExpectedAppointmentDeposit = expectedDeposit,
                     Payments = cash > 0 ? [new CreateOrderPaymentDto { Amount = cash, Method = OrderPaymentMethod.Cash }] : []
                 }, CancellationToken.None);
             // A refused sale is never saved: the next one starts clean, as a new request would.

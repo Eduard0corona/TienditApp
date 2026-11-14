@@ -16,6 +16,7 @@ import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { DEPOSIT_CANCEL_HOURS, depositPolicy } from '../../utils/bookingDeposits';
+import { goToExternalPage } from '../../utils/externalNavigation';
 import { formatMoney } from '../../utils/money';
 import { rememberOnlineCheckout } from '../../utils/onlineCheckouts';
 import { describeDuration, shortDayLabel, upperFirst } from '../../utils/onlineBooking';
@@ -132,6 +133,29 @@ export default function PublicBookingPage() {
     setChosen(null);
   };
 
+  // Whether the page went to Mercado Pago to pay a deposit (Fase 31O). Back from there, the browser may bring the page back as
+  // it left it (or it never left, when another app took the link), still opening the payment: the sheet works again.
+  const leftForPayment = useRef(false);
+  useEffect(() => {
+    const back = () => {
+      if (!leftForPayment.current) return;
+      leftForPayment.current = false;
+      setSending(false);
+    };
+    const shown = (event: PageTransitionEvent) => {
+      if (event.persisted) back();
+    };
+    const visible = () => {
+      if (document.visibilityState === 'visible') back();
+    };
+    window.addEventListener('pageshow', shown);
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      window.removeEventListener('pageshow', shown);
+      document.removeEventListener('visibilitychange', visible);
+    };
+  }, []);
+
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!service || !chosen || sending || checking) return;
@@ -159,8 +183,9 @@ export default function PublicBookingPage() {
           expectedDeposit: service.depositAmount,
         });
         rememberOnlineCheckout(started.checkoutId, started.returnKey);
+        goToExternalPage(started.checkoutUrl);
         leaving = true;
-        window.location.assign(started.checkoutUrl);
+        leftForPayment.current = true;
         return;
       }
       const result = await publicMenuApi.requestAppointment(slug, { ...request, idempotencyKey: attempt.current.key });

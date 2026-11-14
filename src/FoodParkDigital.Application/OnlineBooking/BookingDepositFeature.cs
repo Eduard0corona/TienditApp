@@ -227,15 +227,14 @@ public class StartAppointmentDepositCommandHandler : IRequestHandler<StartAppoin
         if (request.ExpectedDeposit is { } expected && expected != deposit)
             return Result.Failure<OnlineCheckoutStartedDto>(BookingDepositOffer.DepositChangedMessage(deposit.Value));
 
-        // The same spam guard as a request: its requests waiting, and its deposits in course (one that never reached Mercado
-        // Pago does not count).
-        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, account?.Id, now, cancellationToken) is { } refused)
+        // The same spam guard as a request: its requests waiting and its deposits in course count together (one that never
+        // reached Mercado Pago does not count).
+        var paying = await _context.OnlineCheckouts.CountAsync(c => c.ForAppointment
+            && c.Status == OnlineCheckoutStatus.AwaitingPayment
+            && c.CustomerPhone == phone
+            && c.PreferenceId != null, cancellationToken);
+        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, account?.Id, now, cancellationToken, alsoPending: paying) is { } refused)
             return Result.Failure<OnlineCheckoutStartedDto>(refused);
-        if (await _context.OnlineCheckouts.CountAsync(c => c.ForAppointment
-                && c.Status == OnlineCheckoutStatus.AwaitingPayment
-                && c.CustomerPhone == phone
-                && c.PreferenceId != null, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
-            return Result.Failure<OnlineCheckoutStartedDto>(RequestPublicAppointmentCommandHandler.TooManyPendingMessage);
         if (PublicAppointmentPlacement.TooFar(business.Settings, request.StartAt, now))
             return Result.Failure<OnlineCheckoutStartedDto>(RequestPublicAppointmentCommandHandler.TooFarMessage);
 

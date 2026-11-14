@@ -43,7 +43,8 @@ export const accountApi = {
     apiRequest('get', '/api/v1/me/appointments', { query: { scope, pageNumber, pageSize }, signal }),
 
   /** Cancels one of them before it starts; any other is not found (404). */
-  cancelAppointment: (id: string) => apiRequest('post', '/api/v1/me/appointments/{id}/cancel', { path: { id } }),
+  cancelAppointment: (id: string, expectDepositBack?: boolean) =>
+    apiRequest('post', '/api/v1/me/appointments/{id}/cancel', { path: { id }, body: { expectDepositBack: expectDepositBack ?? null } }),
 
   /**
    * The businesses the account keeps among its favorites (Fase 24F), the last one first: each with its card in Explorar

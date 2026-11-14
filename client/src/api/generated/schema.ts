@@ -8720,7 +8720,13 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CancelMyAppointmentRequest"];
+                    "text/json": components["schemas"]["CancelMyAppointmentRequest"];
+                    "application/*+json": components["schemas"]["CancelMyAppointmentRequest"];
+                };
+            };
             responses: {
                 /** @description OK */
                 200: {
@@ -12488,9 +12494,9 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "application/json": components["schemas"]["PublicAppointmentRequest"];
-                    "text/json": components["schemas"]["PublicAppointmentRequest"];
-                    "application/*+json": components["schemas"]["PublicAppointmentRequest"];
+                    "application/json": components["schemas"]["CancelPublicAppointmentRequest"];
+                    "text/json": components["schemas"]["CancelPublicAppointmentRequest"];
+                    "application/*+json": components["schemas"]["CancelPublicAppointmentRequest"];
                 };
             };
             responses: {
@@ -17090,6 +17096,9 @@ export interface components {
         CancelInventoryCountRequest: {
             reason?: string | null;
         };
+        CancelMyAppointmentRequest: {
+            expectDepositBack?: boolean | null;
+        };
         CancelOrderInvoiceRequest: {
             motive: components["schemas"]["CfdiCancellationMotive"];
         };
@@ -17097,6 +17106,10 @@ export interface components {
             reason?: string | null;
             restockItems?: boolean | null;
             atCustomerRequest?: boolean | null;
+        };
+        CancelPublicAppointmentRequest: {
+            token: string;
+            expectDepositBack?: boolean | null;
         };
         CancelTabItemRequest: {
             /** Format: uuid */
@@ -17857,6 +17870,8 @@ export interface components {
             delivery?: components["schemas"]["OrderDeliveryInput"];
             /** Format: uuid */
             appointmentId?: string | null;
+            /** Format: double */
+            expectedAppointmentDeposit?: number | null;
             /** @default false */
             onCredit: boolean;
         };

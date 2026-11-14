@@ -86,10 +86,17 @@ public class MeController : ControllerBase
         => Ok(await _mediator.Send(new GetMyAppointmentsQuery { Scope = scope, PageNumber = pageNumber, PageSize = pageSize }, cancellationToken));
 
     /// <summary>Cancels one of the account's appointments before it starts (Fase 24D); any other is not found.</summary>
+    /// <remarks>
+    /// Its body is optional: with <c>expectDepositBack</c>, what the page said cancelling does with its deposit (Fase 31O), and
+    /// when that changed nothing is cancelled.
+    /// </remarks>
     [HttpPost("appointments/{id:guid}/cancel")]
-    public async Task<ActionResult<CustomerAppointmentDto>> CancelMyAppointment(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<CustomerAppointmentDto>> CancelMyAppointment(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CancelMyAppointmentRequest? request,
+        CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new CancelMyAppointmentCommand(id), cancellationToken);
+        var result = await _mediator.Send(new CancelMyAppointmentCommand(id, request?.ExpectDepositBack), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -282,3 +289,10 @@ public class SaveMyCartRequest
 public record MyPostalCodeRequest(string? PostalCode = null);
 
 public record AccountAddressRequest(string PostalCode, string AddressLine, string? Label = null, string? References = null);
+
+/// <summary>What the page said of the deposit when the customer cancelled one of the account's appointments (Fase 31O).</summary>
+public class CancelMyAppointmentRequest
+{
+    /// <summary>Whether cancelling gives the deposit back, as the page said; when that changed, nothing is cancelled.</summary>
+    public bool? ExpectDepositBack { get; init; }
+}

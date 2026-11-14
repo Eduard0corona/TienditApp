@@ -460,6 +460,17 @@ export default function AppointmentsList() {
       });
       if (!accepted) return;
     }
+    // Done without its sale, the deposit stays held: it enters when it is charged in Vender, or the business gives it back.
+    if (holdsDeposit(item) && newStatus === AppointmentStatusConst.Completed) {
+      const accepted = await confirm({
+        title: 'Marcar como completada',
+        message: `La cita de ${item.customerName} queda completada sin cobrar: su anticipo de ${formatMoney(item.depositAmount!)} `
+          + 'sigue retenido hasta que la cobres en Vender o se lo devuelvas.',
+        confirmLabel: 'Completar',
+        cancelLabel: 'Volver',
+      });
+      if (!accepted) return;
+    }
     setError('');
     try {
       await appointmentsApi.updateStatus(item.id, newStatus);
@@ -811,7 +822,7 @@ export default function AppointmentsList() {
                       type="button"
                       className="btn btn-link btn-sm p-0"
                       onClick={() => void returnDeposit(item)}
-                      aria-label={`Devolver el anticipo de ${item.customerName}`}
+                      aria-label={`Devolver anticipo de ${item.customerName}`}
                     >
                       Devolver anticipo
                     </button>

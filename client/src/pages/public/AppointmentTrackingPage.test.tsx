@@ -94,7 +94,7 @@ describe('AppointmentTrackingPage', () => {
     expect(api.cancelAppointmentByLink).not.toHaveBeenCalled();
     await user.click(dialog.getByRole('button', { name: 'Cancelar cita' }));
 
-    await waitFor(() => expect(api.cancelAppointmentByLink).toHaveBeenCalledWith(LINK));
+    await waitFor(() => expect(api.cancelAppointmentByLink).toHaveBeenCalledWith(LINK, undefined));
     expect(await screen.findByText('La cancelaste')).toBeInTheDocument();
     expect(toast.success).toHaveBeenCalledWith('Cancelaste tu cita.');
     expect(screen.queryByRole('button', { name: /Cancelar la cita/ })).not.toBeInTheDocument();
@@ -112,6 +112,10 @@ describe('AppointmentTrackingPage', () => {
     await user.click(screen.getByRole('button', { name: /Cancelar la cita/ }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Cancelar cita' }));
     expect(dialog.getByText(/Faltan menos de 24 horas: el negocio se queda con tu anticipo de \$45\.00\./)).toBeInTheDocument();
+    // It sends what it said, so the server refuses it if that changed meanwhile.
+    api.cancelAppointmentByLink.mockResolvedValue(appointment({ status: AppointmentStatus.Cancelled, statusLabel: 'La cancelaste', canCancel: false }) as never);
+    await user.click(dialog.getByRole('button', { name: 'Cancelar cita' }));
+    await waitFor(() => expect(api.cancelAppointmentByLink).toHaveBeenCalledWith(LINK, false));
   });
 
   it('says the deposit goes back when cancelling in time', async () => {

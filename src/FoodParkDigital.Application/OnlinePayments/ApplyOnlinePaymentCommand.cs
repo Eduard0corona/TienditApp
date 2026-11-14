@@ -195,6 +195,7 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
     public const string OrdersStoppedMessage = "El negocio dejó de recibir pedidos en línea antes de que se confirmara tu pago.";
     public const string PaidLateMessage = "Tu pago llegó después del tiempo para pagar.";
     public const string MismatchMessage = "El pago no coincide con tu pedido.";
+    public const string DepositMismatchMessage = "El pago no coincide con el anticipo.";
     public const string CatalogChangedMessage = "Algo de tu pedido cambió en el menú mientras pagabas: un producto, su horario o sus opciones.";
 
     private static readonly JsonSerializerOptions RequestJson = new(JsonSerializerDefaults.Web);
@@ -264,7 +265,8 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
         string? refusal;
         OnlineCheckoutFailure failure;
         if (payment.Amount != checkout.Amount || payment.Currency != OnlineCheckout.Currency)
-            (failure, refusal) = (OnlineCheckoutFailure.PaymentMismatch, MismatchMessage);
+            // A deposit (of a quote or an appointment) is not an order: its customer reads it as what they paid.
+            (failure, refusal) = (OnlineCheckoutFailure.PaymentMismatch, checkout.ForAppointment || checkout.IsForQuote ? DepositMismatchMessage : MismatchMessage);
         else if (checkout.Status == OnlineCheckoutStatus.Expired || approvedAt > checkout.ExpiresAt)
             (failure, refusal) = (OnlineCheckoutFailure.PaidAfterExpiry, PaidLateMessage);
         else if (request.RefusedBecause is { } reason)
