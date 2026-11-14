@@ -117,6 +117,19 @@ describe('AppointmentDepositReturnPage', () => {
     expect(screen.getByRole('link', { name: 'Intentar de nuevo' })).toHaveAttribute('href', status().checkoutUrl);
   });
 
+  it('waits for the payment Mercado Pago approved without offering to pay again, and sends no id that is not one', async () => {
+    confirmDeposit.mockResolvedValue(status());
+
+    renderPage('?payment_id=no-es-un-pago&status=approved');
+
+    // The same heading shows while it first asks: this line comes only with the server's answer.
+    expect(await screen.findByText(/Mercado Pago ya lo aprobó/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Confirmando tu anticipo…' })).toBeInTheDocument();
+    expect(confirmDeposit).toHaveBeenCalledWith('barberia-luis', CHECKOUT, { paymentId: null, returnKey: null }, expect.anything());
+    expect(screen.queryByRole('link', { name: 'Pagar en Mercado Pago' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Intentar de nuevo' })).not.toBeInTheDocument();
+  });
+
   it('says the time to pay ended, and nothing was charged', async () => {
     confirmDeposit.mockResolvedValue(status({ status: OnlineCheckoutStatus.Expired, checkoutUrl: null }));
 
