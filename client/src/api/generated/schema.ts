@@ -809,6 +809,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appointments/{id}/deposit/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AppointmentDto"];
+                        "application/json": components["schemas"]["AppointmentDto"];
+                        "text/json": components["schemas"]["AppointmentDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/appointments/{id}/unmark-fake": {
         parameters: {
             query?: never;
@@ -12896,6 +12935,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/menu/{slug}/appointments/deposit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StartAppointmentDepositRequest"];
+                    "text/json": components["schemas"]["StartAppointmentDepositRequest"];
+                    "application/*+json": components["schemas"]["StartAppointmentDepositRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineCheckoutStartedDto"];
+                        "application/json": components["schemas"]["OnlineCheckoutStartedDto"];
+                        "text/json": components["schemas"]["OnlineCheckoutStartedDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/appointments/deposit/{checkoutId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                    checkoutId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ConfirmOnlineCheckoutRequest"];
+                    "text/json": components["schemas"]["ConfirmOnlineCheckoutRequest"];
+                    "application/*+json": components["schemas"]["ConfirmOnlineCheckoutRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AppointmentDepositStatusDto"];
+                        "application/json": components["schemas"]["AppointmentDepositStatusDto"];
+                        "text/json": components["schemas"]["AppointmentDepositStatusDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/menu/{slug}/home-visit": {
         parameters: {
             query?: never;
@@ -16628,6 +16758,24 @@ export interface components {
          * @enum {integer}
          */
         AppointmentChannel: 0 | 1;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        AppointmentDepositStatus: 1 | 2 | 3 | 4;
+        AppointmentDepositStatusDto: {
+            status: components["schemas"]["OnlineCheckoutStatus"];
+            /** Format: double */
+            amount: number;
+            /** Format: date-time */
+            expiresAt: string;
+            businessName: string;
+            contactPhone?: string | null;
+            checkoutUrl?: string | null;
+            failureMessage?: string | null;
+            refundStatus?: components["schemas"]["OnlinePaymentRefundStatus"];
+            receipt?: components["schemas"]["PublicAppointmentReceiptDto"];
+        };
         AppointmentDto: {
             /** Format: uuid */
             id: string;
@@ -16660,6 +16808,9 @@ export interface components {
             answerBy?: string | null;
             fromTeam: boolean;
             markedFake: boolean;
+            /** Format: double */
+            depositAmount?: number | null;
+            depositStatus?: components["schemas"]["AppointmentDepositStatus"];
         };
         AppointmentDtoPaginatedList: {
             items: components["schemas"]["AppointmentDto"][];
@@ -18082,6 +18233,10 @@ export interface components {
             /** Format: int32 */
             problemPhotos: number;
             canAddPhotos: boolean;
+            /** Format: double */
+            depositAmount?: number | null;
+            depositStatus?: components["schemas"]["AppointmentDepositStatus"];
+            cancelReturnsDeposit: boolean;
         };
         CustomerAppointmentDtoPaginatedList: {
             items: components["schemas"]["CustomerAppointmentDto"][];
@@ -19838,6 +19993,11 @@ export interface components {
             /** Format: int32 */
             answerReminderMinutes: number;
             answerReminderChoices: number[];
+            /** Format: int32 */
+            depositPercent?: number | null;
+            depositAvailable: boolean;
+            /** Format: int32 */
+            depositCancelHours: number;
         };
         OnlineBookingStaffMemberDto: {
             /** Format: uuid */
@@ -19913,7 +20073,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OnlinePaymentRefundReason: 1 | 2 | 3 | 4 | 5 | 6;
+        OnlinePaymentRefundReason: 1 | 2 | 3 | 4 | 5 | 6 | 7;
         /**
          * Format: int32
          * @enum {integer}
@@ -21261,6 +21421,8 @@ export interface components {
             services: components["schemas"]["PublicBookingServiceDto"][];
             staff: components["schemas"]["PublicBookingStaffDto"][];
             responseTime?: components["schemas"]["ResponseTime"];
+            /** Format: int32 */
+            depositCancelHours: number;
         };
         PublicBookingServiceDto: {
             /** Format: uuid */
@@ -21273,6 +21435,8 @@ export interface components {
             durationMinutes: number;
             imageUrl?: string | null;
             staffIds: string[];
+            /** Format: double */
+            depositAmount?: number | null;
         };
         PublicBookingSlotDto: {
             /** Format: date-time */
@@ -22709,6 +22873,21 @@ export interface components {
             /** Format: date */
             to: string;
         };
+        StartAppointmentDepositRequest: {
+            /** Format: uuid */
+            serviceProductId: string;
+            /** Format: date-time */
+            startAt: string;
+            customerName: string;
+            customerPhone: string;
+            notes?: string | null;
+            /** Format: uuid */
+            idempotencyKey?: string | null;
+            /** Format: uuid */
+            staffId?: string | null;
+            /** Format: double */
+            expectedDeposit?: number | null;
+        };
         StartInventoryCountCommand: {
             /** Format: uuid */
             inventoryLocationId: string;
@@ -23210,6 +23389,8 @@ export interface components {
             capacity: number;
             /** Format: int32 */
             answerReminderMinutes?: number | null;
+            /** Format: int32 */
+            depositPercent?: number | null;
         };
         UpdateOnlineBookingStaffRequest: {
             enabled: boolean;

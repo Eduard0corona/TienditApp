@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
@@ -19,7 +20,8 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs.OnlinePayments;
 /// expiring (<see cref="SweepOnlinePaymentsCommand"/>), in that business's scope. Since the Fase 24K (ADR 0044) it also
 /// reviews, every <see cref="ReviewOnlinePaymentsCommandHandler.ReviewEvery"/>, the payments that changed in each connected
 /// account (<see cref="ReviewOnlinePaymentsCommand"/>), so a refund made in Mercado Pago or a dispute reaches the order
-/// even without its notification. Without Mercado Pago configured it does nothing.
+/// even without its notification. Since the Fase 31O (ADR 0095) it also sweeps each business with a request booked with a
+/// deposit whose time came unanswered, which gives it back. Without Mercado Pago configured it does nothing.
 /// </summary>
 public sealed class OnlinePaymentsWorkerService : BackgroundService
 {
@@ -117,7 +119,16 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
                 .Select(a => a.TenantId)
                 .Take(max)
                 .ToListAsync(cancellationToken);
-            tenants = withCheckouts.Concat(renewing).Distinct().Take(max).ToList();
+            // Fase 31O (ADR 0095): the requests booked with a deposit whose time came unanswered, which give it back.
+            var unanswered = await context.Appointments
+                .IgnoreQueryFilters()
+                .Where(a => a.DepositStatus == AppointmentDepositStatus.Held && a.Status == AppointmentStatus.Requested && a.StartAt <= now)
+                .GroupBy(a => a.TenantId)
+                .OrderBy(g => g.Min(a => a.StartAt))
+                .Select(g => g.Key)
+                .Take(max)
+                .ToListAsync(cancellationToken);
+            tenants = withCheckouts.Concat(renewing).Concat(unanswered).Distinct().Take(max).ToList();
             // The accounts whose payments were not reviewed lately and whose key works: the ones this process has not
             // reviewed yet first, the longest waiting (or never reviewed) first, and then the ones it reviewed, the longest
             // ago first. Reading as many more as the accounts it reviewed always finds the max that go first.
@@ -141,10 +152,10 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
                 await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
                 var sweep = await scope.ServiceProvider.GetRequiredService<ISender>()
                     .Send(new SweepOnlinePaymentsCommand(), cancellationToken);
-                if (sweep.IsSuccess && (sweep.Value.Expired > 0 || sweep.Value.KeyRenewed))
+                if (sweep.IsSuccess && (sweep.Value.Expired > 0 || sweep.Value.KeyRenewed || sweep.Value.DepositsReturned > 0))
                     _logger.LogInformation(
-                        "Online payments of tenant {TenantId}: {Expired} expired, key renewed {KeyRenewed}",
-                        tenantId, sweep.Value.Expired, sweep.Value.KeyRenewed);
+                        "Online payments of tenant {TenantId}: {Expired} expired, key renewed {KeyRenewed}, {DepositsReturned} deposits returned",
+                        tenantId, sweep.Value.Expired, sweep.Value.KeyRenewed, sweep.Value.DepositsReturned);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

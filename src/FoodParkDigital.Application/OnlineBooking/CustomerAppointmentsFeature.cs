@@ -8,6 +8,7 @@ using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -51,6 +52,14 @@ public class CustomerAppointmentDto
     /// with fewer than five.
     /// </summary>
     public bool CanAddPhotos { get; set; }
+    /// <summary>
+    /// What the customer paid online to book it (Fase 31O, ADR 0095), with where it stands (<see cref="DepositStatus"/>);
+    /// null when it was booked without one.
+    /// </summary>
+    public decimal? DepositAmount { get; set; }
+    public AppointmentDepositStatus? DepositStatus { get; set; }
+    /// <summary>Cancelling it now gives the deposit back (held, and in time); false otherwise, also without one.</summary>
+    public bool CancelReturnsDeposit { get; set; }
 }
 
 /// <summary>
@@ -132,7 +141,10 @@ public static class CustomerAppointments
             appointment.WorkOrderId != null,
             // Bounded by the appointment's business, like its staff: Mis citas reads across businesses (IgnoreQueryFilters
             // applies to the whole query).
-            context.AppointmentProblemPhotos.Count(p => p.TenantId == appointment.TenantId && p.AppointmentId == appointment.Id));
+            context.AppointmentProblemPhotos.Count(p => p.TenantId == appointment.TenantId && p.AppointmentId == appointment.Id),
+            appointment.DepositAmount,
+            appointment.DepositStatus,
+            appointment.RequestedStartAt);
 
     internal static CustomerAppointmentDto ToDto(Row row, DateTimeOffset now)
     {
@@ -156,7 +168,11 @@ public static class CustomerAppointments
             StaffName = row.StaffName,
             ProblemPhotos = row.ProblemPhotos,
             CanAddPhotos = HomeVisitRules.ProblemPhotoRefusal(
-                row.Channel, row.VisitPostalCode is not null, row.IsWork, row.Status, row.StartAt, row.ProblemPhotos, now) is null
+                row.Channel, row.VisitPostalCode is not null, row.IsWork, row.Status, row.StartAt, row.ProblemPhotos, now) is null,
+            DepositAmount = row.DepositAmount,
+            DepositStatus = row.DepositStatus,
+            CancelReturnsDeposit = CanCancel(row.Channel, row.Status, row.StartAt, now)
+                && BookingDeposits.CustomerCancelReturns(row.DepositStatus, row.Status, row.RequestedStartAt, row.StartAt, now)
         };
     }
 
@@ -177,7 +193,10 @@ public static class CustomerAppointments
         string? VisitPostalCode,
         HomeVisitChargePolicy? VisitChargePolicy,
         bool IsWork,
-        int ProblemPhotos);
+        int ProblemPhotos,
+        decimal? DepositAmount,
+        AppointmentDepositStatus? DepositStatus,
+        DateTimeOffset? RequestedStartAt);
 }
 
 /// <summary>

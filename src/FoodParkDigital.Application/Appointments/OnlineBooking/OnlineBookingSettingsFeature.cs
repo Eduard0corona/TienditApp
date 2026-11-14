@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -39,6 +40,18 @@ public class OnlineBookingSettingsDto
     public int AnswerReminderMinutes { get; set; } = ResponseTimes.DefaultReminderMinutes;
     /// <summary>The minutes it may pick, besides 0.</summary>
     public IReadOnlyList<int> AnswerReminderChoices { get; set; } = ResponseTimes.ReminderMinuteChoices;
+    /// <summary>
+    /// The share of each service's price its customer pays online to book it (Fase 31O, ADR 0095), from 10 to 100; null asks
+    /// none.
+    /// </summary>
+    public int? DepositPercent { get; set; }
+    /// <summary>
+    /// The business can collect a deposit now: its Mercado Pago account is connected, works and is in the platform's mode.
+    /// Without it, a deposit asked is not charged and customers book as before.
+    /// </summary>
+    public bool DepositAvailable { get; set; }
+    /// <summary>Hours before an agendada appointment its customer may cancel and get the deposit back.</summary>
+    public int DepositCancelHours { get; set; } = (int)BookingDeposits.FreeCancellationNotice.TotalHours;
 }
 
 /// <summary>The setting for online appointments, for everyone on the team who manages the agenda.</summary>
@@ -49,11 +62,12 @@ public record GetOnlineBookingSettingsQuery : IRequest<OnlineBookingSettingsDto>
 /// <summary>
 /// Turns online appointments on or off and says how many the business attends at once (owners and admins). Since the Fase
 /// 30B (ADR 0082), also how long before its limit it is reminded of a request still waiting, or not at all; left as it is
-/// when not sent (a client of before).
+/// when not sent (a client of before). Since the Fase 31O (ADR 0095), also the share of each service's price its customer
+/// pays to book it: 0 asks none, null leaves it as it is.
 /// </summary>
 [RequiresTenantManager]
 [RequiresCapability(TenantCapability.Appointments)]
-public record UpdateOnlineBookingSettingsCommand(bool Enabled, int Capacity, int? AnswerReminderMinutes = null)
+public record UpdateOnlineBookingSettingsCommand(bool Enabled, int Capacity, int? AnswerReminderMinutes = null, int? DepositPercent = null)
     : IRequest<Result<OnlineBookingSettingsDto>>;
 
 public class UpdateOnlineBookingSettingsCommandValidator : AbstractValidator<UpdateOnlineBookingSettingsCommand>
@@ -64,6 +78,9 @@ public class UpdateOnlineBookingSettingsCommandValidator : AbstractValidator<Upd
         RuleFor(x => x.AnswerReminderMinutes)
             .Must(minutes => minutes is null || ResponseTimes.IsReminderChoice(minutes.Value))
             .WithMessage(ResponseTimes.ReminderChoiceMessage);
+        RuleFor(x => x.DepositPercent)
+            .Must(percent => percent is null or 0 or (>= BookingDeposits.MinPercent and <= BookingDeposits.MaxPercent))
+            .WithMessage(BookingDeposits.PercentMessage);
     }
 }
 
@@ -77,14 +94,24 @@ public class OnlineBookingSettingsHandler :
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IOnlinePaymentGateway? _gateway;
+    private readonly IDateTimeProvider? _clock;
 
     public OnlineBookingSettingsHandler(
-        IApplicationDbContext context, ICurrentTenantService tenantService, ICurrentUserService currentUserService)
+        IApplicationDbContext context,
+        ICurrentTenantService tenantService,
+        ICurrentUserService currentUserService,
+        IOnlinePaymentGateway? gateway = null,
+        IDateTimeProvider? clock = null)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
+        _gateway = gateway;
+        _clock = clock;
     }
+
+    private DateTimeOffset Now => _clock?.UtcNow ?? DateTimeOffset.UtcNow;
 
     public async Task<OnlineBookingSettingsDto> Handle(GetOnlineBookingSettingsQuery request, CancellationToken cancellationToken)
     {
@@ -104,12 +131,24 @@ public class OnlineBookingSettingsHandler :
             return Result.Failure<OnlineBookingSettingsDto>("Configura primero tu negocio.");
 
         var settings = tenant.Settings;
-        var previous = new { settings.OnlineBookingEnabled, settings.OnlineBookingCapacity, settings.AnswerReminderMinutes };
+        var previous = new
+        {
+            settings.OnlineBookingEnabled, settings.OnlineBookingCapacity, settings.AnswerReminderMinutes, settings.BookingDepositPercent
+        };
+        // Fase 31O (ADR 0095): a share is asked only while the business can collect it; taking it off always works.
+        if (request.DepositPercent is { } percent)
+        {
+            var asked = percent == 0 ? (int?)null : percent;
+            if (asked is not null && asked != previous.BookingDepositPercent
+                && !await global::FoodParkDigital.Application.OnlineBooking.BookingDepositOffer.OffersAsync(_context, _gateway, tenant.Id, Now, cancellationToken))
+                return Result.Failure<OnlineBookingSettingsDto>(global::FoodParkDigital.Application.OnlineBooking.BookingDepositOffer.UnavailableMessage);
+            settings.SetBookingDepositPercent(asked);
+        }
         settings.UpdateOnlineBooking(request.Enabled, request.Capacity);
         if (request.AnswerReminderMinutes is { } minutes)
             settings.SetAnswerReminder(minutes);
         if (previous.OnlineBookingEnabled != settings.OnlineBookingEnabled || previous.OnlineBookingCapacity != settings.OnlineBookingCapacity
-            || previous.AnswerReminderMinutes != settings.AnswerReminderMinutes)
+            || previous.AnswerReminderMinutes != settings.AnswerReminderMinutes || previous.BookingDepositPercent != settings.BookingDepositPercent)
         {
             // Letting strangers take the agenda's times is a decision worth recording.
             _context.AuditLogs.Add(new AuditLog(
@@ -121,7 +160,10 @@ public class OnlineBookingSettingsHandler :
                 metadata: JsonSerializer.Serialize(new
                 {
                     Previous = previous,
-                    New = new { settings.OnlineBookingEnabled, settings.OnlineBookingCapacity, settings.AnswerReminderMinutes }
+                    New = new
+                    {
+                        settings.OnlineBookingEnabled, settings.OnlineBookingCapacity, settings.AnswerReminderMinutes, settings.BookingDepositPercent
+                    }
                 })));
             await _context.SaveChangesAsync(cancellationToken);
         }
@@ -153,7 +195,9 @@ public class OnlineBookingSettingsHandler :
             Missing = missing,
             Slug = tenant.Slug,
             StaffCount = staff.Count,
-            AnswerReminderMinutes = settings?.AnswerReminderMinutes ?? ResponseTimes.DefaultReminderMinutes
+            AnswerReminderMinutes = settings?.AnswerReminderMinutes ?? ResponseTimes.DefaultReminderMinutes,
+            DepositPercent = settings?.BookingDepositPercent,
+            DepositAvailable = await global::FoodParkDigital.Application.OnlineBooking.BookingDepositOffer.OffersAsync(_context, _gateway, tenant.Id, Now, cancellationToken)
         };
     }
 }
