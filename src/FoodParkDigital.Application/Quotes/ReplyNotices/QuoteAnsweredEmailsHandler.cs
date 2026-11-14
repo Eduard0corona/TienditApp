@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Quotes.Events;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,12 +28,22 @@ public sealed class QuoteAnsweredEmailsHandler : IOutboxEventHandler<QuoteAnswer
 
     public async Task HandleAsync(QuoteAnsweredFromLinkEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
     {
+        var paidDeposits = QuoteDeposits.PaidQuery(_context, domainEvent.TenantId);
         var quote = await _context.Quotes
             .AsNoTracking()
             .Where(q => q.Id == domainEvent.QuoteId && q.TenantId == domainEvent.TenantId)
-            .Select(q => new { q.Status, q.ReplyChannel, q.ClosedAt, q.OrderId })
+            .Select(q => new
+            {
+                q.Status,
+                q.ReplyChannel,
+                q.ClosedAt,
+                q.OrderId,
+                DepositPaid = paidDeposits.Any(c => c.QuoteId == q.Id)
+            })
             .FirstOrDefaultAsync(cancellationToken);
-        if (quote is null || !QuoteReplyEmail.Worth(quote.Status, quote.ReplyChannel, quote.ClosedAt, quote.OrderId, _clock.UtcNow))
+        // Paying its deposit accepted it from the link and made it its order (Fase 31N): it is still news.
+        if (quote is null || !QuoteReplyEmail.Worth(quote.Status, quote.ReplyChannel, quote.ClosedAt, quote.OrderId, _clock.UtcNow,
+                depositPaid: quote.Status == QuoteStatus.Accepted && quote.DepositPaid))
             return;
 
         foreach (var recipient in await QuoteReplyEmailRecipients.ListAsync(_context, _access, domainEvent.TenantId, null, cancellationToken))

@@ -980,10 +980,60 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         return payment;
     }
 
+    public const string OnlineDepositOnlyServiceMessage = "Solo una orden de servicio recibe un anticipo en línea.";
+    public const string OnlineDepositOnceMessage = "Esta orden ya tiene su pago en línea.";
+    public const string OnlineDepositAmountMessage = "El anticipo va de $0.01 a lo que queda por pagar, con máximo 2 decimales.";
+
+    /// <summary>
+    /// The deposit the customer paid online when they accepted, from its link, the quote this service order comes from
+    /// (Fase 31N, ADR 0094): the business's payment gateway approved it before the order existed, so it is recorded with the
+    /// order, never enters a drawer and is part of its total, never more than what is left. One per order; the rest is paid
+    /// as in any service order, and what is refunded of it goes back «En línea» (<see cref="OnlineRefundable"/>).
+    /// </summary>
+    /// <param name="paymentReference">The gateway's id of the payment, which its refunds use.</param>
+    /// <param name="paidAt">When it is recorded: a late notification must not rewrite a closed day.</param>
+    public OrderPayment RegisterOnlineDeposit(string paymentReference, decimal amount, DateTimeOffset paidAt, Guid? inventoryLocationId)
+    {
+        if (string.IsNullOrWhiteSpace(paymentReference))
+            throw new DomainException("El pago en línea necesita su referencia.");
+        if (OrderType != OrderType.Service)
+            throw new DomainException(OnlineDepositOnlyServiceMessage);
+        if (_payments.Any(p => p.Method is OrderPaymentMethod.Online or OrderPaymentMethod.Platform))
+            throw new DomainException(OnlineDepositOnceMessage);
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException("No se pueden registrar pagos en una orden cancelada.");
+        if (amount <= 0 || decimal.Round(amount, 2) != amount || PaidAmount + amount + WrittenOffAmount > Total)
+            throw new DomainException(OnlineDepositAmountMessage);
+
+        var payment = new OrderPayment(
+            tenantId: TenantId,
+            orderId: Id,
+            amount: amount,
+            method: OrderPaymentMethod.Online,
+            paidAt: paidAt,
+            inventoryLocationId: inventoryLocationId,
+            evidenceUrl: null,
+            reference: paymentReference.Trim(),
+            notes: null,
+            tip: 0,
+            cashReceived: null);
+        _payments.Add(payment);
+        PaidAmount += amount;
+        return payment;
+    }
+
     /// <summary>What the customer paid online and has not been given back the same way.</summary>
     public decimal OnlineRefundable =>
         _payments.Where(p => p.Method == OrderPaymentMethod.Online).Sum(p => p.Amount)
         - _refunds.Where(r => r.Method == OrderPaymentMethod.Online).Sum(r => r.Amount);
+
+    /// <summary>
+    /// What the customer paid any other way than online and has not been given back any other way (Fase 31N): with a deposit
+    /// paid online, the rest of a service order is paid at the business and goes back the same way.
+    /// </summary>
+    public decimal NonOnlineRefundable =>
+        _payments.Where(p => p.Method != OrderPaymentMethod.Online).Sum(p => p.Amount)
+        - _refunds.Where(r => r.Method != OrderPaymentMethod.Online).Sum(r => r.Amount);
 
     /// <summary>
     /// Sends a new order to the customer's address: the zone must reach its postal code (and be active) and the products
@@ -1300,10 +1350,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (method != OrderPaymentMethod.Platform && platformCharged)
             throw new DomainException(PlatformOrderRules.PlatformChargedRefundMessage);
         // What was paid online goes back to the customer's card through the gateway, up to what was paid that way, and
-        // only that way: never out of a drawer it never entered.
+        // only that way: never out of a drawer it never entered. What was paid otherwise (the rest of a service order with a
+        // deposit paid online, Fase 31N) goes back otherwise, up to what was paid that way.
         if (method == OrderPaymentMethod.Online && amount > OnlineRefundable)
             throw new DomainException(OnlineRefundOnlyOfOnlineMessage);
-        if (method != OrderPaymentMethod.Online && _payments.Any(p => p.Method == OrderPaymentMethod.Online))
+        if (method != OrderPaymentMethod.Online && _payments.Any(p => p.Method == OrderPaymentMethod.Online)
+            && amount > NonOnlineRefundable)
             throw new DomainException(PaidOnlineRefundMessage);
         // A refund to the balance in their favor goes to the customer's account, which the order names by its phone.
         if (method == OrderPaymentMethod.CustomerBalance && string.IsNullOrWhiteSpace(CustomerPhone))

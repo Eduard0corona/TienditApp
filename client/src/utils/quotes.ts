@@ -170,3 +170,9 @@ export function hasPendingSends(quote: WithSends, now: number = Date.now()): boo
   return (quote.whatsApps ?? []).some((message) => message.status === OutgoingMessageStatus.Sent && !message.deliveredAt
     && !message.readAt && message.sentAt != null && now - Date.parse(message.sentAt) < DELIVERY_WINDOW_MS);
 }
+
+/**
+ * The shares of what is left to pay a business picks for the deposit that accepts a quote from its link (Fase 31N); one it
+ * saved outside them is offered too. The server takes any from 10 to 100.
+ */
+export const DEPOSIT_PERCENTS = [10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100];

@@ -83,6 +83,64 @@ describe('RefundOrderModal', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ amount: 100, method: OrderPaymentMethod.Online }));
   });
 
+  it('gives back a deposit paid online and the rest paid at the business each its own way, up to what was paid so (Fase 31N)', async () => {
+    const onSubmit = vi.fn();
+    const withDeposit: OrderDto = {
+      ...sale,
+      orderType: OrderType.Service,
+      payments: [
+        { id: 'p1', amount: 105, method: OrderPaymentMethod.Online, paidAt: '2026-10-10T18:00:00Z', reference: '987654321' },
+        { id: 'p2', amount: 245, method: OrderPaymentMethod.Cash, paidAt: '2026-10-11T18:00:00Z' },
+      ],
+      refunds: [{ id: 'r1', amount: 45, method: OrderPaymentMethod.Cash, reason: 'Pieza sobrante', refundedAt: '2026-10-11T19:00:00Z', refundedBy: 'ana', restockItems: false, lines: [] }],
+      netPaidAmount: 305,
+      refundedAmount: 45,
+    };
+    render(<RefundOrderModal mode="refund" order={withDeposit} submitting={false} error="" onClose={vi.fn()} onSubmit={onSubmit} />);
+
+    const method = screen.getByLabelText('Se devuelve en');
+    expect(method.tagName).toBe('SELECT');
+    expect(within(method).getAllByRole('option').map((option) => option.textContent)).toContain('En línea');
+
+    // What was paid at the business, and not given back yet: 200 of the 245 in cash.
+    await userEvent.selectOptions(method, String(OrderPaymentMethod.Cash));
+    expect(screen.getByText('Hasta $200.00, lo que pagó en el negocio.')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Monto a devolver'), '250');
+    expect(screen.getByText('No puede ser mayor a $200.00.')).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText('Monto a devolver'));
+    await userEvent.type(screen.getByLabelText('Monto a devolver'), '200');
+    await userEvent.type(screen.getByLabelText('Motivo'), 'No se hizo el trabajo');
+    await userEvent.click(screen.getByRole('button', { name: 'Reembolsar $200.00' }));
+    expect(onSubmit).toHaveBeenLastCalledWith(expect.objectContaining({ amount: 200, method: OrderPaymentMethod.Cash }));
+
+    // The deposit goes back «En línea», up to what was paid online.
+    await userEvent.selectOptions(method, String(OrderPaymentMethod.Online));
+    expect(screen.getByText('Hasta $105.00, lo que pagó en línea: Mercado Pago se lo devuelve a su tarjeta o cuenta.')).toBeInTheDocument();
+    expect(screen.getByText('No puede ser mayor a $105.00.')).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText('Monto a devolver'));
+    await userEvent.type(screen.getByLabelText('Monto a devolver'), '105');
+    await userEvent.click(screen.getByRole('button', { name: 'Reembolsar $105.00' }));
+    expect(onSubmit).toHaveBeenLastCalledWith(expect.objectContaining({ amount: 105, method: OrderPaymentMethod.Online }));
+  });
+
+  it('keeps «En línea» the only way once what was paid at the business went back (Fase 31N)', () => {
+    const backAtTheBusiness: OrderDto = {
+      ...sale,
+      orderType: OrderType.Service,
+      payments: [
+        { id: 'p1', amount: 105, method: OrderPaymentMethod.Online, paidAt: '2026-10-10T18:00:00Z', reference: '987654321' },
+        { id: 'p2', amount: 245, method: OrderPaymentMethod.Cash, paidAt: '2026-10-11T18:00:00Z' },
+      ],
+      refunds: [{ id: 'r1', amount: 245, method: OrderPaymentMethod.Cash, reason: 'No se hizo el trabajo', refundedAt: '2026-10-11T19:00:00Z', refundedBy: 'ana', restockItems: false, lines: [] }],
+      netPaidAmount: 105,
+      refundedAmount: 245,
+    };
+    render(<RefundOrderModal mode="refund" order={backAtTheBusiness} submitting={false} error="" onClose={vi.fn()} onSubmit={vi.fn()} />);
+
+    expect(screen.getByLabelText('Se devuelve en')).toHaveValue('En línea');
+    expect(screen.getByLabelText('Se devuelve en')).toHaveAttribute('readonly');
+  });
+
   it('gives back to the balance in the customer\'s favor only an order with their phone (Fase 26D)', async () => {
     const options = () => within(screen.getByLabelText('Se devuelve en')).getAllByRole('option').map((option) => option.textContent);
     const { unmount } = render(<RefundOrderModal mode="refund" order={sale} submitting={false} error="" onClose={vi.fn()} onSubmit={vi.fn()} />);

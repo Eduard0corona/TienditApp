@@ -285,6 +285,8 @@ internal static class QuoteViews
             Total = quote.Total,
             VisitCredit = QuoteVisitCredits.Describe(quote, stillPaid),
             ToPay = quote.ToPay(stillPaid),
+            DepositAmount = quote.DepositAmount,
+            DepositPaid = await QuoteDeposits.PaidAsync(context, quote, cancellationToken),
             SentAt = quote.SentAt,
             TrackingToken = quote.LinkOpensOn(today) ? quote.TrackingToken : null,
             ClosedAt = quote.ClosedAt,

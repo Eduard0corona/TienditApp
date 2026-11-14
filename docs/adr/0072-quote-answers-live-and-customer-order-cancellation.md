@@ -33,7 +33,7 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
 4. **Fuera de esta fase:**
    - Avisar por correo una cancelación de un pedido: el negocio que recibe pedidos en línea los atiende con la app abierta. Llegó en la Fase 30B ([ADR 0082](0082-order-cancellation-email-reminder-lead-and-online-orders-index.md)), para quien lo elige.
    - Que el cliente cancele un pedido ya aceptado, pagado o de otro canal, o pida que le devuelvan un pago en línea.
-   - Avisar en pantalla un anticipo pagado.
+   - Avisar en pantalla un anticipo pagado: llegó con el anticipo en la Fase 31N ([ADR 0094](0094-quote-deposit.md)), como cualquier respuesta desde el enlace.
    - Un sonido para las respuestas a cotizaciones: llegó en la Fase 29Z ([ADR 0080](0080-quote-sound-and-device-tone.md)).
 
 ## Consecuencias

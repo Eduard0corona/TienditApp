@@ -44,7 +44,7 @@ describe('QuotesList', () => {
     vi.clearAllMocks();
     vi.mocked(useTenant).mockReturnValue({ capabilities: TenantCapability.Service | TenantCapability.Appointments } as unknown as ReturnType<typeof useTenant>);
     vi.mocked(useToast).mockReturnValue(toast as unknown as ReturnType<typeof useToast>);
-    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
+    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, onlineReplies: true, depositAvailable: false, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
     vi.mocked(quotesApi.list).mockResolvedValue(page([
       { id: 'q1', number: 'COT-000007', revision: 2, status: QuoteStatus.Expired, customerName: 'Valeria Ruiz', customerPhone: '5522107765', total: 1160, validUntil: '2026-10-19', updatedAt: '2026-10-04T17:00:00Z', fromVisit: true },
     ]) as never);
@@ -95,7 +95,7 @@ describe('QuotesList', () => {
   });
 
   it('lets owners change how long quotes are valid, and only tells the rest', async () => {
-    vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 30, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
+    vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 30, onlineReplies: true, depositAvailable: false, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
     renderList();
 
     const days = await screen.findByLabelText('Días de vigencia');
@@ -108,7 +108,7 @@ describe('QuotesList', () => {
   });
 
   it('lets owners turn off the answers from the link, and only tells the rest how customers answer (Fase 29G)', async () => {
-    vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 15, onlineReplies: false, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
+    vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 15, onlineReplies: false, depositAvailable: false, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
     renderList();
 
     const answers = await screen.findByRole('switch', { name: 'Tus clientes responden desde su enlace' });
@@ -116,10 +116,56 @@ describe('QuotesList', () => {
     expect(screen.getByText(/Tus clientes aceptan o rechazan la cotización desde su enlace/)).toBeInTheDocument();
     await userEvent.click(answers);
 
-    await waitFor(() => expect(quotesApi.updateSettings).toHaveBeenCalledWith(15, false));
+    await waitFor(() => expect(quotesApi.updateSettings).toHaveBeenCalledWith(15, false, undefined));
     expect(toast.success).toHaveBeenCalledWith('Listo: tus clientes te responden por mensaje o en persona, y tú registras su respuesta.');
     expect(await screen.findByText(/te responden por mensaje o en persona; tú registras su respuesta/)).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Tus clientes responden desde su enlace' })).not.toBeChecked();
+  });
+
+  it('lets owners ask a deposit once Mercado Pago collects it, and turning the answers off drops it too (Fase 31N)', async () => {
+    const settings = { validityDays: 15, onlineReplies: true, depositAvailable: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] };
+    vi.mocked(quotesApi.settings).mockResolvedValue(settings);
+    vi.mocked(quotesApi.updateSettings).mockResolvedValueOnce({ ...settings, depositPercent: 30 });
+    renderList();
+
+    const deposit = await screen.findByLabelText('Anticipo para aceptar');
+    expect(deposit).toHaveValue('0');
+    await userEvent.selectOptions(deposit, '30');
+
+    await waitFor(() => expect(quotesApi.updateSettings).toHaveBeenCalledWith(15, undefined, 30));
+    expect(toast.success).toHaveBeenCalledWith('Listo: para aceptar desde su enlace, tus clientes pagan en línea el 30 % de lo que queda por pagar.');
+    expect(await screen.findByText(/tu cliente paga en línea el 30 % de lo que queda por pagar/)).toBeInTheDocument();
+
+    vi.mocked(quotesApi.updateSettings).mockResolvedValueOnce({ ...settings, onlineReplies: false, depositPercent: null });
+    await userEvent.click(screen.getByRole('switch', { name: 'Tus clientes responden desde su enlace' }));
+    await waitFor(() => expect(quotesApi.updateSettings).toHaveBeenCalledWith(15, false, 0));
+    expect(toast.success).toHaveBeenCalledWith('Listo: tus clientes te responden por mensaje o en persona, y tú registras su respuesta; ya no pides anticipo.');
+    // Without the answers on the link there is no deposit to ask.
+    expect(screen.queryByLabelText('Anticipo para aceptar')).not.toBeInTheDocument();
+  });
+
+  it('keeps the share already asked while Mercado Pago cannot collect, offering only to turn it off (Fase 31N)', async () => {
+    vi.mocked(quotesApi.settings).mockResolvedValue({
+      validityDays: 15, onlineReplies: true, depositPercent: 30, depositAvailable: false, pricesIncludeTax: true, defaultTaxRate: 16,
+      whatsAppConnected: false, whatsAppTemplates: [],
+    });
+    renderList();
+
+    const deposit = await screen.findByLabelText('Anticipo para aceptar');
+    expect(deposit).toBeEnabled();
+    expect(deposit).toHaveValue('30');
+    expect(screen.getByRole('option', { name: 'Sin anticipo' })).toBeEnabled();
+    expect(screen.getByRole('option', { name: '30 % de lo que queda por pagar' })).toBeEnabled();
+    expect(screen.getByRole('option', { name: '50 % de lo que queda por pagar' })).toBeDisabled();
+    expect(screen.getByText(/Ahora tu cuenta de Mercado Pago no puede cobrar: revísala en/)).toBeInTheDocument();
+  });
+
+  it('says where to connect Mercado Pago before asking a deposit', async () => {
+    renderList();
+
+    expect(await screen.findByLabelText('Anticipo para aceptar')).toBeDisabled();
+    expect(screen.getByText(/Para pedir anticipo, conecta tu cuenta de Mercado Pago en/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Pagos en línea' })).toHaveAttribute('href', '/settings/online-payments');
   });
 
   it('opens those still to convert from «Requiere atención», also when the bell is followed from this screen', async () => {
@@ -172,9 +218,9 @@ describe('QuotesList', () => {
 
   it('lets owners pick the WhatsApp template of the quotes once the business connected its WhatsApp', async () => {
     const templates = [{ id: 't1', name: 'Cotización lista', body: 'Tu cotización {folio}: {enlace}', providerTemplateName: 'cotizacion_lista' }];
-    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: templates });
+    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, onlineReplies: true, depositAvailable: false, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: templates });
     vi.mocked(quotesApi.setWhatsAppTemplate).mockResolvedValue({
-      validityDays: 15, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 't1', whatsAppTemplates: templates,
+      validityDays: 15, onlineReplies: true, depositAvailable: false, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 't1', whatsAppTemplates: templates,
     });
     renderList();
 
@@ -187,7 +233,7 @@ describe('QuotesList', () => {
   });
 
   it('tells staff how the quotes go by WhatsApp, without letting them change it', async () => {
-    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: [] });
+    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, onlineReplies: true, depositAvailable: false, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: [] });
     renderList('STAFF');
 
     expect(await screen.findByText(/salen del WhatsApp de tu negocio con el texto de TienditApp/)).toBeInTheDocument();

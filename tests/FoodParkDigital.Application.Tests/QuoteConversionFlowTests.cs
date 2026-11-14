@@ -9,6 +9,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Inventory;
+using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Orders.Queries;
@@ -414,7 +415,9 @@ public class QuoteConversionFlowTests
         public SalesDbContext Context => Fixture.Context;
         /// <summary>What the person converting may do; everything an owner may, unless a test says.</summary>
         public IReadOnlyCollection<string> Permissions { get; set; } = Enum.GetNames<TenantPermission>();
-        private QuotesHandler Handler => new(Context, Fixture.TenantService, Fixture.CurrentUser, Fixture.Clock);
+        /// <summary>Mercado Pago, for the deposit its quotes ask (Fase 31N); none unless a test gives it.</summary>
+        public IOnlinePaymentGateway? Gateway { get; set; }
+        public QuotesHandler Handler => new(Context, Fixture.TenantService, Fixture.CurrentUser, Fixture.Clock, Gateway);
 
         public static async Task<Shop> OpenAsync(
             TenantCapability capabilities = TenantCapability.Service | TenantCapability.Appointments, bool pricesIncludeTax = true,
@@ -464,8 +467,9 @@ public class QuoteConversionFlowTests
         /// <param name="salePhone">The phone the sale of the visit was charged with: the visit's customer's, as the Agenda fills it.</param>
         /// <param name="jobPrice">The price of the job quoted, plus IVA.</param>
         /// <param name="quotePhone">The phone the quote is corrected to before it is sent; the visit's, unless said.</param>
+        /// <param name="accept">Whether the business records it accepted; otherwise it is left sent.</param>
         public async Task<(OrderDto Sale, QuoteDto Quote)> CreditedVisitQuoteAsync(
-            string? salePhone = "5522107765", decimal jobPrice = 1000m, string? quotePhone = null)
+            string? salePhone = "5522107765", decimal jobPrice = 1000m, string? quotePhone = null, bool accept = true)
         {
             var service = await Fixture.AddProductAsync(Tenant, "Visita y diagnóstico", 300m, unit: UnitType.Service);
             var visit = await VisitAsync(service.Id);
@@ -491,7 +495,7 @@ public class QuoteConversionFlowTests
             if (quotePhone is not null)
                 draft.CustomerPhone = quotePhone;
             var sent = await SendAsync(draft, [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = jobPrice }]);
-            return (sale.Value!, await AcceptAsync(sent));
+            return (sale.Value!, accept ? await AcceptAsync(sent) : sent);
         }
 
         /// <summary>A new draft for Valeria, saved with <paramref name="lines"/>: what the server answered.</summary>

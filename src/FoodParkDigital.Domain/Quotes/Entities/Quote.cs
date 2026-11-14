@@ -64,6 +64,13 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
     public decimal Tax { get; private set; }
     public decimal Total { get; private set; }
 
+    /// <summary>
+    /// What the customer pays online to accept this version from its link (Fase 31N, ADR 0094), fixed when it is sent with
+    /// the business's share (<see cref="QuoteRules.DepositFor"/>); null when it asks none. The business still records an
+    /// acceptance it got some other way without it.
+    /// </summary>
+    public decimal? DepositAmount { get; private set; }
+
     /// <summary>The sale of the visit it takes off (with <see cref="VisitCreditAmount"/>); null when it takes nothing off.</summary>
     public Guid? VisitCreditSaleOrderId { get; private set; }
     public decimal? VisitCreditAmount { get; private set; }
@@ -175,12 +182,15 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>
     /// The customer gets it: it is valid from the business's <paramref name="today"/> for its days, with its link. A corrected
     /// version replaces the one the customer had (<paramref name="replaced"/>): the latest version sent or rejected before it.
+    /// Since the Fase 31N it asks <paramref name="deposit"/> to accept it from its link, when the business asks one.
     /// </summary>
-    public void Send(DateOnly today, string trackingToken, Quote? replaced, DateTimeOffset now)
+    public void Send(DateOnly today, string trackingToken, Quote? replaced, DateTimeOffset now, decimal? deposit = null)
     {
         EnsureDraft();
         if (_lines.Count == 0 || Total <= 0)
             throw new DomainException(QuoteRules.NothingToSendMessage);
+        if (deposit is { } asked && (asked < QuoteRules.MinDeposit || asked > Total || decimal.Round(asked, 2) != asked))
+            throw new DomainException(QuoteRules.DepositMessage);
         if (!Order.IsTrackingToken(trackingToken))
             throw new ArgumentException("The link must look like one.", nameof(trackingToken));
         if (Revision == 1 ? replaced is not null : replaced is null)
@@ -196,6 +206,7 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
         Status = QuoteStatus.Sent;
         ValidUntil = today.AddDays(ValidityDays);
         TrackingToken = trackingToken;
+        DepositAmount = deposit;
         SentAt = now;
         UpdatedAt = now;
     }
@@ -261,6 +272,9 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
         var answer = accepted ? QuoteStatus.Accepted : QuoteStatus.Rejected;
         if (Status == answer)
             return false;
+        // A version that asks a deposit is accepted from its link by paying it (Fase 31N): AcceptWithDeposit.
+        if (accepted && DepositAmount is not null && StatusOn(today) == QuoteStatus.Sent)
+            throw new DomainException(QuoteRules.DepositRequiredMessage);
 
         switch (StatusOn(today))
         {
@@ -282,6 +296,35 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
         Close(answer, today, QuoteReplyChannel.Link, trimmed, now);
         AddDomainEvent(new QuoteAnsweredFromLinkEvent(Id, TenantId, accepted));
         return true;
+    }
+
+    /// <summary>
+    /// The customer paid the deposit of this version online and so accepted it from its link (Fase 31N, ADR 0094). The
+    /// payment started on the business's <paramref name="startedOn"/>: begun while the version was valid, it counts even if
+    /// the validity ended while they paid. Only once, and only while the version is the one the customer has: one the
+    /// business answered, replaced or that another payment accepted is refused, and the payment goes back.
+    /// </summary>
+    /// <remarks>It tells the business, as any answer from the link (<see cref="QuoteAnsweredFromLinkEvent"/>).</remarks>
+    public void AcceptWithDeposit(DateOnly startedOn, DateTimeOffset now)
+    {
+        if (DepositAmount is null)
+            throw new DomainException(QuoteRules.NoDepositMessage);
+        switch (StatusOn(startedOn))
+        {
+            case QuoteStatus.Sent:
+                break;
+            case QuoteStatus.Superseded:
+                throw new DomainException(QuoteRules.ReplacedMessage);
+            case QuoteStatus.Expired:
+                throw new DomainException(QuoteRules.ExpiredForCustomerMessage);
+            case QuoteStatus.Accepted or QuoteStatus.Rejected:
+                throw new DomainException(QuoteRules.AnsweredAlreadyMessage);
+            default:
+                throw new DomainException(QuoteRules.NotAnswerableMessage);
+        }
+
+        Close(QuoteStatus.Accepted, startedOn, QuoteReplyChannel.Link, null, now);
+        AddDomainEvent(new QuoteAnsweredFromLinkEvent(Id, TenantId, true));
     }
 
     /// <summary>

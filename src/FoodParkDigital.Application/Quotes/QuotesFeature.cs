@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Appointments;
 using FoodParkDigital.Domain.Appointments.Enums;
@@ -77,12 +78,15 @@ public record DiscardQuoteCommand(Guid Id) : IRequest<Result<QuoteDto>>;
 public record RecordQuoteReplyCommand(Guid Id, bool Accepted, QuoteReplyChannel Channel, string? Response) : IRequest<Result<QuoteDto>>;
 
 /// <summary>
-/// How many days the business's quotes are valid once sent and, since the Fase 29G (ADR 0061), whether the customer answers
-/// them from their link (null keeps it as it is: a client that does not know it yet). Owners and admins.
+/// How many days the business's quotes are valid once sent; since the Fase 29G (ADR 0061), whether the customer answers
+/// them from their link; and since the Fase 31N (ADR 0094), the share of what is left to pay the customer pays online to
+/// accept from the link (<paramref name="DepositPercent"/>: 0 asks none, 10 to 100 that share). Null keeps either as it is:
+/// a client that does not know it yet. Owners and admins.
 /// </summary>
 [RequiresTenantManager]
 [RequiresCapability(TenantCapability.Service | TenantCapability.Appointments)]
-public record UpdateQuoteSettingsCommand(int ValidityDays, bool? OnlineReplies = null) : IRequest<Result<QuoteSettingsDto>>;
+public record UpdateQuoteSettingsCommand(int ValidityDays, bool? OnlineReplies = null, int? DepositPercent = null)
+    : IRequest<Result<QuoteSettingsDto>>;
 
 /// <summary>
 /// The WhatsApp template the business's quotes go out with (Fase 29D, owners and admins): an active one for quotes, or
@@ -169,6 +173,9 @@ public class UpdateQuoteSettingsCommandValidator : AbstractValidator<UpdateQuote
     {
         RuleFor(x => x.ValidityDays).InclusiveBetween(QuoteRules.MinValidityDays, QuoteRules.MaxValidityDays)
             .WithMessage(QuoteRules.ValidityDaysMessage);
+        RuleFor(x => x.DepositPercent)
+            .Must(p => p is null or 0 or (>= QuoteRules.MinDepositPercent and <= QuoteRules.MaxDepositPercent))
+            .WithMessage(QuoteRules.DepositPercentMessage);
     }
 }
 
@@ -195,17 +202,21 @@ public class QuotesHandler :
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUser;
     private readonly IDateTimeProvider _clock;
+    private readonly IOnlinePaymentGateway? _gateway;
 
+    /// <param name="gateway">Mercado Pago, for the deposit (Fase 31N); without it, no business can ask one.</param>
     public QuotesHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUser,
-        IDateTimeProvider clock)
+        IDateTimeProvider clock,
+        IOnlinePaymentGateway? gateway = null)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUser = currentUser;
         _clock = clock;
+        _gateway = gateway;
     }
 
     private Guid TenantId => _tenantService.TenantId;
@@ -340,16 +351,20 @@ public class QuotesHandler :
         var today = await QuoteCalendar.TodayAsync(_context, TenantId, now, cancellationToken);
         try
         {
-            // What was paid for the visit, as it stands when the customer gets it.
+            // What was paid for the visit, as it stands when the customer gets it, and the deposit it asks on what is left.
             quote.SetVisitCredit(await QuoteVisitCredits.ForAsync(_context, TenantId, quote.AppointmentId, cancellationToken), now);
-            quote.Send(today, OrderTracking.NewToken(), replaced, now);
+            var deposit = await QuoteDeposits.ForSendAsync(_context, _gateway, quote, now, cancellationToken);
+            if (deposit.IsFailure)
+                return Result.Failure<QuoteDto>(deposit.Error!);
+            quote.Send(today, OrderTracking.NewToken(), replaced, now, deposit.Value);
         }
         catch (DomainException ex)
         {
             return Result.Failure<QuoteDto>(ex.Message);
         }
 
-        _context.AuditLogs.Add(QuoteAudit.Create(quote, QuoteAudit.Sent, _currentUser.UserName, new { quote.ValidUntil }));
+        _context.AuditLogs.Add(QuoteAudit.Create(quote, QuoteAudit.Sent, _currentUser.UserName,
+            new { quote.ValidUntil, Deposit = quote.DepositAmount }));
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(await DescribeAsync(quote, cancellationToken));
     }
@@ -450,18 +465,31 @@ public class QuotesHandler :
 
         var previous = settings.QuoteValidityDays;
         var previousOnlineReplies = settings.QuoteOnlineReplies;
+        var previousDeposit = settings.QuoteDepositPercent;
+        var onlineReplies = request.OnlineReplies ?? previousOnlineReplies;
+        var deposit = request.DepositPercent is { } percent ? (percent == 0 ? null : percent) : previousDeposit;
+
+        // The deposit is paid from the link (Fase 31N): it needs the answers there, and asking a new share needs an account that
+        // collects it now. One already asked stays while the account has trouble: each send says so (QuoteDeposits).
+        if (deposit is not null && !onlineReplies)
+            return Result.Failure<QuoteSettingsDto>(QuoteDeposits.NeedsOnlineRepliesMessage);
+        if (deposit is not null && deposit != previousDeposit
+            && !await QuoteDeposits.OffersAsync(_context, _gateway, TenantId, _clock.UtcNow, cancellationToken))
+            return Result.Failure<QuoteSettingsDto>(QuoteDeposits.UnavailableMessage);
+
         try
         {
             settings.SetQuoteValidityDays(request.ValidityDays);
-            if (request.OnlineReplies is { } onlineReplies)
-                settings.SetQuoteOnlineReplies(onlineReplies);
+            settings.SetQuoteOnlineReplies(onlineReplies);
+            settings.SetQuoteDepositPercent(deposit);
         }
         catch (DomainException ex)
         {
             return Result.Failure<QuoteSettingsDto>(ex.Message);
         }
 
-        if (previous != settings.QuoteValidityDays || previousOnlineReplies != settings.QuoteOnlineReplies)
+        if (previous != settings.QuoteValidityDays || previousOnlineReplies != settings.QuoteOnlineReplies
+            || previousDeposit != settings.QuoteDepositPercent)
         {
             _context.AuditLogs.Add(new Domain.Audit.Entities.AuditLog(
                 tenantId: TenantId,
@@ -474,7 +502,9 @@ public class QuotesHandler :
                     Previous = previous,
                     New = settings.QuoteValidityDays,
                     PreviousOnlineReplies = previousOnlineReplies,
-                    OnlineReplies = settings.QuoteOnlineReplies
+                    OnlineReplies = settings.QuoteOnlineReplies,
+                    PreviousDepositPercent = previousDeposit,
+                    DepositPercent = settings.QuoteDepositPercent
                 })));
             await _context.SaveChangesAsync(cancellationToken);
         }
@@ -526,6 +556,7 @@ public class QuotesHandler :
             {
                 ValidityDays = s.QuoteValidityDays,
                 OnlineReplies = s.QuoteOnlineReplies,
+                DepositPercent = s.QuoteDepositPercent,
                 PricesIncludeTax = s.PricesIncludeTax,
                 DefaultTaxRate = s.DefaultTaxRate,
                 WhatsAppTemplateId = s.QuoteWhatsAppTemplateId
@@ -539,6 +570,7 @@ public class QuotesHandler :
                DefaultTaxRate = TenantSalesSettings.Legacy.DefaultTaxRate
            };
         settings.WhatsAppConnected = await Messaging.Campaigns.CampaignRules.IsWhatsAppConnectedAsync(_context, TenantId, cancellationToken);
+        settings.DepositAvailable = await QuoteDeposits.OffersAsync(_context, _gateway, TenantId, _clock.UtcNow, cancellationToken);
         settings.WhatsAppTemplates = await QuoteDeliveries.TemplatesAsync(_context, TenantId, cancellationToken);
         // A template deleted, turned off or moved to another purpose since is TienditApp's text again.
         if (settings.WhatsAppTemplates.All(t => t.Id != settings.WhatsAppTemplateId))

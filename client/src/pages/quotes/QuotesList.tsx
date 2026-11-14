@@ -5,6 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import PageTitle from '../../components/common/PageTitle';
 import ChimeSettingsButton from '../../components/common/ChimeSettingsButton';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import QuoteDepositSetting from '../../components/quotes/QuoteDepositSetting';
 import { getApiErrorMessage } from '../../api/errors';
 import { quotesApi } from '../../api/quotesApi';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
@@ -54,6 +55,7 @@ export default function QuotesList() {
   const linked = searchParams.get('estado');
   const [filter, setFilter] = useState<QuoteListFilter>(linked === TO_CONVERT_LINK ? QuoteListFilter.ToConvert : QuoteListFilter.Open);
   const onlineRepliesId = useId();
+  const depositId = useId();
   const [search, setSearch] = useState('');
   const [pageNumber, setPageNumber] = useState(1);
   // The bell leads here also from this screen: a link followed again sets the filter it names.
@@ -102,18 +104,33 @@ export default function QuotesList() {
     onError: (err) => toast.error(getApiErrorMessage(err, 'No se pudo guardar la vigencia.')),
   });
 
-  // Fase 29G: whether customers answer from the link, saved as soon as it changes (with the validity as it is saved).
+  // Fase 29G: whether customers answer from the link, saved as soon as it changes (with the validity as it is saved). Turned
+  // off, the deposit goes off with it (Fase 31N): it is paid from the link.
   const saveOnlineReplies = useMutation({
-    mutationFn: ({ validityDays, onlineReplies }: { validityDays: number; onlineReplies: boolean }) =>
-      quotesApi.updateSettings(validityDays, onlineReplies),
-    onSuccess: (settings) => {
+    mutationFn: ({ validityDays, onlineReplies, dropDeposit }: { validityDays: number; onlineReplies: boolean; dropDeposit: boolean }) =>
+      quotesApi.updateSettings(validityDays, onlineReplies, dropDeposit ? 0 : undefined),
+    onSuccess: (settings, { dropDeposit }) => {
       queryClient.setQueryData(['quotes', 'settings'], settings);
       toast.success(settings.onlineReplies
         ? 'Listo: tus clientes pueden aceptar o rechazar la cotización desde su enlace.'
-        : 'Listo: tus clientes te responden por mensaje o en persona, y tú registras su respuesta.');
+        : `Listo: tus clientes te responden por mensaje o en persona, y tú registras su respuesta${dropDeposit ? '; ya no pides anticipo' : ''}.`);
     },
     onError: (err) => toast.error(getApiErrorMessage(err, 'No se pudo guardar cómo te responden tus clientes.')),
   });
+
+  // Fase 31N: the share of what is left to pay the customer pays online to accept from the link; 0 asks none.
+  const saveDeposit = useMutation({
+    mutationFn: ({ validityDays, percent }: { validityDays: number; percent: number }) =>
+      quotesApi.updateSettings(validityDays, undefined, percent),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['quotes', 'settings'], settings);
+      toast.success(settings.depositPercent
+        ? `Listo: para aceptar desde su enlace, tus clientes pagan en línea el ${settings.depositPercent} % de lo que queda por pagar.`
+        : 'Listo: tus clientes aceptan desde su enlace sin pagar anticipo.');
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err, 'No se pudo guardar el anticipo.')),
+  });
+  const settingsBusy = saveValidity.isPending || saveOnlineReplies.isPending || saveDeposit.isPending;
 
   const saveTemplate = useMutation({
     mutationFn: (templateId: string) => quotesApi.setWhatsAppTemplate(templateId || null),
@@ -285,7 +302,7 @@ export default function QuotesList() {
                 <button
                   type="submit"
                   className="btn btn-sm btn-light"
-                  disabled={saveValidity.isPending || saveOnlineReplies.isPending || validity === null || Number(validityDays) === settings.validityDays}
+                  disabled={settingsBusy || validity === null || Number(validityDays) === settings.validityDays}
                 >
                   Guardar vigencia
                 </button>
@@ -307,16 +324,31 @@ export default function QuotesList() {
                   className="form-check-input"
                   checked={saveOnlineReplies.isPending ? saveOnlineReplies.variables.onlineReplies : settings.onlineReplies}
                   // Not «disabled» while saving: a disabled control drops the keyboard's focus. A change meanwhile waits.
-                  aria-disabled={saveOnlineReplies.isPending || saveValidity.isPending}
+                  aria-disabled={settingsBusy}
                   onChange={(e) => {
-                    if (saveOnlineReplies.isPending || saveValidity.isPending) return;
-                    saveOnlineReplies.mutate({ validityDays: settings.validityDays, onlineReplies: e.target.checked });
+                    if (settingsBusy) return;
+                    saveOnlineReplies.mutate({
+                      validityDays: settings.validityDays,
+                      onlineReplies: e.target.checked,
+                      dropDeposit: !e.target.checked && settings.depositPercent != null,
+                    });
                   }}
                 />
                 <label className="form-check-label small" htmlFor={onlineRepliesId}>
                   Tus clientes responden desde su enlace
                 </label>
               </div>
+            )}
+
+            {settings.onlineReplies && (
+              <QuoteDepositSetting
+                id={depositId}
+                settings={settings}
+                canChange={isAdmin}
+                busy={settingsBusy}
+                pending={saveDeposit.isPending ? saveDeposit.variables.percent : null}
+                onChange={(percent) => saveDeposit.mutate({ validityDays: settings.validityDays, percent })}
+              />
             )}
 
             {settings.whatsAppConnected && (

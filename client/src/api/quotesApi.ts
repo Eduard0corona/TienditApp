@@ -21,6 +21,8 @@ export type QuoteWhatsAppTemplate = Schemas['QuoteWhatsAppTemplateDto'];
 export type QuoteOrder = Schemas['QuoteOrderDto'];
 export type WorkAppointment = Schemas['WorkAppointmentDto'];
 export type ScheduleQuoteWork = Schemas['ScheduleQuoteWorkRequest'];
+export type QuoteDepositStarted = Schemas['QuoteDepositStartedDto'];
+export type QuoteDepositStatus = Schemas['QuoteDepositStatusDto'];
 
 export const quotesApi = {
   list: (filter: QuoteListFilter, search: string, pageNumber: number, signal?: AbortSignal) =>
@@ -31,11 +33,12 @@ export const quotesApi = {
   settings: (signal?: AbortSignal) => apiRequest('get', '/api/v1/quotes/settings', { signal }),
 
   /**
-   * How many days a quote is valid once sent and whether the customer answers it from its link (Fase 29G; left out, it stays
-   * as it is). Owners and admins.
+   * How many days a quote is valid once sent, whether the customer answers it from its link (Fase 29G) and the share of what is
+   * left to pay they pay online to accept it there (Fase 31N: 0 asks none, 10 to 100 that share). Left out, each stays as it
+   * is. Owners and admins.
    */
-  updateSettings: (validityDays: number, onlineReplies?: boolean) =>
-    apiRequest('put', '/api/v1/quotes/settings', { body: { validityDays, onlineReplies } }),
+  updateSettings: (validityDays: number, onlineReplies?: boolean, depositPercent?: number) =>
+    apiRequest('put', '/api/v1/quotes/settings', { body: { validityDays, onlineReplies, depositPercent } }),
 
   /** A draft for a customer, or for the visit of an appointment (which opens its quote when it has one). */
   create: (body: CreateQuote) => apiRequest('post', '/api/v1/quotes', { body }),
@@ -93,6 +96,16 @@ export const publicQuoteApi = {
   /** The PDF of the link's quote (Fase 31M), as its page shows it. The link travels in the body, never in the URL. */
   downloadPdf: (token: string): Promise<{ blob: Blob; fileName: string }> =>
     downloadPdf(() => api.post<Blob>('/public/quotes/pdf', { token }, { responseType: 'blob' })),
+
+  /**
+   * Goes to pay the deposit that accepts it (Fase 31N): Mercado Pago's page, into the business's account; a payment in course
+   * of the same version is the same one.
+   */
+  startDeposit: (token: string) => apiRequest('post', '/api/v1/public/quotes/deposit', { body: { token } }),
+
+  /** How the deposit stands, once the server asked Mercado Pago (the return page). Only with the link of the version paid. */
+  confirmDeposit: (token: string, checkoutId: string, paymentId: string | null, signal?: AbortSignal) =>
+    apiRequest('post', '/api/v1/public/quotes/deposit/confirm', { body: { token, checkoutId, paymentId }, signal }),
 };
 
 // A refusal comes as a blob too: read back, its message (not found, say) reaches the person.

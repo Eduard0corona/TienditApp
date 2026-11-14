@@ -23,7 +23,9 @@ function standing(quote: PublicQuote): string | null {
         ? `Vale hasta el ${formatCalendarDate(validUntil)}. Respóndela aquí o escríbele al negocio si tienes dudas.`
         : `Vale hasta el ${formatCalendarDate(validUntil)}. Para aceptarla o preguntar algo, responde al negocio.`;
     case QuoteStatus.Accepted:
-      // Fase 29G: answered here, the business already knows and gets in touch.
+      // Fase 29G: answered here, the business already knows and gets in touch. Fase 31N: paying its deposit accepted it.
+      if (here && quote.depositPaid && quote.depositAmount != null)
+        return `La aceptaste aquí el ${here} y pagaste su anticipo de ${formatMoney(quote.depositAmount)}. ${quote.businessName} ya lo sabe y se pondrá en contacto contigo para hacer el trabajo.`;
       return here
         ? `La aceptaste aquí el ${here}. ${quote.businessName} ya lo sabe y se pondrá en contacto contigo para hacer el trabajo.`
         : 'Le dijiste al negocio que la aceptas.';
@@ -153,6 +155,13 @@ export default function PublicQuotePage() {
                   <dd className="col-5 col-sm-3 text-end">−{formatMoney(quote.visitCredit.amount)}</dd>
                   <dt className="col-7 col-sm-9 text-sm-end">Por pagar</dt>
                   <dd className="col-5 col-sm-3 text-end fw-semibold">{formatMoney(quote.toPay)}</dd>
+                </>
+              )}
+              {/* Fase 31N: what accepting it asks while it waits, or what was paid once that accepted it. */}
+              {quote.depositAmount != null && (quote.status === QuoteStatus.Sent || quote.depositPaid) && (
+                <>
+                  <dt className="col-7 col-sm-9 text-muted fw-normal text-sm-end">{quote.depositPaid ? 'Anticipo pagado en línea' : 'Anticipo para aceptarla'}</dt>
+                  <dd className="col-5 col-sm-3 text-end">{formatMoney(quote.depositAmount)}</dd>
                 </>
               )}
             </dl>

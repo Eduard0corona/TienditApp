@@ -110,6 +110,13 @@ public class QuoteDto
     public QuoteVisitCreditDto? VisitCredit { get; set; }
     /// <summary>What is left to pay: the total less the visit while it applies.</summary>
     public decimal ToPay { get; set; }
+    /// <summary>
+    /// The deposit this version asks to accept it from its link (Fase 31N, ADR 0094), fixed when it was sent; null when it asks
+    /// none. The business still records an acceptance itself without it.
+    /// </summary>
+    public decimal? DepositAmount { get; set; }
+    /// <summary>The customer paid the deposit online, and so accepted it from its link: its order has it as «En línea».</summary>
+    public bool DepositPaid { get; set; }
     public DateTimeOffset? SentAt { get; set; }
     /// <summary>The link of this version (<c>/cotizacion#…</c>) once sent, while it opens.</summary>
     public string? TrackingToken { get; set; }
@@ -158,6 +165,16 @@ public class QuoteSettingsDto
     public int ValidityDays { get; set; }
     /// <summary>The customer accepts or rejects a quote from its link (Fase 29G, ADR 0061).</summary>
     public bool OnlineReplies { get; set; }
+    /// <summary>
+    /// The share of what is left to pay the customer pays online to accept a quote from its link (Fase 31N, ADR 0094), from
+    /// 10 to 100; null when it asks none.
+    /// </summary>
+    public int? DepositPercent { get; set; }
+    /// <summary>
+    /// Whether the business can ask a deposit now: Mercado Pago connected, working and turned on, with service orders. Its
+    /// customers answering from the link is <see cref="OnlineReplies"/>.
+    /// </summary>
+    public bool DepositAvailable { get; set; }
     public bool PricesIncludeTax { get; set; }
     public decimal DefaultTaxRate { get; set; }
     /// <summary>The business connected its WhatsApp (Fase 29D): its quotes go by WhatsApp from TienditApp.</summary>

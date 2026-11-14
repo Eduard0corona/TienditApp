@@ -76,7 +76,8 @@ public class OnlineOrderReminderMigrationSqlServerTests
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
-        var shop = await SeedAsync(database.CreateContext());
+        // On a database at this migration: the model before the Fase 31L, and the ones after it, without their columns.
+        var shop = await SeedAsync(BeforeWhatsAppMessageMedia.CreateContext(database));
         await using (var change = database.CreateContext(shop.TenantId))
         {
             await change.Database.ExecuteSqlAsync(

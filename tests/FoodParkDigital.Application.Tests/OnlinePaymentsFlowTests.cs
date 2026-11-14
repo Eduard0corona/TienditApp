@@ -937,7 +937,8 @@ public partial class OnlinePaymentsFlowTests
             var handler = new ApplyOnlinePaymentCommandHandler(
                 Context, Gateway, Clock,
                 new CustomerLookupService(Context, new PhoneNormalizationService(), NullLogger<CustomerLookupService>.Instance),
-                NoOpOrderInventoryService.Instance, new FolioGenerator(Context), NullLogger<ApplyOnlinePaymentCommandHandler>.Instance);
+                NoOpOrderInventoryService.Instance, new FolioGenerator(Context), new PhoneNormalizationService(),
+                NoOpOrderCashService.Instance, NullLogger<ApplyOnlinePaymentCommandHandler>.Instance);
             return (TResponse)(object)await handler.Handle(apply, cancellationToken);
         }
 

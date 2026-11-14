@@ -5,7 +5,8 @@ using FoodParkDigital.Domain.OnlinePayments.Enums;
 namespace FoodParkDigital.Domain.OnlinePayments.Entities;
 
 /// <summary>
-/// An order of the online menu the customer pays online (Fase 24I, ADR 0031). It keeps what the customer asked for and the
+/// An order of the online menu the customer pays online (Fase 24I, ADR 0031), or since the Fase 31N the deposit that accepts a
+/// quote from its link (<see cref="QuoteId"/>, ADR 0094). It keeps what the customer asked for and the
 /// total the server computed, and the customer pays it in Mercado Pago, into the business's account. The order only exists
 /// once a payment is approved: then it is placed, as any order of the menu, with an «En línea» payment for the total. If it
 /// can no longer be placed, or the payment comes too late, the payment goes back to the customer. What it knew about the
@@ -37,8 +38,14 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
     /// <summary>What the customer pays: the order's total as the server computed it, delivery included.</summary>
     public decimal Amount { get; private set; }
 
-    /// <summary>What the customer asked for, to place the order with once paid; null once it ended.</summary>
+    /// <summary>What the customer asked for, to place the order with once paid; null once it ended, and for a deposit.</summary>
     public string? Request { get; private set; }
+
+    /// <summary>
+    /// The version of a quote whose deposit this is (Fase 31N, ADR 0094): paid, it accepts that version and turns it into its
+    /// service order. Null for an order of the online menu.
+    /// </summary>
+    public Guid? QuoteId { get; private set; }
 
     /// <summary>The customer account that ordered (Fase 24B), so its order is in its Mis pedidos; null for a guest.</summary>
     public Guid? CustomerUserId { get; private set; }
@@ -114,6 +121,36 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
             ExpiresAt = now + TimeToPay
         };
     }
+
+    /// <summary>
+    /// The deposit a customer pays online to accept a version of a quote from its link (Fase 31N, ADR 0094): the version's
+    /// amount, into the business's account, in the same 30 minutes. It knows nothing of the customer: the quote does.
+    /// </summary>
+    public static OnlineCheckout ForQuote(Guid tenantId, long providerUserId, Guid quoteId, decimal amount, DateTimeOffset now)
+    {
+        if (tenantId == Guid.Empty)
+            throw new DomainException("El pago en línea necesita un negocio.");
+        if (providerUserId <= 0)
+            throw new DomainException("El negocio no tiene su cuenta de Mercado Pago conectada.");
+        if (quoteId == Guid.Empty)
+            throw new DomainException("El anticipo necesita su cotización.");
+        if (amount <= 0 || decimal.Round(amount, 2) != amount)
+            throw new DomainException("El anticipo a pagar en línea no es válido.");
+
+        return new OnlineCheckout
+        {
+            TenantId = tenantId,
+            ProviderUserId = providerUserId,
+            Amount = amount,
+            QuoteId = quoteId,
+            Status = OnlineCheckoutStatus.AwaitingPayment,
+            StartedAt = now,
+            ExpiresAt = now + TimeToPay
+        };
+    }
+
+    /// <summary>Whether this is the deposit of a quote (Fase 31N) and not an order of the online menu.</summary>
+    public bool IsForQuote => QuoteId is not null;
 
     /// <summary>Mercado Pago created its checkout: the customer is sent to pay there.</summary>
     public void AttachPreference(string preferenceId, string checkoutUrl)

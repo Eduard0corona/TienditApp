@@ -90,7 +90,8 @@ public class WhatsAppMessageMediaMigrationSqlServerTests
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
-        var chat = await SeedAsync(database.CreateContext());
+        // On a database at this migration: the model before the Fase 31N, without its columns.
+        var chat = await SeedAsync(BeforeQuoteDeposits.CreateContext(database));
         Guid saved, waiting;
         await using (var add = database.CreateContext(chat.TenantId))
         {

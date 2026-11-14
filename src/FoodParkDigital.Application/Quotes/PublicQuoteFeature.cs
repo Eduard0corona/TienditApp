@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -78,6 +79,18 @@ public class PublicQuoteDto
     public bool RepliedFromLink { get; set; }
     /// <summary>What the customer wrote when they answered here; never what the business recorded.</summary>
     public string? Response { get; set; }
+    /// <summary>
+    /// The deposit to pay to accept it here (Fase 31N, ADR 0094); null when it asks none. Accepting it is paying it: «accept»
+    /// alone is refused.
+    /// </summary>
+    public decimal? DepositAmount { get; set; }
+    /// <summary>
+    /// The deposit can be paid now: it can be answered here and the business can collect it. Asking one it cannot collect now,
+    /// the customer can still reject it, or write to the business.
+    /// </summary>
+    public bool CanPayDeposit { get; set; }
+    /// <summary>The customer paid the deposit, and so accepted it here.</summary>
+    public bool DepositPaid { get; set; }
 }
 
 public class GetPublicQuoteQueryHandler : IRequestHandler<GetPublicQuoteQuery, PublicQuoteDto?>
@@ -85,12 +98,16 @@ public class GetPublicQuoteQueryHandler : IRequestHandler<GetPublicQuoteQuery, P
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly IDateTimeProvider _clock;
+    private readonly IOnlinePaymentGateway? _gateway;
 
-    public GetPublicQuoteQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider clock)
+    /// <param name="gateway">Mercado Pago, to say whether its deposit can be paid (Fase 31N).</param>
+    public GetPublicQuoteQueryHandler(
+        IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider clock, IOnlinePaymentGateway? gateway = null)
     {
         _context = context;
         _tenantService = tenantService;
         _clock = clock;
+        _gateway = gateway;
     }
 
     public async Task<PublicQuoteDto?> Handle(GetPublicQuoteQuery request, CancellationToken cancellationToken)
@@ -100,7 +117,7 @@ public class GetPublicQuoteQueryHandler : IRequestHandler<GetPublicQuoteQuery, P
             return null;
 
         _tenantService.SetTenant(found.TenantId);
-        return await PublicQuotes.DescribeAsync(_context, found, _clock.UtcNow, cancellationToken);
+        return await PublicQuotes.DescribeAsync(_context, found, _clock.UtcNow, cancellationToken, _gateway);
     }
 }
 
@@ -143,10 +160,11 @@ internal static class PublicQuotes
 
     /// <summary>
     /// The quote as its customer reads it: that version only, until 30 days after its validity (null after it). Of the customer,
-    /// only their name.
+    /// only their name. Without <paramref name="gateway"/> its deposit cannot be paid.
     /// </summary>
     public static async Task<PublicQuoteDto?> DescribeAsync(
-        IApplicationDbContext context, Found found, DateTimeOffset now, CancellationToken cancellationToken)
+        IApplicationDbContext context, Found found, DateTimeOffset now, CancellationToken cancellationToken,
+        IOnlinePaymentGateway? gateway = null)
     {
         var view = await context.Quotes
             .AsNoTracking()
@@ -179,6 +197,9 @@ internal static class PublicQuotes
 
         var replied = status is QuoteStatus.Accepted or QuoteStatus.Rejected;
         var fromLink = replied && view.ReplyChannel == QuoteReplyChannel.Link;
+        var canReply = status == QuoteStatus.Sent && business.OnlineReplies;
+        var canPayDeposit = canReply && view.DepositAmount is not null
+            && await QuoteDeposits.OffersAsync(context, gateway, view.TenantId, now, cancellationToken);
         return new PublicQuoteDto
         {
             BusinessName = business.Name,
@@ -206,11 +227,14 @@ internal static class PublicQuotes
             ToPay = view.ToPay(stillPaid),
             Note = view.Note,
             NewerToken = newer,
-            CanReply = status == QuoteStatus.Sent && business.OnlineReplies,
+            CanReply = canReply,
             RepliedAt = replied ? view.ClosedAt : null,
             RepliedOn = replied && view.ClosedAt is { } closedAt ? QuoteCalendar.Today(business.TimeZone, closedAt) : null,
             RepliedFromLink = fromLink,
-            Response = fromLink ? view.CustomerResponse : null
+            Response = fromLink ? view.CustomerResponse : null,
+            DepositAmount = view.DepositAmount,
+            CanPayDeposit = canPayDeposit,
+            DepositPaid = await QuoteDeposits.PaidAsync(context, view, cancellationToken)
         };
     }
 }

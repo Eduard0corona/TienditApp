@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Quotes;
 using FluentValidation;
@@ -33,12 +34,15 @@ public class ReplyToQuoteFromLinkCommandHandler : IRequestHandler<ReplyToQuoteFr
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly IDateTimeProvider _clock;
+    private readonly IOnlinePaymentGateway? _gateway;
 
-    public ReplyToQuoteFromLinkCommandHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider clock)
+    public ReplyToQuoteFromLinkCommandHandler(
+        IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider clock, IOnlinePaymentGateway? gateway = null)
     {
         _context = context;
         _tenantService = tenantService;
         _clock = clock;
+        _gateway = gateway;
     }
 
     public async Task<Result<PublicQuoteDto>?> Handle(ReplyToQuoteFromLinkCommand request, CancellationToken cancellationToken)
@@ -98,7 +102,7 @@ public class ReplyToQuoteFromLinkCommandHandler : IRequestHandler<ReplyToQuoteFr
             }
         }
 
-        var view = await PublicQuotes.DescribeAsync(_context, found, now, cancellationToken);
+        var view = await PublicQuotes.DescribeAsync(_context, found, now, cancellationToken, _gateway);
         return view is null ? null : Result.Success(view);
     }
 }
