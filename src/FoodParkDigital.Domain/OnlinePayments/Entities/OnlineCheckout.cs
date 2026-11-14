@@ -6,7 +6,8 @@ namespace FoodParkDigital.Domain.OnlinePayments.Entities;
 
 /// <summary>
 /// An order of the online menu the customer pays online (Fase 24I, ADR 0031), or since the Fase 31N the deposit that accepts a
-/// quote from its link (<see cref="QuoteId"/>, ADR 0094). It keeps what the customer asked for and the
+/// quote from its link (<see cref="QuoteId"/>, ADR 0094), or since the Fase 31O the deposit that books an appointment online
+/// (<see cref="ForAppointment"/>, ADR 0095). It keeps what the customer asked for and the
 /// total the server computed, and the customer pays it in Mercado Pago, into the business's account. The order only exists
 /// once a payment is approved: then it is placed, as any order of the menu, with an «En línea» payment for the total. If it
 /// can no longer be placed, or the payment comes too late, the payment goes back to the customer. What it knew about the
@@ -46,6 +47,18 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
     /// service order. Null for an order of the online menu.
     /// </summary>
     public Guid? QuoteId { get; private set; }
+
+    /// <summary>
+    /// The deposit that books an appointment online (Fase 31O, ADR 0095): <see cref="Request"/> keeps what the customer asked
+    /// for, and the approved payment creates the request with it (<see cref="AppointmentId"/>).
+    /// </summary>
+    public bool ForAppointment { get; private set; }
+
+    /// <summary>
+    /// The appointment its approved payment booked (Fase 31O): its deposit is this payment. Null until then, and for every
+    /// other checkout.
+    /// </summary>
+    public Guid? AppointmentId { get; private set; }
 
     /// <summary>The customer account that ordered (Fase 24B), so its order is in its Mis pedidos; null for a guest.</summary>
     public Guid? CustomerUserId { get; private set; }
@@ -95,6 +108,32 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
         Guid? customerUserId,
         string? customerPhone,
         DateTimeOffset now)
+        => Create(tenantId, providerUserId, amount, request, customerUserId, customerPhone, now, forAppointment: false);
+
+    /// <summary>
+    /// The deposit a customer pays online to book an appointment (Fase 31O, ADR 0095): the service's share, into the
+    /// business's account, in the same 30 minutes. It keeps what the customer asked for (the service, the time, who attends
+    /// and their details), and the request exists only once a payment is approved.
+    /// </summary>
+    public static OnlineCheckout ForAppointmentRequest(
+        Guid tenantId,
+        long providerUserId,
+        decimal amount,
+        string request,
+        Guid? customerUserId,
+        string customerPhone,
+        DateTimeOffset now)
+        => Create(tenantId, providerUserId, amount, request, customerUserId, customerPhone, now, forAppointment: true);
+
+    private static OnlineCheckout Create(
+        Guid tenantId,
+        long providerUserId,
+        decimal amount,
+        string request,
+        Guid? customerUserId,
+        string? customerPhone,
+        DateTimeOffset now,
+        bool forAppointment)
     {
         if (tenantId == Guid.Empty)
             throw new DomainException("El pago en línea necesita un negocio.");
@@ -116,6 +155,7 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
             Request = request,
             CustomerUserId = customerUserId,
             CustomerPhone = phone,
+            ForAppointment = forAppointment,
             Status = OnlineCheckoutStatus.AwaitingPayment,
             StartedAt = now,
             ExpiresAt = now + TimeToPay
@@ -175,10 +215,9 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
     /// <summary>The approved payment placed the order. Only while it awaits a payment approved in time.</summary>
     public void Place(string paymentId, DateTimeOffset paidAt, Guid orderId)
     {
-        if (!IsAwaitingPayment)
-            throw new DomainException(NotAwaitingPaymentMessage);
-        if (paidAt > ExpiresAt)
-            throw new DomainException("El pago llegó después del tiempo para pagar.");
+        if (ForAppointment)
+            throw new InvalidOperationException("The deposit of an appointment books it (PlaceAppointment).");
+        EnsurePaidInTime(paidAt);
         if (orderId == Guid.Empty)
             throw new DomainException("El pedido pagado no existe.");
 
@@ -186,6 +225,47 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
         OrderId = orderId;
         Status = OnlineCheckoutStatus.Placed;
         Forget();
+    }
+
+    /// <summary>
+    /// The approved payment booked the appointment it was for (Fase 31O): the request exists, with this payment as its
+    /// deposit. Only while it awaits a payment approved in time.
+    /// </summary>
+    public void PlaceAppointment(string paymentId, DateTimeOffset paidAt, Guid appointmentId)
+    {
+        if (!ForAppointment)
+            throw new InvalidOperationException("Only the deposit of an appointment books one.");
+        EnsurePaidInTime(paidAt);
+        if (appointmentId == Guid.Empty)
+            throw new DomainException("La cita pagada no existe.");
+
+        SetPayment(paymentId, paidAt);
+        AppointmentId = appointmentId;
+        Status = OnlineCheckoutStatus.Placed;
+        Forget();
+    }
+
+    /// <summary>
+    /// The sale of its appointment took the deposit as its «En línea» payment (Fase 31O): what Mercado Pago later says of the
+    /// payment (a refund made there, a dispute) reaches that sale. Once.
+    /// </summary>
+    public void ApplyToSale(Guid orderId)
+    {
+        if (!ForAppointment || Status != OnlineCheckoutStatus.Placed || AppointmentId is null)
+            throw new InvalidOperationException("Only the paid deposit of an appointment goes to its sale.");
+        if (OrderId is not null)
+            throw new DomainException("Este anticipo ya está en una venta.");
+        if (orderId == Guid.Empty)
+            throw new ArgumentException("The sale is required.", nameof(orderId));
+        OrderId = orderId;
+    }
+
+    private void EnsurePaidInTime(DateTimeOffset paidAt)
+    {
+        if (!IsAwaitingPayment)
+            throw new DomainException(NotAwaitingPaymentMessage);
+        if (paidAt > ExpiresAt)
+            throw new DomainException("El pago llegó después del tiempo para pagar.");
     }
 
     /// <summary>
