@@ -506,10 +506,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// away. False without a deposit held; later, the business keeps it.
     /// </summary>
     public bool CustomerCancelReturnsDeposit(DateTimeOffset now)
-        => HoldsDeposit
-            && (Status == AppointmentStatus.Requested
-                || (RequestedStartAt is { } askedFor && askedFor != StartAt)
-                || StartAt - now >= BookingDeposits.FreeCancellationNotice);
+        => BookingDeposits.CustomerCancelReturns(DepositStatus, Status, RequestedStartAt, StartAt, now);
 
     /// <summary>
     /// The business did not answer a request booked with a deposit before its time (Fase 31O, ADR 0095): the deposit goes back

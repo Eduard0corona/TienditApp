@@ -26,6 +26,21 @@ public static class BookingDeposits
         "El anticipo que el cliente pagó en línea es mayor que la venta: cobra al menos el anticipo y, si fue de más, reembolsa la diferencia «En línea».";
 
     /// <summary>
+    /// Whether its customer cancelling an appointment now gets its deposit back: one held, of a request not answered yet, of
+    /// one the business moved from the time it was asked for, or of one at least <see cref="FreeCancellationNotice"/> away.
+    /// </summary>
+    public static bool CustomerCancelReturns(
+        Enums.AppointmentDepositStatus? deposit,
+        Enums.AppointmentStatus status,
+        DateTimeOffset? requestedStartAt,
+        DateTimeOffset startAt,
+        DateTimeOffset now)
+        => deposit == Enums.AppointmentDepositStatus.Held
+            && (status == Enums.AppointmentStatus.Requested
+                || (requestedStartAt is { } askedFor && askedFor != startAt)
+                || startAt - now >= FreeCancellationNotice);
+
+    /// <summary>
     /// The deposit a service asks: <paramref name="percent"/> of its <paramref name="price"/>, to the cent, half away from
     /// zero; none without a percent or below <see cref="MinDeposit"/>.
     /// </summary>

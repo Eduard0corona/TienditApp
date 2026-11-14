@@ -21,6 +21,7 @@ internal static class BeforeQuoteDeposits
     /// <summary>For the context of an earlier version, which does not know them either.</summary>
     public static void Ignore(ModelBuilder modelBuilder)
     {
+        BeforeAppointmentDeposits.Ignore(modelBuilder);
         modelBuilder.Entity<TenantSettings>().Ignore(settings => settings.QuoteDepositPercent);
         modelBuilder.Entity<Quote>().Ignore(quote => quote.DepositAmount);
         // The quote a checkout pays: its key to the quotes and its index go with it.
