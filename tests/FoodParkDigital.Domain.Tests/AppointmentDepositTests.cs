@@ -29,8 +29,9 @@ public class AppointmentDepositTests
     [InlineData(30, "350", "105")]
     [InlineData(10, "350", "35")]
     [InlineData(100, "350", "350")]
-    // To the cent, half away from zero: 33 % of $100.05 is $33.0165.
+    // To the cent: 33 % of $100.05 is $33.0165; and half away from zero, 50 % of $100.05 ($50.025) is $50.03, not $50.02.
     [InlineData(33, "100.05", "33.02")]
+    [InlineData(50, "100.05", "50.03")]
     // Below $10 none is asked: 10 % of $99.94 is $9.99; of $99.99, $10.00.
     [InlineData(10, "99.94", null)]
     [InlineData(10, "99.99", "10")]
