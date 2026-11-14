@@ -752,7 +752,9 @@ export default function SellPage() {
 
       <ChargeModal
         show={chargeOpen}
-        amountDue={totals.total}
+        // What the customer already paid online to book the appointment (Fase 31O) is not charged again.
+        amountDue={Math.max(0, totals.total - (appointment?.deposit ?? 0))}
+        paidOnline={appointment?.deposit ?? null}
         submitting={submitting}
         error={saleError}
         // The tip of a platform's order is in its app, for the courier.

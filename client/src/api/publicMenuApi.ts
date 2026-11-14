@@ -21,6 +21,8 @@ export type RequestPublicHomeVisit = Schemas['RequestPublicHomeVisitRequest'];
 export type CreateOnlineCheckout = Schemas['CreateOnlineCheckoutRequest'];
 export type OnlineCheckoutStarted = Schemas['OnlineCheckoutStartedDto'];
 export type OnlineCheckoutStatus = Schemas['OnlineCheckoutStatusDto'];
+export type StartAppointmentDeposit = Schemas['StartAppointmentDepositRequest'];
+export type AppointmentDepositStatus = Schemas['AppointmentDepositStatusDto'];
 
 /** The public menu of a business: no sign-in. */
 export const publicMenuApi = {
@@ -78,6 +80,17 @@ export const publicMenuApi = {
   /** Asks for one of those times: the appointment waits «Por confirmar» until the business accepts it. */
   requestAppointment: (slug: string, body: RequestPublicAppointment) =>
     apiRequest('post', '/api/v1/public/menu/{slug}/appointments', { path: { slug }, body }),
+
+  /**
+   * Pays the deposit the service asks to be booked (Fase 31O): the answer is Mercado Pago's page, and the request is booked
+   * when the payment is approved. Its return key goes in the body of the return page, never in a URL.
+   */
+  startAppointmentDeposit: (slug: string, body: StartAppointmentDeposit) =>
+    apiRequest('post', '/api/v1/public/menu/{slug}/appointments/deposit', { path: { slug }, body }),
+
+  /** How the deposit stands (the return page): the request booked comes with its link only with this device's return key. */
+  confirmAppointmentDeposit: (slug: string, checkoutId: string, body: { paymentId?: string | null; returnKey?: string | null }, signal?: AbortSignal) =>
+    apiRequest('post', '/api/v1/public/menu/{slug}/appointments/deposit/{checkoutId}/confirm', { path: { slug, checkoutId }, body, signal }),
 
   /**
    * The visit to quote a customer requests online (Fase 29B): what it is and what it costs before the postal code. Not

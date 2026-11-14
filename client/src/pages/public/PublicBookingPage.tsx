@@ -15,7 +15,9 @@ import StaffPicker from '../../components/booking/StaffPicker';
 import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { DEPOSIT_CANCEL_HOURS, depositPolicy } from '../../utils/bookingDeposits';
 import { formatMoney } from '../../utils/money';
+import { rememberOnlineCheckout } from '../../utils/onlineCheckouts';
 import { describeDuration, shortDayLabel, upperFirst } from '../../utils/onlineBooking';
 import { localPhone } from '../../utils/phones';
 import { responseTimeLabel } from '../../utils/responseTime';
@@ -42,7 +44,8 @@ const answerLost = (err: unknown) => {
  * confirmar» until the business accepts it; the receipt gives the link to follow it (/cita#link), and with a customer
  * account it is also in Mis citas. The server works out the free times (its hours, the service's duration and the
  * appointments already taken) and says no when the time was taken meanwhile; the page only shows them. When the business
- * says who attends (Fase 24J, ADR 0032), the customer chooses the person, or no preference, and the times are theirs.
+ * says who attends (Fase 24J, ADR 0032), the customer chooses the person, or no preference, and the times are theirs. A
+ * service that asks a deposit (Fase 31O, ADR 0095) is booked by paying it in Mercado Pago: the return page shows the request.
  */
 export default function PublicBookingPage() {
   const sheetTitleId = useId();
@@ -145,7 +148,21 @@ export default function PublicBookingPage() {
     // Another request (another time, name or phone) gets another key.
     const signature = JSON.stringify(request);
     if (attempt.current?.signature !== signature) attempt.current = { signature, key: newUuid() };
+    // Off to Mercado Pago: the sheet stays as it is while the browser leaves.
+    let leaving = false;
     try {
+      // A service that asks a deposit (Fase 31O) is booked by paying it: off to Mercado Pago, and back to the return page.
+      if (service.depositAmount != null) {
+        const started = await publicMenuApi.startAppointmentDeposit(slug, {
+          ...request,
+          idempotencyKey: attempt.current.key,
+          expectedDeposit: service.depositAmount,
+        });
+        rememberOnlineCheckout(started.checkoutId, started.returnKey);
+        leaving = true;
+        window.location.assign(started.checkoutUrl);
+        return;
+      }
       const result = await publicMenuApi.requestAppointment(slug, { ...request, idempotencyKey: attempt.current.key });
       attempt.current = null;
       setSheetOpen(false);
@@ -164,6 +181,8 @@ export default function PublicBookingPage() {
       // else until then.
       setSending(false);
       setChecking(true);
+      // The deposit the service asks may have changed (or started or stopped being asked): the page reads it again.
+      void booking.refetch();
       // The person no longer takes it: the page reads who does, and the customer picks again; with nobody doing the
       // service any more, the customer picks another one.
       if (staffId) {
@@ -193,8 +212,10 @@ export default function PublicBookingPage() {
         setNotice(message);
       }
     } finally {
-      setSending(false);
-      setChecking(false);
+      if (!leaving) {
+        setSending(false);
+        setChecking(false);
+      }
     }
   };
 
@@ -302,6 +323,9 @@ export default function PublicBookingPage() {
                     <span className="text-muted">{describeDuration(item.durationMinutes)} ·</span>
                     <span className="pm-price ta-money">{formatMoney(item.price)}</span>
                   </span>
+                  {item.depositAmount != null && (
+                    <span className="d-block small text-muted">Anticipo para reservar: <span className="ta-money">{formatMoney(item.depositAmount)}</span></span>
+                  )}
                   {item.description && <span className="pm-item-description">{item.description}</span>}
                 </span>
                 {withPhotos
@@ -324,6 +348,7 @@ export default function PublicBookingPage() {
               <div className="fw-semibold">{service.name}</div>
               <div className="small text-muted">
                 {describeDuration(service.durationMinutes)} · <span className="ta-money">{formatMoney(service.price)}</span>
+                {service.depositAmount != null && <> · Anticipo <span className="ta-money">{formatMoney(service.depositAmount)}</span></>}
               </div>
             </div>
             <button type="button" className="btn btn-sm btn-light text-nowrap" onClick={() => chooseService(null)} aria-label="Cambiar servicio">
@@ -422,12 +447,22 @@ export default function PublicBookingPage() {
                     value={notes} onChange={(event) => setNotes(event.target.value)} />
                 </div>
               </div>
+              {service.depositAmount != null && (
+                <div className="alert alert-info small mt-3 mb-0">
+                  <strong>Anticipo de <span className="ta-money">{formatMoney(service.depositAmount)}</span> para reservar.</strong>{' '}
+                  Lo pagas en línea con Mercado Pago y se descuenta al cobrarte la cita. {depositPolicy(data.depositCancelHours ?? DEPOSIT_CANCEL_HOURS)}
+                </div>
+              )}
               {error && <div className="alert alert-danger mt-3 mb-0" role="alert">{error}</div>}
               <button type="submit" className="btn btn-primary btn-touch btn-touch-lg w-100 mt-3" disabled={sending || checking}>
-                {sending ? 'Enviando…' : 'Pedir cita'}
+                {service.depositAmount != null
+                  ? (sending ? 'Abriendo Mercado Pago…' : `Pagar anticipo de ${formatMoney(service.depositAmount)}`)
+                  : (sending ? 'Enviando…' : 'Pedir cita')}
               </button>
               <p className="small text-muted mt-2 mb-0">
-                {data.businessName} te confirma por WhatsApp. Usamos tu teléfono solo para avisarte de esta cita.
+                {service.depositAmount != null
+                  ? `Al pagarlo, tu solicitud llega a ${data.businessName}, que te confirma por WhatsApp. Usamos tu teléfono solo para avisarte de esta cita.`
+                  : `${data.businessName} te confirma por WhatsApp. Usamos tu teléfono solo para avisarte de esta cita.`}
               </p>
             </form>
           )}

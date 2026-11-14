@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildSellLink } from '../../utils/sellLink';
-import { HomeVisitChargePolicy } from '../../api/generated/enums';
+import { AppointmentDepositStatus, HomeVisitChargePolicy } from '../../api/generated/enums';
 import type { AppointmentDto, ProductDto } from '../../types';
 import { CfdiTaxObject, UnitType } from '../../types';
 import {
@@ -135,5 +135,13 @@ describe('saleOfAppointment', () => {
 
   it('charges no service that is no longer in the catalog', () => {
     expect(saleOfAppointment(appointment, []).service).toBeUndefined();
+  });
+
+  it('takes the deposit paid online to book it while held, and none once its sale took it or it went back (Fase 31O)', () => {
+    const held = { ...appointment, depositAmount: 45, depositStatus: AppointmentDepositStatus.Held } as AppointmentDto;
+    expect(saleOfAppointment(held, [corte]).appointment.deposit).toBe(45);
+    for (const depositStatus of [AppointmentDepositStatus.Applied, AppointmentDepositStatus.Returned, AppointmentDepositStatus.Kept])
+      expect(saleOfAppointment({ ...held, depositStatus }, [corte]).appointment.deposit).toBeNull();
+    expect(saleOfAppointment(appointment, [corte]).appointment.deposit).toBeNull();
   });
 });

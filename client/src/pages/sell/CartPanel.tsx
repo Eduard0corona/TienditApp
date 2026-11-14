@@ -225,6 +225,19 @@ export default function CartPanel(props: CartPanelProps) {
           <span>Total</span>
           <span className="ta-money">{formatMoney(totals.total)}</span>
         </div>
+        {/* The deposit the customer paid online to book the appointment (Fase 31O): the sale takes it, the rest is charged. */}
+        {props.appointment?.deposit != null && (
+          <>
+            <div className="d-flex justify-content-between small">
+              <span>Anticipo pagado en línea</span>
+              <span className="ta-money">−{formatMoney(props.appointment.deposit)}</span>
+            </div>
+            <div className="d-flex justify-content-between fw-semibold">
+              <span>Por cobrar</span>
+              <span className="ta-money">{formatMoney(Math.max(0, totals.total - props.appointment.deposit))}</span>
+            </div>
+          </>
+        )}
         {platform && !pricesPending && <div className="small text-muted">Con tus precios de {platformName}</div>}
       </div>
 

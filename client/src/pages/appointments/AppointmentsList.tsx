@@ -29,7 +29,9 @@ import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
-import { getAccess } from '../../utils/access';
+import { getAccess, hasUserPermission } from '../../utils/access';
+import { businessDepositLabel, canReturnDeposit, holdsDeposit } from '../../utils/bookingDeposits';
+import { formatMoney } from '../../utils/money';
 import { photoCount } from '../../utils/problemPhotos';
 import { answerInTimeLabel, FROM_TEAM_LABEL, MARKED_FAKE_LABEL } from '../../utils/responseTime';
 import {
@@ -172,6 +174,8 @@ export default function AppointmentsList() {
   const canQuote = getAccess(user, capabilities).quotes;
   // The order of the job of a quote (Fase 29F) opens for whoever sees orders.
   const canOpenOrders = getAccess(user, capabilities).orders;
+  // The deposit an appointment was booked with goes back for whoever processes refunds (Fase 31O), as the API asks.
+  const canReturnDeposits = hasUserPermission(user, 'ProcessRefunds');
   const [quoting, setQuoting] = useState<string | null>(null);
   // Like the server's notices: with IVA included while the business is read.
   const pricesIncludeTax = tenant?.pricesIncludeTax ?? true;
@@ -441,6 +445,21 @@ export default function AppointmentsList() {
   };
 
   const updateStatus = async (item: AppointmentDto, newStatus: AppointmentStatus) => {
+    // With its deposit held (Fase 31O), cancelling gives it back and «No asistió» keeps it: said before it changes.
+    if (holdsDeposit(item) && (newStatus === AppointmentStatusConst.Cancelled || newStatus === AppointmentStatusConst.NoShow)) {
+      const amount = formatMoney(item.depositAmount!);
+      const cancelling = newStatus === AppointmentStatusConst.Cancelled;
+      const accepted = await confirm({
+        title: cancelling ? 'Cancelar la cita' : 'El cliente no asistió',
+        message: cancelling
+          ? `La cita de ${item.customerName} se cancela y su anticipo de ${amount} se le devuelve.`
+          : `Te quedas con el anticipo de ${amount} de ${item.customerName}. Si quieres, después puedes devolvérselo.`,
+        confirmLabel: cancelling ? 'Cancelar y devolver' : 'No asistió',
+        cancelLabel: 'Volver',
+        danger: cancelling,
+      });
+      if (!accepted) return;
+    }
     setError('');
     try {
       await appointmentsApi.updateStatus(item.id, newStatus);
@@ -468,7 +487,8 @@ export default function AppointmentsList() {
     const accepted = await confirm({
       title: 'Rechazar la solicitud',
       message: `La cita de ${item.customerName} (${item.serviceName}, ${formatSlot(item)}) se cancela y el horario queda libre. `
-        + 'El cliente recibe el aviso para elegir otro.',
+        + 'El cliente recibe el aviso para elegir otro.'
+        + (holdsDeposit(item) ? ` Su anticipo de ${formatMoney(item.depositAmount!)} se le devuelve.` : ''),
       confirmLabel: 'Rechazar',
       cancelLabel: 'Volver',
       danger: true,
@@ -491,7 +511,8 @@ export default function AppointmentsList() {
       title: 'Marcar la solicitud como falsa',
       message: `La cita de ${item.customerName} (${item.serviceName}, ${formatSlot(item)}) se cancela y el horario queda libre, `
         + 'sin avisarle a nadie: el teléfono puede no ser de quien la mandó. No cuenta en tu tiempo de respuesta en Explorar, '
-        + 'y ese teléfono no puede pedirte otra cita ni visita en 90 días. Si te equivocas, puedes quitar la marca.',
+        + 'y ese teléfono no puede pedirte otra cita ni visita en 90 días. Si te equivocas, puedes quitar la marca.'
+        + (holdsDeposit(item) ? ` Su anticipo de ${formatMoney(item.depositAmount!)} se devuelve.` : ''),
       confirmLabel: 'Es falsa',
       cancelLabel: 'Volver',
       danger: true,
@@ -526,6 +547,28 @@ export default function AppointmentsList() {
       await loadData();
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo quitar la marca.'));
+    }
+  };
+
+  // Fase 31O: the business gives back a deposit still held (the whole appointment is charged then) or one it kept.
+  const returnDeposit = async (item: AppointmentDto) => {
+    const amount = formatMoney(item.depositAmount!);
+    const accepted = await confirm({
+      title: 'Devolver el anticipo',
+      message: holdsDeposit(item)
+        ? `El anticipo de ${amount} vuelve a ${item.customerName} por Mercado Pago, y al cobrar la cita se cobra completa.`
+        : `El anticipo de ${amount} que te quedaste vuelve a ${item.customerName} por Mercado Pago.`,
+      confirmLabel: 'Devolver',
+      cancelLabel: 'Volver',
+    });
+    if (!accepted) return;
+    setError('');
+    try {
+      await appointmentsApi.returnDeposit(item.id);
+      toast.success('Anticipo devuelto: se le regresa al cliente por Mercado Pago.');
+      await loadData();
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo devolver el anticipo.'));
     }
   };
 
@@ -761,6 +804,18 @@ export default function AppointmentsList() {
                   <span className={`badge ${statusBadge(item.status)}`}>{statusLabel(item.status)}</span>
                   {item.cancelledByCustomer && <div className="text-muted small">La canceló el cliente</div>}
                   {item.markedFake && <div className="text-muted small">{MARKED_FAKE_LABEL}</div>}
+                  {/* The deposit it was booked with online, where it stands (Fase 31O). */}
+                  {businessDepositLabel(item) && <div className="text-muted small">{businessDepositLabel(item)}</div>}
+                  {canReturnDeposits && canReturnDeposit(item) && (
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm p-0"
+                      onClick={() => void returnDeposit(item)}
+                      aria-label={`Devolver el anticipo de ${item.customerName}`}
+                    >
+                      Devolver anticipo
+                    </button>
+                  )}
                   {/* By when it is answered in time, as Explorar counts it (Fase 29L); one of the team does not count (29M). */}
                   {item.status === AppointmentStatusConst.Requested && item.answerBy && (
                     <AnswerInTime answerBy={item.answerBy} />

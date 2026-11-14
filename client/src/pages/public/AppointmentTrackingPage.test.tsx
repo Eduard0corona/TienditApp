@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HomeVisitChargePolicy } from '../../api/generated/enums';
+import { AppointmentDepositStatus, HomeVisitChargePolicy } from '../../api/generated/enums';
 import { publicMenuApi, type CustomerAppointment } from '../../api/publicMenuApi';
 import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { AppointmentStatus } from '../../types';
@@ -37,6 +37,7 @@ function appointment(overrides: Partial<CustomerAppointment> = {}): CustomerAppo
     address: 'Av. Juárez 123, Centro',
     problemPhotos: 0,
     canAddPhotos: false,
+    cancelReturnsDeposit: false,
     ...overrides,
   };
 }
@@ -97,6 +98,32 @@ describe('AppointmentTrackingPage', () => {
     expect(await screen.findByText('La cancelaste')).toBeInTheDocument();
     expect(toast.success).toHaveBeenCalledWith('Cancelaste tu cita.');
     expect(screen.queryByRole('button', { name: /Cancelar la cita/ })).not.toBeInTheDocument();
+  });
+
+  it('says the deposit it was booked with, and what cancelling does with it, as the server decided (Fase 31O)', async () => {
+    const user = userEvent.setup();
+    api.trackAppointment.mockResolvedValue(appointment({
+      status: AppointmentStatus.Confirmed, statusLabel: 'Confirmada', depositAmount: 45, depositStatus: AppointmentDepositStatus.Held,
+      cancelReturnsDeposit: false,
+    }) as never);
+    renderPage(`/cita#${LINK}`);
+
+    expect(await screen.findByText('Pagaste un anticipo de $45.00: se descuenta al cobrarte la cita.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Cancelar la cita/ }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Cancelar cita' }));
+    expect(dialog.getByText(/Faltan menos de 24 horas: el negocio se queda con tu anticipo de \$45\.00\./)).toBeInTheDocument();
+  });
+
+  it('says the deposit goes back when cancelling in time', async () => {
+    const user = userEvent.setup();
+    api.trackAppointment.mockResolvedValue(appointment({
+      depositAmount: 45, depositStatus: AppointmentDepositStatus.Held, cancelReturnsDeposit: true,
+    }) as never);
+    renderPage(`/cita#${LINK}`);
+
+    await user.click(await screen.findByRole('button', { name: /Cancelar la cita/ }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Cancelar cita' }));
+    expect(dialog.getByText(/Te devolvemos tu anticipo de \$45\.00\./)).toBeInTheDocument();
   });
 
   it('offers no cancel once the server says it is too late', async () => {

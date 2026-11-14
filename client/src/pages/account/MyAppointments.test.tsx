@@ -35,6 +35,7 @@ function appointment(overrides: Partial<CustomerAppointment> = {}): CustomerAppo
     address: null,
     problemPhotos: 0,
     canAddPhotos: false,
+    cancelReturnsDeposit: false,
     ...overrides,
   };
 }

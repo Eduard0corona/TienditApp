@@ -2,6 +2,7 @@ import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import type { AppointmentDto, CategoryDto, OrderDto, ProductDto } from '../../types';
 import { OrderChannel, PlatformCollectedBy, UnitType } from '../../types';
 import { formatInBusinessZone } from '../../utils/dates';
+import { holdsDeposit } from '../../utils/bookingDeposits';
 
 // Same limits as the API (OrderLimits).
 export const MAX_QUANTITY_PER_LINE = 10_000;
@@ -133,6 +134,11 @@ export interface SaleAppointment {
   /** What the visit at the customer's address was agreed for; null at the business or without a charge. */
   visitFee: number | null;
   zoneName: string | null;
+  /**
+   * The deposit its customer paid online to book it, still held (Fase 31O): the sale takes it as its «En línea» payment, so
+   * what is left to charge is the rest. Null without one.
+   */
+  deposit?: number | null;
 }
 
 /** The appointment a link asks to charge (?appointment=), read once. */
@@ -237,6 +243,7 @@ export function saleOfAppointment(
       description: `${data.serviceName} · ${when}`,
       visitFee: data.visit && data.visit.fee > 0 ? data.visit.fee : null,
       zoneName: data.visit?.zoneName ?? null,
+      deposit: holdsDeposit(data) ? data.depositAmount ?? null : null,
     },
     service: data.serviceProductId && !freeVisit ? products.find((product) => product.id === data.serviceProductId) : undefined,
     freeVisit,

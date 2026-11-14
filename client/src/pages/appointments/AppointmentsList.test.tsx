@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appointmentsApi } from '../../api/appointmentsApi';
 import { filesApi } from '../../api/filesApi';
-import { HomeVisitChargePolicy } from '../../api/generated/enums';
+import { AppointmentDepositStatus, HomeVisitChargePolicy } from '../../api/generated/enums';
 import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { employeesApi } from '../../api/employeesApi';
 import { quoteVisit } from '../../api/homeVisits';
@@ -22,7 +22,7 @@ import { APPOINTMENT_REQUESTS_CHANGED } from '../../hooks/useAppointmentRequests
 vi.mock('../../api/appointmentsApi', () => ({
   appointmentsApi: {
     getAll: vi.fn(), create: vi.fn(), update: vi.fn(), updateStatus: vi.fn(), accept: vi.fn(), decline: vi.fn(),
-    markFake: vi.fn(), unmarkFake: vi.fn(),
+    markFake: vi.fn(), unmarkFake: vi.fn(), returnDeposit: vi.fn(),
   },
 }));
 vi.mock('../../api/employeesApi', () => ({ employeesApi: { getAll: vi.fn() } }));
@@ -464,6 +464,55 @@ describe('AppointmentsList', () => {
     await waitFor(() => expect(appointmentsApi.markFake).toHaveBeenCalledWith('r1'));
     expect(toast.success).toHaveBeenCalledWith('Solicitud marcada como falsa: no cuenta en Explorar.');
     expect(appointmentsApi.decline).not.toHaveBeenCalled();
+  });
+
+  it('says where the deposit stands, asks before cancelling it back and gives it back only for whoever refunds (Fase 31O)', async () => {
+    const user = userEvent.setup();
+    const held = appointment({
+      id: 'd1', customerName: 'Valeria', channel: AppointmentChannel.Online, depositAmount: 45, depositStatus: AppointmentDepositStatus.Held,
+    });
+    vi.mocked(appointmentsApi.updateStatus).mockResolvedValue({} as never);
+    vi.mocked(appointmentsApi.returnDeposit).mockResolvedValue({} as never);
+    const { unmount } = renderAgenda([held]);
+
+    let row = (await screen.findByText('Valeria')).closest('tr')!;
+    expect(within(row).getByText('Anticipo de $45.00 pagado en línea: entra al cobrarla')).toBeInTheDocument();
+    // Without ProcessRefunds nothing goes back from here.
+    expect(within(row).queryByRole('button', { name: 'Devolver el anticipo de Valeria' })).not.toBeInTheDocument();
+
+    // Cancelling says the deposit goes back, and «Volver» changes nothing.
+    await user.selectOptions(within(row).getByRole('combobox', { name: 'Estado de la cita de Valeria' }), String(AppointmentStatus.Cancelled));
+    let dialog = within(await screen.findByRole('dialog', { name: 'Cancelar la cita' }));
+    expect(dialog.getByText(/su anticipo de \$45\.00 se le devuelve/)).toBeInTheDocument();
+    await user.click(dialog.getByRole('button', { name: 'Volver' }));
+    expect(appointmentsApi.updateStatus).not.toHaveBeenCalled();
+    // «No asistió» says the business keeps it.
+    await user.selectOptions(within(row).getByRole('combobox', { name: 'Estado de la cita de Valeria' }), String(AppointmentStatus.NoShow));
+    dialog = within(await screen.findByRole('dialog', { name: 'El cliente no asistió' }));
+    expect(dialog.getByText(/Te quedas con el anticipo de \$45\.00/)).toBeInTheDocument();
+    await user.click(dialog.getByRole('button', { name: 'No asistió' }));
+    await waitFor(() => expect(appointmentsApi.updateStatus).toHaveBeenCalledWith('d1', AppointmentStatus.NoShow));
+    unmount();
+
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ManageAppointments', 'ProcessRefunds'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    renderAgenda([
+      held,
+      appointment({ id: 'd2', customerName: 'Mario', channel: AppointmentChannel.Online, depositAmount: 30, depositStatus: AppointmentDepositStatus.Applied }),
+    ]);
+    row = (await screen.findByText('Valeria')).closest('tr')!;
+    // One already in its sale does not go back from the agenda.
+    const applied = screen.getByText('Mario').closest('tr')!;
+    expect(within(applied).getByText('Anticipo de $30.00 en su venta')).toBeInTheDocument();
+    expect(within(applied).queryByRole('button', { name: /Devolver el anticipo/ })).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole('button', { name: 'Devolver el anticipo de Valeria' }));
+    dialog = within(await screen.findByRole('dialog', { name: 'Devolver el anticipo' }));
+    expect(dialog.getByText(/al cobrar la cita se cobra completa/)).toBeInTheDocument();
+    await user.click(dialog.getByRole('button', { name: 'Devolver' }));
+    await waitFor(() => expect(appointmentsApi.returnDeposit).toHaveBeenCalledWith('d1'));
+    expect(toast.success).toHaveBeenCalledWith('Anticipo devuelto: se le regresa al cliente por Mercado Pago.');
   });
 
   it('says a request was marked as fake, and takes the mark back (Fase 29V)', async () => {

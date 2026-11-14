@@ -9,7 +9,7 @@ import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDef
 import PublicBookingPage from './PublicBookingPage';
 
 vi.mock('../../api/publicMenuApi', () => ({
-  publicMenuApi: { getBooking: vi.fn(), getBookingSlots: vi.fn(), requestAppointment: vi.fn() },
+  publicMenuApi: { getBooking: vi.fn(), getBookingSlots: vi.fn(), requestAppointment: vi.fn(), startAppointmentDeposit: vi.fn() },
 }));
 
 const api = vi.mocked(publicMenuApi);
@@ -176,6 +176,65 @@ describe('PublicBookingPage', () => {
     expect(screen.getByRole('button', { name: 'Copiar enlace de tu cita' })).toBeInTheDocument();
     await user.click(screen.getByRole('link', { name: 'Ver tu cita' }));
     expect(await screen.findByText(`En /cita#${LINK}`)).toBeInTheDocument();
+  });
+
+  it('books a service that asks a deposit by paying it in Mercado Pago, keeping the return key on this device (Fase 31O)', async () => {
+    const user = userEvent.setup();
+    const assign = vi.fn();
+    const location = window.location;
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...location, assign } });
+    try {
+      api.getBooking.mockResolvedValue(booking({
+        depositCancelHours: 24,
+        services: [{ id: 's1', name: 'Corte de cabello', price: 150, durationMinutes: 45, staffIds: [], depositAmount: 45 }],
+      }) as never);
+      api.startAppointmentDeposit.mockResolvedValue({
+        checkoutId: 'c1', checkoutUrl: 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=1', amount: 45,
+        expiresAt: '2026-10-04T17:30:00Z', returnKey: 'llave-1',
+      } as never);
+      renderPage();
+
+      expect(await screen.findByRole('button', { name: /Corte de cabello.*Anticipo para reservar: \$45\.00/ })).toBeInTheDocument();
+      const sheet = await pickMondayAtTen(user);
+      expect(sheet.getByText(/Lo pagas en línea con Mercado Pago y se descuenta al cobrarte la cita/)).toBeInTheDocument();
+      expect(sheet.getByText(/si la cancelas con al menos 24 horas/)).toBeInTheDocument();
+      await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
+      await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+      await user.click(sheet.getByRole('button', { name: 'Pagar anticipo de $45.00' }));
+
+      await waitFor(() => expect(assign).toHaveBeenCalledWith('https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=1'));
+      expect(api.startAppointmentDeposit).toHaveBeenCalledWith('barberia-luis', expect.objectContaining({
+        serviceProductId: 's1', startAt: MONDAY_TEN, expectedDeposit: 45, idempotencyKey: expect.any(String),
+      }));
+      expect(api.requestAppointment).not.toHaveBeenCalled();
+      expect(JSON.parse(window.localStorage.getItem('tienditapp.onlineCheckouts') ?? '{}').c1.returnKey).toBe('llave-1');
+      // While the browser leaves for Mercado Pago, nothing else is sent.
+      expect(sheet.getByRole('button', { name: 'Abriendo Mercado Pago…' })).toBeDisabled();
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: location });
+      window.localStorage.clear();
+    }
+  });
+
+  it('reads the deposit again when the server says it changed, and sends nothing to pay', async () => {
+    const user = userEvent.setup();
+    api.getBooking
+      .mockResolvedValueOnce(booking({ services: [{ id: 's1', name: 'Corte de cabello', price: 150, durationMinutes: 45, staffIds: [], depositAmount: 45 }] }) as never)
+      .mockResolvedValue(booking({ services: [{ id: 's1', name: 'Corte de cabello', price: 150, durationMinutes: 45, staffIds: [], depositAmount: 60 }] }) as never);
+    api.startAppointmentDeposit.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 400, data: { detail: 'El anticipo de este servicio ahora es de $60.00. Revísalo antes de pagar.' } },
+    });
+    renderPage();
+
+    const sheet = await pickMondayAtTen(user);
+    await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    await user.click(sheet.getByRole('button', { name: 'Pagar anticipo de $45.00' }));
+
+    expect(await sheet.findByText(/ahora es de \$60\.00/)).toBeInTheDocument();
+    expect(await sheet.findByRole('button', { name: 'Pagar anticipo de $60.00' })).toBeInTheDocument();
+    expect(api.getBooking).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the sheet open while the request is on its way', async () => {

@@ -2,10 +2,13 @@ import { useId } from 'react';
 import { Modal } from 'react-bootstrap';
 import { ordersApi } from '../../api/ordersApi';
 import ChargePanel, { type ChargeBalance, type ChargeCredit, type ChargeResult } from '../../components/sales/ChargePanel';
+import { formatMoney } from '../../utils/money';
 
 interface ChargeModalProps {
   show: boolean;
   amountDue: number;
+  /** What the customer already paid online for the appointment the sale charges (Fase 31O), out of the total; null otherwise. */
+  paidOnline?: number | null;
   submitting: boolean;
   error: string;
   allowTip: boolean;
@@ -25,6 +28,13 @@ export default function ChargeModal(props: ChargeModalProps) {
         <Modal.Title id={titleId} as="h2" className="h5">Cobrar</Modal.Title>
       </Modal.Header>
       <Modal.Body>
+        {show && props.paidOnline != null && (
+          <p className="small mb-3" role="note">
+            <i className="ri-secure-payment-line me-1" aria-hidden="true"></i>
+            El cliente ya pagó en línea un anticipo de <span className="ta-money">{formatMoney(props.paidOnline)}</span>: entra a la venta como
+            pago «En línea» y aquí cobras el resto.
+          </p>
+        )}
         {show && (
           <ChargePanel
             amountDue={props.amountDue}
