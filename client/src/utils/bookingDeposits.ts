@@ -78,8 +78,12 @@ export function expectedDepositBack(appointment: WithDeposit & { cancelReturnsDe
   return holdsDeposit(appointment) ? !!appointment.cancelReturnsDeposit : undefined;
 }
 
-/** What happens to the deposit, as the booking page says it before paying. */
+/**
+ * What happens to the deposit, as the booking page says it before paying: the rule of the server
+ * (BookingDeposits.CustomerCancelReturns), whose three cases give it back when the customer cancels.
+ */
 export function depositPolicy(cancelHours = DEPOSIT_CANCEL_HOURS): string {
-  return 'Se te devuelve si el negocio no acepta tu cita o no la responde antes de su hora, '
-    + `o si la cancelas con al menos ${cancelHours} horas. Si la cancelas después o no llegas, el negocio se lo queda.`;
+  return 'Se te devuelve si el negocio no acepta tu cita o no la responde antes de su hora, y si la cancelas mientras '
+    + `espera su confirmación, después de que el negocio la cambió de la hora que pediste o con al menos ${cancelHours} horas. `
+    + 'Si la cancelas ya confirmada con menos tiempo, o no llegas, el negocio se lo queda.';
 }

@@ -197,7 +197,7 @@ describe('PublicBookingPage', () => {
       expect(await screen.findByRole('button', { name: /Corte de cabello.*Anticipo para reservar: \$45\.00/ })).toBeInTheDocument();
       const sheet = await pickMondayAtTen(user);
       expect(sheet.getByText(/Lo pagas en línea con Mercado Pago y se descuenta al cobrarte la cita/)).toBeInTheDocument();
-      expect(sheet.getByText(/si la cancelas con al menos 24 horas/)).toBeInTheDocument();
+      expect(sheet.getByText(/si la cancelas mientras espera su confirmación, después de que el negocio la cambió de la hora que pediste o con al menos 24 horas/)).toBeInTheDocument();
       await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
       await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
       await user.click(sheet.getByRole('button', { name: 'Pagar anticipo de $45.00' }));

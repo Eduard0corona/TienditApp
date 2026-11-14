@@ -172,8 +172,9 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
           {deposit
             ? `Para enviar su solicitud, tu cliente paga en línea el ${deposit} % del precio del servicio con tu cuenta de Mercado Pago `
               + '(si es menos de $10, no se pide). Al cobrar la cita en Vender, el anticipo ya cuenta como pago en línea. Se le devuelve '
-              + `si rechazas la solicitud, no la respondes antes de su hora, cancelas la cita o la cancela con al menos ${cancelHours} horas; `
-              + 'si la cancela después o no llega, te lo quedas.'
+              + 'si rechazas la solicitud, no la respondes antes de su hora o cancelas la cita, y si la cancela mientras no la confirmas, '
+              + `después de que la cambiaste de la hora que pidió o con al menos ${cancelHours} horas; si la cancela ya confirmada con `
+              + 'menos tiempo, o no llega, te lo quedas.'
             : 'Tus clientes piden su cita sin pagar nada en línea, como hasta ahora.'}
           {depositUnavailable && (
             <>

@@ -35,6 +35,8 @@ describe('bookingDeposits', () => {
     expect(cancelDepositSentence({ ...held, cancelReturnsDeposit: false }))
       .toBe(' Faltan menos de 24 horas: el negocio se queda con tu anticipo de $45.00.');
     expect(cancelDepositSentence({ depositAmount: 45, depositStatus: AppointmentDepositStatus.Returned })).toBe('');
-    expect(depositPolicy(48)).toMatch(/con al menos 48 horas\. Si la cancelas después o no llegas, el negocio se lo queda\.$/);
+    // The three cases in which the server gives it back when the customer cancels (BookingDeposits.CustomerCancelReturns).
+    expect(depositPolicy(48)).toMatch(new RegExp('y si la cancelas mientras espera su confirmación, después de que el negocio la cambió de la hora '
+      + 'que pediste o con al menos 48 horas\\. Si la cancelas ya confirmada con menos tiempo, o no llegas, el negocio se lo queda\\.$'));
   });
 });

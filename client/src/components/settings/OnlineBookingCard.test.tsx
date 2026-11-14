@@ -114,7 +114,9 @@ describe('OnlineBookingCard', () => {
     expect(deposit).toHaveValue('0');
     expect(deposit).toHaveAccessibleDescription('Tus clientes piden su cita sin pagar nada en línea, como hasta ahora.');
     await user.selectOptions(deposit, '30 % del precio del servicio');
-    expect(deposit).toHaveAccessibleDescription(/paga en línea el 30 % del precio del servicio.*con al menos 24 horas; si la cancela después o no llega, te lo quedas/);
+    // The three cases in which the server gives it back when the customer cancels, as BookingDeposits.CustomerCancelReturns.
+    expect(deposit).toHaveAccessibleDescription(new RegExp('paga en línea el 30 % del precio del servicio.*si la cancela mientras no la confirmas, '
+      + 'después de que la cambiaste de la hora que pidió o con al menos 24 horas; si la cancela ya confirmada con menos tiempo, o no llega, te lo quedas'));
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
     await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 1, 60, 30));
