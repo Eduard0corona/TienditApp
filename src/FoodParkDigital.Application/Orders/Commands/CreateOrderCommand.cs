@@ -113,6 +113,12 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
     /// </summary>
     public Guid? AppointmentId { get; init; }
     /// <summary>
+    /// The deposit paid online that the screen took off the appointment's sale (Fase 31O), 0 when it showed none: when the
+    /// appointment no longer holds that deposit (given back, or taken by another sale meanwhile), the sale is refused instead
+    /// of being saved short of it. Optional: without it the sale takes whatever deposit the appointment holds.
+    /// </summary>
+    public decimal? ExpectedAppointmentDeposit { get; init; }
+    /// <summary>
     /// Sold on credit (Fase 26A): what the payments leave unpaid is what the customer owes, and the sale is handed over as
     /// a paid one. Only a counter sale of the business, with connection, to a customer the business sells to on credit
     /// whose limit takes it.
@@ -207,6 +213,10 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         "La venta de una cita la registra el negocio en el mostrador: sin plataforma, mesa, cuenta abierta ni envío.";
     public const string AppointmentWithConnectionMessage = "La venta de una cita se registra con conexión: la cita se revisa al cobrar.";
     public const string AppointmentNotFoundMessage = "La cita no existe.";
+    public const string AppointmentDepositPaymentsMessage =
+        "Los pagos y el anticipo que el cliente pagó en línea suman más que el total de la venta.";
+    public const string AppointmentDepositChangedMessage =
+        "El anticipo de esta cita cambió (se devolvió o ya entró a otra venta): revisa la venta antes de cobrar.";
     public const string CreditWithConnectionMessage = "Una venta fiada se registra con conexión: el límite del cliente se revisa al venderla.";
     public const string CustomerBalanceSaleMessage = "El saldo a favor se usa en una venta del negocio en el mostrador.";
     public const string CustomerBalanceWithConnectionMessage =
@@ -290,6 +300,11 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             .GreaterThanOrEqualTo(0)
             .PrecisionScale(18, 2, ignoreTrailingZeros: true)
             .When(x => x.ExpectedTotal.HasValue);
+        RuleFor(x => x.ExpectedAppointmentDeposit)
+            .GreaterThanOrEqualTo(0)
+            .PrecisionScale(18, 2, ignoreTrailingZeros: true)
+            .When(x => x.ExpectedAppointmentDeposit.HasValue);
+        RuleFor(x => x.ExpectedAppointmentDeposit).Null().When(x => x.AppointmentId is null).WithMessage(AppointmentNotFoundMessage);
 
         When(x => x.OpenTab, () =>
         {
@@ -622,9 +637,12 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         if (request.AppointmentId is { } appointmentId)
         {
             var appointmentError = await AppointmentSalePlacement.ChargeAsync(
-                _context, order, appointmentId, salesSettings.DefaultTaxRate, cancellationToken);
+                _context, order, appointmentId, salesSettings.DefaultTaxRate, now, cancellationToken);
             if (appointmentError is not null)
                 return Result.Failure<OrderDto>(appointmentError);
+            // The deposit the screen took off is the one the sale took: the cashier charged only the rest.
+            if (request.ExpectedAppointmentDeposit is { } expectedDeposit && expectedDeposit != order.PaidAmount)
+                return Result.Failure<OrderDto>(CreateOrderCommandValidator.AppointmentDepositChangedMessage);
         }
 
         // 9. The status the team starts it with.
@@ -640,8 +658,11 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 "Revisa la venta antes de cobrar.");
         }
 
-        if (request.Payments.Sum(p => p.Amount) > order.Total)
-            return Result.Failure<OrderDto>("Los pagos suman mas que el total de la venta.");
+        // What the customer already paid online to book the appointment it charges (Fase 31O) counts with the payments.
+        if (request.Payments.Sum(p => p.Amount) + order.PaidAmount > order.Total)
+            return Result.Failure<OrderDto>(order.PaidAmount > 0
+                ? CreateOrderCommandValidator.AppointmentDepositPaymentsMessage
+                : "Los pagos suman mas que el total de la venta.");
 
         // 11. The same folio of the same platform again today, or its same long id ever: short folios repeat, so the
         // business confirms instead of a unique index refusing a real order. One confirmation covers both, so the warning
@@ -673,7 +694,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 _tenantService.TenantId,
                 request.CustomerId,
                 order.CustomerPhone,
-                order.Total - request.Payments.Sum(p => p.Amount),
+                order.Total - order.PaidAmount - request.Payments.Sum(p => p.Amount),
                 cancellationToken);
             // The same sale sent twice at once: this one waited on the lock while the other was recorded, and counted it in
             // what the customer owes. The answer is the sale recorded, not a refusal of the limit.

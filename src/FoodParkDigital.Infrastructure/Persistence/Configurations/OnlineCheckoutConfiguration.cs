@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
@@ -22,16 +23,26 @@ public class OnlineCheckoutConfiguration : IEntityTypeConfiguration<OnlineChecko
         {
             table.HasCheckConstraint("CK_OnlineCheckouts_Amount", "[Amount] > 0");
             table.HasCheckConstraint("CK_OnlineCheckouts_Status", "[Status] IN (0, 1, 2, 3)");
-            // Awaiting a payment, an order of the menu keeps what was asked; the deposit of a quote (Fase 31N) has its quote.
+            // Awaiting a payment, an order of the menu (or the request of an appointment, Fase 31O) keeps what was asked; the
+            // deposit of a quote (Fase 31N) has its quote. Paid, it placed its order or booked its appointment.
             table.HasCheckConstraint(
                 "CK_OnlineCheckouts_Outcome",
-                "([Status] = 0 AND ([Request] IS NOT NULL OR [QuoteId] IS NOT NULL) AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [Failure] IS NULL)"
-                + " OR ([Status] = 1 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL AND [OrderId] IS NOT NULL AND [Failure] IS NULL)"
-                + " OR ([Status] = 2 AND [Request] IS NULL AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [Failure] IS NULL)"
+                "([Status] = 0 AND ([Request] IS NOT NULL OR [QuoteId] IS NOT NULL) AND [PaymentId] IS NULL AND [OrderId] IS NULL"
+                + " AND [AppointmentId] IS NULL AND [Failure] IS NULL)"
+                + " OR ([Status] = 1 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL"
+                + " AND ([OrderId] IS NOT NULL OR [AppointmentId] IS NOT NULL) AND [Failure] IS NULL)"
+                + " OR ([Status] = 2 AND [Request] IS NULL AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [AppointmentId] IS NULL"
+                + " AND [Failure] IS NULL)"
                 + " OR ([Status] = 3 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL AND [OrderId] IS NULL"
-                + " AND [Failure] IS NOT NULL AND [Failure] BETWEEN 1 AND 4)");
+                + " AND [AppointmentId] IS NULL AND [Failure] IS NOT NULL AND [Failure] BETWEEN 1 AND 4)");
             // A deposit never carries what an order of the menu asked.
             table.HasCheckConstraint("CK_OnlineCheckouts_Quote", "[QuoteId] IS NULL OR [Request] IS NULL");
+            // Fase 31O (ADR 0095): only the deposit of an appointment books one, once paid; an order of the menu paid has its
+            // order. The sale of the appointment may take the deposit later (its OrderId).
+            table.HasCheckConstraint(
+                "CK_OnlineCheckouts_Appointment",
+                "([ForAppointment] = 0 AND [AppointmentId] IS NULL AND ([Status] <> 1 OR [OrderId] IS NOT NULL))"
+                + " OR ([ForAppointment] = 1 AND [QuoteId] IS NULL AND ([Status] <> 1 OR [AppointmentId] IS NOT NULL))");
             // Only the payment of an order has a chargeback or a claim (Fase 24K), with when it last changed.
             table.HasCheckConstraint(
                 "CK_OnlineCheckouts_Dispute",
@@ -57,6 +68,8 @@ public class OnlineCheckoutConfiguration : IEntityTypeConfiguration<OnlineChecko
             .ValueGeneratedNever();
         builder.Property(x => x.Version).IsRowVersion();
         builder.Ignore(x => x.IsAwaitingPayment);
+        // Fase 31O: 0 for the rows that exist and for those the version before it saves, unaware of the column.
+        builder.Property(x => x.ForAppointment).IsRequired().HasDefaultValue(false);
 
         builder.HasOne<Tenant>()
             .WithMany()
@@ -76,6 +89,10 @@ public class OnlineCheckoutConfiguration : IEntityTypeConfiguration<OnlineChecko
             .HasForeignKey(x => x.QuoteId)
             .OnDelete(DeleteBehavior.NoAction);
         builder.Ignore(x => x.IsForQuote);
+        builder.HasOne<Appointment>()
+            .WithMany()
+            .HasForeignKey(x => x.AppointmentId)
+            .OnDelete(DeleteBehavior.NoAction);
 
         // The sweep looks for the ones still awaiting a payment, by when they expire.
         builder.HasIndex(x => new { x.Status, x.ExpiresAt }).HasFilter("[Status] = 0");
@@ -84,6 +101,8 @@ public class OnlineCheckoutConfiguration : IEntityTypeConfiguration<OnlineChecko
         builder.HasIndex(x => x.OrderId).IsUnique().HasFilter("[OrderId] IS NOT NULL");
         // The deposits of a version, for the one in course and the one that accepted it.
         builder.HasIndex(x => x.QuoteId).HasFilter("[QuoteId] IS NOT NULL");
+        // The deposit an appointment was booked with: one.
+        builder.HasIndex(x => x.AppointmentId).IsUnique().HasFilter("[AppointmentId] IS NOT NULL");
         // The disputes still open, for Configuración › Pagos en línea.
         builder.HasIndex(x => new { x.TenantId, x.Dispute }).HasFilter("[Dispute] = 1");
     }

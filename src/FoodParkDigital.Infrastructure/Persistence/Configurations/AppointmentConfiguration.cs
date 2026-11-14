@@ -22,6 +22,12 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
             table.HasCheckConstraint(
                 "CK_Appointments_Work",
                 "[WorkOrderId] IS NULL OR ([SaleOrderId] IS NULL AND [Channel] = 0 AND [TrackingToken] IS NULL)");
+            // Fase 31O (ADR 0095): what its customer paid online to book it, and where it stands; only booked online.
+            table.HasCheckConstraint(
+                "CK_Appointments_Deposit",
+                "([DepositAmount] IS NULL AND [DepositStatus] IS NULL)"
+                + " OR ([DepositAmount] IS NOT NULL AND [DepositStatus] IS NOT NULL AND [DepositAmount] > 0"
+                + " AND [DepositStatus] IN (1, 2, 3, 4) AND [Channel] = 1)");
         });
         builder.HasKey(x => x.Id);
 
@@ -51,6 +57,9 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
         builder.Property(x => x.TrackingToken).HasMaxLength(Order.TrackingTokenLength).IsUnicode(false);
         // Fase 29B (ADR 0053): where the customer of a visit requested online gets its quote, as invoices keep an address.
         builder.Property(x => x.CustomerEmail).HasMaxLength(InvoiceEmailAddress.MaxLength);
+        builder.Property(x => x.DepositAmount).HasPrecision(18, 2);
+        builder.Property(x => x.DepositStatus).HasConversion<int?>();
+        builder.Ignore(x => x.HoldsDeposit);
 
         // The customer account that booked it online; the appointment stays while it points to the account.
         builder.HasOne<ApplicationUser>()
@@ -91,6 +100,9 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
         // once the product is gone. Which business it is of is checked when the appointment is saved.
 
         builder.HasIndex(x => new { x.TenantId, x.StartAt });
+        // Fase 31O: the requests booked with a deposit still waiting, whose deposit goes back once their time comes.
+        builder.HasIndex(x => new { x.StartAt, x.TenantId }, "IX_Appointments_DepositHeld_Requests")
+            .HasFilter("[DepositStatus] = 1 AND [Status] = 5");
         builder.HasIndex(x => new { x.TenantId, x.Status });
         // The appointments of the job of an order, for the order and its quote.
         builder.HasIndex(x => x.WorkOrderId)

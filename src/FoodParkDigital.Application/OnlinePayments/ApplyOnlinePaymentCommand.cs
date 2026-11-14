@@ -159,6 +159,13 @@ internal sealed class OnlinePaymentChecker
                 refusal = ex.Message;
                 _logger.LogWarning("Deposit checkout {CheckoutId} could not accept its quote", checkoutId);
             }
+            catch (OnlineBooking.AppointmentDepositRefusedException ex) when (refusal is null)
+            {
+                // A deposit whose appointment could not be booked (Fase 31O): it goes back with why.
+                _context.ChangeTracker.Clear();
+                refusal = ex.Message;
+                _logger.LogWarning("Deposit checkout {CheckoutId} could not book its appointment", checkoutId);
+            }
         }
     }
 }
@@ -172,7 +179,8 @@ internal sealed class OnlinePaymentChecker
 /// total), with an «En línea» payment for its total; if it can no longer be placed, was paid too late or the checkout was
 /// already paid, the payment goes back to the customer in full. Applying the same payment again changes nothing. The deposit
 /// of a quote (Fase 31N, ADR 0094) accepts its version and makes it its service order instead
-/// (<see cref="QuoteDepositPlacement"/>), with the same checks of the payment and the same refunds.
+/// (<see cref="QuoteDepositPlacement"/>), and the deposit of an appointment (Fase 31O, ADR 0095) books its request
+/// (<see cref="OnlineBooking.AppointmentDepositPlacement"/>), with the same checks of the payment and the same refunds.
 /// </summary>
 /// <param name="RefusedBecause">
 /// Set when a first attempt found the order can no longer be placed with the catalog of now: the payment goes back with
@@ -187,6 +195,7 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
     public const string OrdersStoppedMessage = "El negocio dejó de recibir pedidos en línea antes de que se confirmara tu pago.";
     public const string PaidLateMessage = "Tu pago llegó después del tiempo para pagar.";
     public const string MismatchMessage = "El pago no coincide con tu pedido.";
+    public const string DepositMismatchMessage = "El pago no coincide con el anticipo.";
     public const string CatalogChangedMessage = "Algo de tu pedido cambió en el menú mientras pagabas: un producto, su horario o sus opciones.";
 
     private static readonly JsonSerializerOptions RequestJson = new(JsonSerializerDefaults.Web);
@@ -198,6 +207,8 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
     private readonly IOrderInventoryService _orderInventoryService;
     private readonly IFolioGenerator _folios;
     private readonly QuoteDepositPlacement _deposits;
+    private readonly OnlineBooking.AppointmentDepositPlacement _bookings;
+    private readonly IOutgoingMessageSignal? _signal;
     private readonly ILogger<ApplyOnlinePaymentCommandHandler> _logger;
 
     public ApplyOnlinePaymentCommandHandler(
@@ -209,7 +220,9 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
         IFolioGenerator folios,
         IPhoneNormalizationService phones,
         IOrderCashService cash,
-        ILogger<ApplyOnlinePaymentCommandHandler> logger)
+        ILogger<ApplyOnlinePaymentCommandHandler> logger,
+        IAppointmentBookingLock? bookingLock = null,
+        IOutgoingMessageSignal? signal = null)
     {
         _context = context;
         _gateway = gateway;
@@ -219,6 +232,8 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
         _folios = folios;
         _deposits = new QuoteDepositPlacement(context,
             new QuoteOrderConverter(context, customerLookupService, phones, orderInventoryService, cash, folios, clock));
+        _bookings = new OnlineBooking.AppointmentDepositPlacement(context, bookingLock, new Appointments.AppointmentNotices(context, phones, clock));
+        _signal = signal;
         _logger = logger;
     }
 
@@ -250,22 +265,29 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
         string? refusal;
         OnlineCheckoutFailure failure;
         if (payment.Amount != checkout.Amount || payment.Currency != OnlineCheckout.Currency)
-            (failure, refusal) = (OnlineCheckoutFailure.PaymentMismatch, MismatchMessage);
+            // A deposit (of a quote or an appointment) is not an order: its customer reads it as what they paid.
+            (failure, refusal) = (OnlineCheckoutFailure.PaymentMismatch, checkout.ForAppointment || checkout.IsForQuote ? DepositMismatchMessage : MismatchMessage);
         else if (checkout.Status == OnlineCheckoutStatus.Expired || approvedAt > checkout.ExpiresAt)
             (failure, refusal) = (OnlineCheckoutFailure.PaidAfterExpiry, PaidLateMessage);
         else if (request.RefusedBecause is { } reason)
             (failure, refusal) = (OnlineCheckoutFailure.OrderRefused, reason);
         else if (checkout.IsForQuote)
             (failure, refusal) = await _deposits.PlaceAsync(checkout, payment, approvedAt, now, cancellationToken);
+        else if (checkout.ForAppointment)
+            (failure, refusal) = await _bookings.PlaceAsync(checkout, payment, approvedAt, now, cancellationToken);
         else
             (failure, refusal) = await PlaceAsync(checkout, payment, approvedAt, now, cancellationToken);
 
         if (refusal is null)
         {
             await _context.SaveChangesAsync(cancellationToken);
+            // The notice of the request booked with a deposit (Fase 31O), once saved.
+            if (_bookings.NoticeQueued)
+                _signal?.Notify();
             // The cart the account left in this store, once the order is saved (Fase 31J): the order never fails for it. As it
-            // was when the customer went to pay: one saved since (a payment applied late) is another cart, and stays.
-            if (checkout.CustomerUserId is { } account)
+            // was when the customer went to pay: one saved since (a payment applied late) is another cart, and stays. A deposit
+            // of an appointment or a quote orders nothing of the menu: the cart stays as it is.
+            if (checkout.CustomerUserId is { } account && !checkout.ForAppointment && !checkout.IsForQuote)
                 await new PublicOrderPlacement(_context).ForgetCartAsync(account, checkout.TenantId, now, checkout.StartedAt, cancellationToken);
             return Result.Success(OnlinePaymentApplication.Placed);
         }

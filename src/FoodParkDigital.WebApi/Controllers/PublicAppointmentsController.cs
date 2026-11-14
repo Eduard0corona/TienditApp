@@ -41,11 +41,15 @@ public class PublicAppointmentsController : ControllerBase
     /// <summary>Cancels the appointment of the link before it starts.</summary>
     [HttpPost("cancel")]
     [EnableRateLimiting("public-order")]
-    public async Task<ActionResult<CustomerAppointmentDto>> Cancel([FromBody] PublicAppointmentRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<CustomerAppointmentDto>> Cancel([FromBody] CancelPublicAppointmentRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new CancelPublicAppointmentCommand(request.Token), cancellationToken);
+        var result = await _mediator.Send(new CancelPublicAppointmentCommand(request.Token, request.ExpectDepositBack), cancellationToken);
         if (result.IsFailure)
-            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        {
+            // A link that is not found; or the deposit no longer does what the page said (Fase 31O), and nothing changed.
+            var status = result.Error == CustomerAppointments.NotFoundMessage ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest;
+            return this.ApiError(status, result.Error);
+        }
         return Ok(result.Value);
     }
 
@@ -88,6 +92,14 @@ public class PublicAppointmentRequest
 {
     /// <summary>The link of the receipt (the fragment of /cita#token).</summary>
     public string Token { get; init; } = null!;
+}
+
+public class CancelPublicAppointmentRequest
+{
+    /// <summary>The link of the receipt (the fragment of /cita#token).</summary>
+    public string Token { get; init; } = null!;
+    /// <summary>Whether the page said cancelling gives the deposit back (Fase 31O); when that changed, nothing is cancelled.</summary>
+    public bool? ExpectDepositBack { get; init; }
 }
 
 /// <summary>A photo of what happens for the visit of a link (Fase 29H), as a form: the link and the file.</summary>

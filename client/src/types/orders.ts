@@ -520,6 +520,8 @@ export interface CreateOrderRequest {
   delivery?: OrderDeliveryInput;
   /** The appointment of the agenda this sale charges (Fase 22E): done with it, and its visit charge in the total. */
   appointmentId?: string;
+  /** The deposit paid online it took off the appointment's sale (Fase 31O), 0 without one: the server refuses it if it changed. */
+  expectedAppointmentDeposit?: number;
   /**
    * Sold on credit (fiado): what the payments leave unpaid is what the customer owes. Only a counter sale with
    * connection to a customer the business sells to on credit, within their limit (the server checks it).

@@ -6,7 +6,9 @@ import { getApiErrorMessage } from '../../api/errors';
 import { onlineBookingSettingsKey, useOnlineBookingSettings } from '../../api/onlineBookingSettings';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
+import { DEPOSIT_CANCEL_HOURS } from '../../utils/bookingDeposits';
 import { bookingPath } from '../../utils/onlineBooking';
+import { DEPOSIT_PERCENTS } from '../../utils/quotes';
 
 /** Whether customers book now, and when they do not, what is missing (the server's words). */
 function BookingNotice({ settings }: { settings: OnlineBookingSettings }) {
@@ -50,10 +52,18 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
   // An API of before (while a version is published) sends neither: the hour of always.
   const savedReminder = settings.answerReminderMinutes ?? 60;
   const [reminder, setReminder] = useState(savedReminder);
+  // Fase 31O: the share of each service's price its customer pays to book it; 0 asks none.
+  const savedDeposit = settings.depositPercent ?? 0;
+  const [deposit, setDeposit] = useState(savedDeposit);
+  const depositUnavailable = !settings.depositAvailable;
+  const depositPercents = DEPOSIT_PERCENTS.includes(savedDeposit) || savedDeposit === 0
+    ? DEPOSIT_PERCENTS
+    : [...DEPOSIT_PERCENTS, savedDeposit].sort((a, b) => a - b);
+  const cancelHours = settings.depositCancelHours ?? DEPOSIT_CANCEL_HOURS;
   const [saving, setSaving] = useState(false);
   const parsed = Number(capacity);
   const capacityValid = Number.isInteger(parsed) && parsed >= 1 && parsed <= settings.maxCapacity;
-  const dirty = enabled !== settings.enabled || parsed !== settings.capacity || reminder !== savedReminder;
+  const dirty = enabled !== settings.enabled || parsed !== settings.capacity || reminder !== savedReminder || deposit !== savedDeposit;
   // Its own choice stays listed even if this version no longer offers it.
   const reminderChoices = [...new Set([...(settings.answerReminderChoices ?? [30, 60, 120, 180]), savedReminder, 0])];
 
@@ -61,7 +71,7 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
     if (!capacityValid) return;
     setSaving(true);
     try {
-      const saved = await appointmentsApi.updateOnlineBooking(enabled, parsed, reminder);
+      const saved = await appointmentsApi.updateOnlineBooking(enabled, parsed, reminder, deposit);
       queryClient.setQueryData(onlineBookingSettingsKey(tenant), saved);
       toast.success(saved.booksOnline ? 'Guardado: tus clientes ya pueden agendar en línea.' : 'Guardado.');
     } catch (err: unknown) {
@@ -139,6 +149,45 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
         </div>
       </div>
 
+      <div className="mb-3">
+        <label className="form-label" htmlFor={`${ids}-deposit`}>Anticipo para reservar</label>
+        <select
+          id={`${ids}-deposit`}
+          className="form-select"
+          style={{ maxWidth: '20rem' }}
+          value={deposit}
+          // A share can be asked only while the business can collect it; one already asked can always go off.
+          disabled={depositUnavailable && savedDeposit === 0}
+          onChange={(event) => setDeposit(Number(event.target.value))}
+          aria-describedby={`${ids}-deposit-help`}
+        >
+          <option value={0}>Sin anticipo</option>
+          {depositPercents.map((percent) => (
+            <option key={percent} value={percent} disabled={depositUnavailable && percent !== savedDeposit}>
+              {percent} % del precio del servicio
+            </option>
+          ))}
+        </select>
+        <div id={`${ids}-deposit-help`} className="form-text">
+          {deposit
+            ? `Para enviar su solicitud, tu cliente paga en línea el ${deposit} % del precio del servicio con tu cuenta de Mercado Pago `
+              + '(si es menos de $10, no se pide). Al cobrar la cita en Vender, el anticipo ya cuenta como pago en línea. Se le devuelve '
+              + 'si rechazas la solicitud, no la respondes antes de su hora o cancelas la cita, y si la cancela mientras no la confirmas, '
+              + `después de que la cambiaste de la hora que pidió o con al menos ${cancelHours} horas; si la cancela ya confirmada con `
+              + 'menos tiempo, o no llega, te lo quedas.'
+            : 'Tus clientes piden su cita sin pagar nada en línea, como hasta ahora.'}
+          {depositUnavailable && (
+            <>
+              {' '}
+              {savedDeposit
+                ? 'Ahora tu cuenta de Mercado Pago no puede cobrar, y no se pide: revísala en '
+                : 'Para pedir anticipo, conecta tu cuenta de Mercado Pago en '}
+              <Link to="/settings/online-payments">Pagos en línea</Link>.
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="d-flex gap-2">
         <button type="button" className="btn btn-primary" disabled={!dirty || !capacityValid || saving} onClick={() => void save()}>
           {saving ? 'Guardando…' : 'Guardar'}
@@ -152,6 +201,7 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
               setEnabled(settings.enabled);
               setCapacity(String(settings.capacity));
               setReminder(savedReminder);
+              setDeposit(savedDeposit);
             }}
           >
             Descartar
@@ -165,7 +215,7 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
 /**
  * «Citas en línea» (Fase 24D, ADR 0025): whether customers book appointments from the online menu, how many the business
  * attends at once, how long before its limit a request still waiting is recalled by email or not at all (Fase 30B, ADR 0082),
- * and what is missing for it (owners and admins of a business with the agenda). The free times come from
+ * the deposit its customers pay to book (Fase 31O, ADR 0095), and what is missing for it (owners and admins of a business with the agenda). The free times come from
  * the business's hours and the duration of each service; the business accepts or declines each request in the Agenda.
  */
 export default function OnlineBookingCard() {
@@ -188,7 +238,7 @@ export default function OnlineBookingCard() {
         )}
         {settings.data && (
           <OnlineBookingForm
-            key={`${settings.data.enabled}|${settings.data.capacity}|${settings.data.answerReminderMinutes}|${settings.data.booksOnline}|${settings.data.staffCount}|${settings.data.missing.join('|')}`}
+            key={`${settings.data.enabled}|${settings.data.capacity}|${settings.data.answerReminderMinutes}|${settings.data.depositPercent}|${settings.data.depositAvailable}|${settings.data.booksOnline}|${settings.data.staffCount}|${settings.data.missing.join('|')}`}
             settings={settings.data}
           />
         )}

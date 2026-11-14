@@ -41,6 +41,10 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             table.HasCheckConstraint(
                 "CK_TenantSettings_QuoteDepositPercent",
                 $"[QuoteDepositPercent] IS NULL OR [QuoteDepositPercent] BETWEEN {QuoteRules.MinDepositPercent} AND {QuoteRules.MaxDepositPercent}");
+            // Fase 31O (ADR 0095): the deposit to book an appointment online, or none.
+            table.HasCheckConstraint(
+                "CK_TenantSettings_BookingDepositPercent",
+                $"[BookingDepositPercent] IS NULL OR [BookingDepositPercent] BETWEEN {BookingDeposits.MinPercent} AND {BookingDeposits.MaxPercent}");
         });
         builder.HasKey(s => s.Id);
 

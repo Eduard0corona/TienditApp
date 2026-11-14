@@ -13,7 +13,9 @@ internal static class OnlineRefundStatuses
 {
     public static async Task ApplyAsync(IApplicationDbContext context, OrderDto dto, CancellationToken cancellationToken)
     {
-        if (dto.Channel != OrderChannel.Online)
+        // An order of the menu paid online, or one that took a deposit paid online: of a quote (Fase 31N) or of the
+        // appointment it charges (Fase 31O), whatever its channel.
+        if (dto.Channel != OrderChannel.Online && dto.Payments.All(p => p.Method != OrderPaymentMethod.Online))
             return;
 
         var dispute = await context.OnlineCheckouts

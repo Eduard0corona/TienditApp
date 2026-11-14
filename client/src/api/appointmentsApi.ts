@@ -62,8 +62,15 @@ export const appointmentsApi = {
   /** Whether customers book from the online menu, how many appointments at once, and what is missing for it. */
   getOnlineBooking: (signal?: AbortSignal) => apiRequest('get', '/api/v1/appointments/online-booking', { signal }),
 
-  updateOnlineBooking: (enabled: boolean, capacity: number, answerReminderMinutes?: number) =>
-    apiRequest('put', '/api/v1/appointments/online-booking', { body: { enabled, capacity, answerReminderMinutes } }),
+  /** Also the share of each service's price its customer pays to book it (Fase 31O): 0 asks none, undefined leaves it. */
+  updateOnlineBooking: (enabled: boolean, capacity: number, answerReminderMinutes?: number, depositPercent?: number) =>
+    apiRequest('put', '/api/v1/appointments/online-booking', { body: { enabled, capacity, answerReminderMinutes, depositPercent } }),
+
+  /**
+   * Gives back the deposit the appointment was booked with online (Fase 31O): one still held (the whole appointment is
+   * charged then) or one the business kept. Whoever processes refunds.
+   */
+  returnDeposit: (id: string) => apiRequest('post', '/api/v1/appointments/{id}/deposit/return', { path: { id } }),
 
   /** The active team, with who customers book online, their services and hours (Fase 24J, owners and admins). */
   getOnlineBookingStaff: (signal?: AbortSignal) => apiRequest('get', '/api/v1/appointments/online-booking/staff', { signal }),

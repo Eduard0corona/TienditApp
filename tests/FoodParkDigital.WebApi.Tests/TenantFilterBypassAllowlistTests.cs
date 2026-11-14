@@ -61,9 +61,10 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Infrastructure/Services/WhatsAppWebhookProcessor.cs"] = 1,
         // Online payments (Fase 24I): the Mercado Pago notification finds the businesses that connected the account it
         // names, and the sweep the businesses with payments in course or a key to renew, and (Fase 24K) the accounts whose
-        // payments are due a review; each one is then applied in its business's scope.
+        // payments are due a review, and (Fase 31O) the businesses with a request booked with a deposit whose time came
+        // unanswered; each one is then applied in its business's scope.
         ["src/FoodParkDigital.Infrastructure/OnlinePayments/MercadoPagoWebhookProcessor.cs"] = 1,
-        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/OnlinePayments/OnlinePaymentsWorkerService.cs"] = 3,
+        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/OnlinePayments/OnlinePaymentsWorkerService.cs"] = 4,
         // Invoicing (Fases 28A to 28D): the worker finds the businesses with invoices (of orders or global), payment
         // complements and credit notes still stamping, cancellations waiting for the SAT, payments of invoices in installments
         // that never had a complement, or refunds (of orders not cancelled) and write-offs of invoiced orders that never had

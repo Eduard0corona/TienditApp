@@ -11,6 +11,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useMyReviews } from '../../hooks/useMyReviews';
 import { useToast } from '../../hooks/useToast';
 import { MyAppointmentsScope } from '../../types';
+import { expectedDepositBack } from '../../utils/bookingDeposits';
 import { cancelAppointmentMessage } from '../../utils/onlineBooking';
 
 const PAGE_SIZE = 10;
@@ -52,7 +53,7 @@ export default function MyAppointments() {
     if (!accepted) return;
     setCancellingId(appointment.id);
     try {
-      await accountApi.cancelAppointment(appointment.id);
+      await accountApi.cancelAppointment(appointment.id, expectedDepositBack(appointment));
       toast.success('Cancelaste tu cita.');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo cancelar tu cita.'));

@@ -22,7 +22,7 @@ public class OnlinePaymentRefundConfiguration : IEntityTypeConfiguration<OnlineP
             table.HasCheckConstraint("CK_OnlinePaymentRefunds_Status", "[Status] IN (0, 1, 2, 3)");
             table.HasCheckConstraint(
                 "CK_OnlinePaymentRefunds_Link",
-                "([Reason] IN (1, 2) AND [CheckoutId] IS NOT NULL AND [OrderId] IS NULL AND [OrderRefundId] IS NULL)"
+                "([Reason] IN (1, 2, 7) AND [CheckoutId] IS NOT NULL AND [OrderId] IS NULL AND [OrderRefundId] IS NULL)"
                 + " OR ([Reason] IN (3, 4, 5, 6) AND [CheckoutId] IS NULL AND [OrderId] IS NOT NULL AND [OrderRefundId] IS NOT NULL)");
             table.HasCheckConstraint(
                 "CK_OnlinePaymentRefunds_Settled",

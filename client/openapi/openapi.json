@@ -1007,6 +1007,46 @@
         }
       }
     },
+    "/api/v1/appointments/{id}/deposit/return": {
+      "post": {
+        "tags": [
+          "Appointments"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/appointments/{id}/unmark-fake": {
       "post": {
         "tags": [
@@ -10367,6 +10407,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelMyAppointmentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelMyAppointmentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelMyAppointmentRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -14894,17 +14953,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PublicAppointmentRequest"
+                "$ref": "#/components/schemas/CancelPublicAppointmentRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/PublicAppointmentRequest"
+                "$ref": "#/components/schemas/CancelPublicAppointmentRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/PublicAppointmentRequest"
+                "$ref": "#/components/schemas/CancelPublicAppointmentRequest"
               }
             }
           }
@@ -15446,6 +15505,131 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicAppointmentReceiptDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/appointments/deposit": {
+      "post": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAppointmentDepositRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAppointmentDepositRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAppointmentDepositRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineCheckoutStartedDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineCheckoutStartedDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineCheckoutStartedDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/appointments/deposit/{checkoutId}/confirm": {
+      "post": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "checkoutId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmOnlineCheckoutRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmOnlineCheckoutRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmOnlineCheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDepositStatusDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDepositStatusDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDepositStatusDto"
                 }
               }
             }
@@ -20199,6 +20383,66 @@
           "Online"
         ]
       },
+      "AppointmentDepositStatus": {
+        "enum": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Held",
+          "Applied",
+          "Returned",
+          "Kept"
+        ]
+      },
+      "AppointmentDepositStatusDto": {
+        "required": [
+          "amount",
+          "businessName",
+          "expiresAt",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/OnlineCheckoutStatus"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "businessName": {
+            "type": "string"
+          },
+          "contactPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "checkoutUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "refundStatus": {
+            "$ref": "#/components/schemas/OnlinePaymentRefundStatus"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/PublicAppointmentReceiptDto"
+          }
+        },
+        "additionalProperties": false
+      },
       "AppointmentDto": {
         "required": [
           "cancelledByCustomer",
@@ -20305,6 +20549,14 @@
           },
           "markedFake": {
             "type": "boolean"
+          },
+          "depositAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "depositStatus": {
+            "$ref": "#/components/schemas/AppointmentDepositStatus"
           }
         },
         "additionalProperties": false
@@ -21263,6 +21515,16 @@
         },
         "additionalProperties": false
       },
+      "CancelMyAppointmentRequest": {
+        "type": "object",
+        "properties": {
+          "expectDepositBack": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "CancelOrderInvoiceRequest": {
         "required": [
           "motive"
@@ -21287,6 +21549,22 @@
             "nullable": true
           },
           "atCustomerRequest": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CancelPublicAppointmentRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "expectDepositBack": {
             "type": "boolean",
             "nullable": true
           }
@@ -23874,6 +24152,11 @@
             "format": "uuid",
             "nullable": true
           },
+          "expectedAppointmentDeposit": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
           "onCredit": {
             "type": "boolean",
             "default": false
@@ -25050,6 +25333,7 @@
           "businessSlug",
           "canAddPhotos",
           "canCancel",
+          "cancelReturnsDeposit",
           "dateLabel",
           "endAt",
           "id",
@@ -25118,6 +25402,17 @@
             "format": "int32"
           },
           "canAddPhotos": {
+            "type": "boolean"
+          },
+          "depositAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "depositStatus": {
+            "$ref": "#/components/schemas/AppointmentDepositStatus"
+          },
+          "cancelReturnsDeposit": {
             "type": "boolean"
           }
         },
@@ -30940,6 +31235,8 @@
           "answerReminderMinutes",
           "booksOnline",
           "capacity",
+          "depositAvailable",
+          "depositCancelHours",
           "enabled",
           "maxCapacity",
           "missing",
@@ -30985,6 +31282,18 @@
               "type": "integer",
               "format": "int32"
             }
+          },
+          "depositPercent": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "depositAvailable": {
+            "type": "boolean"
+          },
+          "depositCancelHours": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -31254,7 +31563,8 @@
           3,
           4,
           5,
-          6
+          6,
+          7
         ],
         "type": "integer",
         "format": "int32",
@@ -31264,7 +31574,8 @@
           "ByBusiness",
           "InMercadoPago",
           "Claim",
-          "Chargeback"
+          "Chargeback",
+          "AppointmentDeposit"
         ]
       },
       "OnlinePaymentRefundStatus": {
@@ -35656,6 +35967,7 @@
         "required": [
           "businessName",
           "daysAhead",
+          "depositCancelHours",
           "pricesIncludeTax",
           "services",
           "slug",
@@ -35706,6 +36018,10 @@
           },
           "responseTime": {
             "$ref": "#/components/schemas/ResponseTime"
+          },
+          "depositCancelHours": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -35749,6 +36065,11 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "depositAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -40685,6 +41006,51 @@
         },
         "additionalProperties": false
       },
+      "StartAppointmentDepositRequest": {
+        "required": [
+          "customerName",
+          "customerPhone",
+          "serviceProductId",
+          "startAt"
+        ],
+        "type": "object",
+        "properties": {
+          "serviceProductId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "customerPhone": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "staffId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "expectedDeposit": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "StartInventoryCountCommand": {
         "required": [
           "inventoryLocationId",
@@ -42456,6 +42822,11 @@
             "format": "int32"
           },
           "answerReminderMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "depositPercent": {
             "type": "integer",
             "format": "int32",
             "nullable": true

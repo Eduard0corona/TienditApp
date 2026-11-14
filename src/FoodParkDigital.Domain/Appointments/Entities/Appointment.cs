@@ -145,6 +145,16 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public string RequestPhone { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// What its customer paid online to book it (Fase 31O, ADR 0095): fixed when the payment created the request, in the
+    /// business's Mercado Pago account from then on. Null for every appointment booked without one.
+    /// </summary>
+    public decimal? DepositAmount { get; private set; }
+    /// <summary>Where that deposit stands (<see cref="AppointmentDepositStatus"/>); null without one.</summary>
+    public AppointmentDepositStatus? DepositStatus { get; private set; }
+    /// <summary>Its deposit waits for its sale.</summary>
+    public bool HoldsDeposit => DepositStatus == AppointmentDepositStatus.Held;
+
     public bool IsHomeVisit => Visit is not null;
 
     /// <summary>It does the job of a service order (<see cref="WorkOrderId"/>).</summary>
@@ -200,6 +210,11 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         if (newStatus == AppointmentStatus.Requested)
             throw new DomainException(OnlineBookingRules.OnlyOnlineRequestedMessage);
         Status = newStatus;
+        // Fase 31O (ADR 0095): cancelled by the business, its deposit goes back; its customer did not come, the business keeps it.
+        if (newStatus == AppointmentStatus.Cancelled)
+            ReturnHeldDeposit();
+        else if (newStatus == AppointmentStatus.NoShow && HoldsDeposit)
+            DepositStatus = AppointmentDepositStatus.Kept;
     }
 
     /// <summary>
@@ -214,6 +229,9 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// business's rule picked among the free ones; with <paramref name="staffName"/>, their name in the agenda.
     /// </param>
     /// <param name="fromTeam">It came from the business's own team (<see cref="FromTeam"/>).</param>
+    /// <param name="deposit">
+    /// What its customer already paid online to book it (Fase 31O, ADR 0095): held until its sale takes it.
+    /// </param>
     public static Appointment RequestOnline(
         Guid tenantId,
         string customerName,
@@ -228,11 +246,14 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         string trackingToken,
         Guid? staffUserId = null,
         string? staffName = null,
-        bool fromTeam = false)
+        bool fromTeam = false,
+        decimal? deposit = null)
     {
         if (serviceProductId == Guid.Empty)
             throw new ArgumentException("The service is required.", nameof(serviceProductId));
         EnsureOnlineRequest(customerUserId, clientRequestId, trackingToken, staffUserId, staffName);
+        if (deposit is { } paid && (paid <= 0 || decimal.Round(paid, 2) != paid))
+            throw new ArgumentOutOfRangeException(nameof(deposit), "A deposit is positive, to the cent.");
 
         var appointment = new Appointment(
             tenantId, customerName, customerPhone, serviceName, startAt, endAt,
@@ -246,7 +267,9 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             TrackingToken = trackingToken,
             RequestedStartAt = startAt,
             FromTeam = fromTeam,
-            RequestPhone = MessagingPhone.ToKey(customerPhone)
+            RequestPhone = MessagingPhone.ToKey(customerPhone),
+            DepositAmount = deposit,
+            DepositStatus = deposit is null ? null : AppointmentDepositStatus.Held
         };
         appointment.AddDomainEvent(new AppointmentRequestedEvent(appointment.Id, tenantId, HomeVisit: false, fromTeam));
         return appointment;
@@ -418,6 +441,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(OnlineBookingRules.NotRequestedMessage);
         Status = AppointmentStatus.Cancelled;
         RespondedAt = now;
+        ReturnHeldDeposit();
     }
 
     /// <summary>
@@ -434,6 +458,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(OnlineBookingRules.NotRequestedMessage);
         Status = AppointmentStatus.Cancelled;
         MarkedFakeAt = now;
+        ReturnHeldDeposit();
     }
 
     /// <summary>
@@ -465,9 +490,53 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(OnlineBookingRules.CustomerCancelStartedMessage);
 
         var wasRequest = Status == AppointmentStatus.Requested;
+        var returnsDeposit = CustomerCancelReturnsDeposit(now);
         Status = AppointmentStatus.Cancelled;
         CancelledByCustomerAt = now;
+        if (returnsDeposit)
+            ReturnHeldDeposit();
+        else if (HoldsDeposit)
+            DepositStatus = AppointmentDepositStatus.Kept;
         AddDomainEvent(new AppointmentCancelledByCustomerEvent(Id, TenantId, IsHomeVisit, FromTeam, wasRequest));
+    }
+
+    /// <summary>
+    /// Whether its customer cancelling it now gets its deposit back (Fase 31O, ADR 0095): a request not answered yet, one the
+    /// business moved from the time it was asked for, or one at least <see cref="BookingDeposits.FreeCancellationNotice"/>
+    /// away. False without a deposit held; later, the business keeps it.
+    /// </summary>
+    public bool CustomerCancelReturnsDeposit(DateTimeOffset now)
+        => BookingDeposits.CustomerCancelReturns(DepositStatus, Status, RequestedStartAt, StartAt, now);
+
+    /// <summary>
+    /// The business did not answer a request booked with a deposit before its time (Fase 31O, ADR 0095): the deposit goes back
+    /// to its customer. The request stays as it is; accepted later (moved to another time), it is charged in full.
+    /// </summary>
+    /// <returns>Whether its deposit goes back now.</returns>
+    public bool ReturnUnansweredDeposit(DateTimeOffset now)
+    {
+        if (Status != AppointmentStatus.Requested || !HoldsDeposit || StartAt > now)
+            return false;
+        ReturnHeldDeposit();
+        return true;
+    }
+
+    /// <summary>
+    /// The business gives the deposit back to its customer (Fase 31O, ADR 0095): one still held, or one it kept because its
+    /// customer did not come or cancelled late. Never one its sale took (that one is refunded from the sale) or already given back.
+    /// </summary>
+    public void ReturnDeposit()
+    {
+        if (DepositStatus is not (AppointmentDepositStatus.Held or AppointmentDepositStatus.Kept))
+            throw new DomainException(BookingDeposits.NothingToReturnMessage);
+        DepositStatus = AppointmentDepositStatus.Returned;
+        AddDomainEvent(new AppointmentDepositReturnedEvent(Id, TenantId));
+    }
+
+    private void ReturnHeldDeposit()
+    {
+        if (HoldsDeposit)
+            ReturnDeposit();
     }
 
     /// <summary>
@@ -550,6 +619,9 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
 
         SaleOrderId = orderId;
         Status = AppointmentStatus.Completed;
+        // Fase 31O (ADR 0095): the sale takes its deposit, as its «En línea» payment.
+        if (HoldsDeposit)
+            DepositStatus = AppointmentDepositStatus.Applied;
     }
 
     /// <summary>

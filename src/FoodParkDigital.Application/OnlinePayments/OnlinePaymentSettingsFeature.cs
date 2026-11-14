@@ -251,6 +251,9 @@ public class CompleteOnlinePaymentConnectionCommandHandler
             // The deposit of the quotes is not behind the menu's switch (Fase 31N): off first, so none starts meanwhile.
             if (await _context.TenantSettings.AnyAsync(s => s.TenantId == tenantId && s.QuoteDepositPercent != null, cancellationToken))
                 return await EndAsync(authorization, OnlinePaymentSettings.QuoteDepositBeforeChangeMessage, cancellationToken);
+            // Nor the deposit to book online (Fase 31O); and a deposit held goes back only through the account that took it.
+            if (await OnlinePaymentSettings.BookingDepositsAsync(_context, tenantId, cancellationToken) is { } booking)
+                return await EndAsync(authorization, booking, cancellationToken);
         }
 
         if (account is null)
@@ -326,6 +329,9 @@ public class DisconnectOnlinePaymentAccountCommandHandler
         // The deposit of the quotes is collected with it too (Fase 31N): off first, so no version is sent asking one.
         if (await _context.TenantSettings.AnyAsync(s => s.TenantId == account.TenantId && s.QuoteDepositPercent != null, cancellationToken))
             return Result.Failure<OnlinePaymentSettingsDto>(OnlinePaymentSettings.QuoteDepositFirstMessage);
+        // Likewise the deposit to book online (Fase 31O), and the ones held go back only through this account.
+        if (await OnlinePaymentSettings.BookingDepositsAsync(_context, account.TenantId, cancellationToken) is { } booking)
+            return Result.Failure<OnlinePaymentSettingsDto>(booking);
         if (await OnlinePaymentSettings.InCourseAsync(_context, cancellationToken))
             return Result.Failure<OnlinePaymentSettingsDto>(OnlinePaymentSettings.InCourseMessage);
 
@@ -403,6 +409,24 @@ internal static class OnlinePaymentSettings
     public const string QuoteDepositFirstMessage =
         "Tus cotizaciones piden anticipo: quítalo en la configuración de cotizaciones antes de desconectar la cuenta de Mercado Pago.";
     public const string ReconnectMessage = "La cuenta de Mercado Pago ya no responde: vuelve a conectarla.";
+    public const string BookingDepositFirstMessage =
+        "Tus citas en línea piden anticipo: quítalo en la configuración de citas en línea antes de desconectar o cambiar la cuenta de Mercado Pago.";
+    public const string BookingDepositsHeldMessage =
+        "Tienes anticipos de citas sin cobrar ni devolver: se devuelven por la cuenta que los cobró. Cobra esas citas o devuelve sus anticipos antes de desconectar o cambiar la cuenta de Mercado Pago.";
+
+    /// <summary>
+    /// Why the account cannot go while appointments are booked with a deposit (Fase 31O, ADR 0095), or null: the business asks
+    /// one (none may start with the account that goes), or one is held (it goes back only through the account that took it).
+    /// </summary>
+    public static async Task<string?> BookingDepositsAsync(IApplicationDbContext context, Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (await context.TenantSettings.AnyAsync(s => s.TenantId == tenantId && s.BookingDepositPercent != null, cancellationToken))
+            return BookingDepositFirstMessage;
+        return await context.Appointments.AnyAsync(
+                a => a.TenantId == tenantId && a.DepositStatus == Domain.Appointments.Enums.AppointmentDepositStatus.Held, cancellationToken)
+            ? BookingDepositsHeldMessage
+            : null;
+    }
 
     /// <summary>Payments in course or money going back: they need the account they started with.</summary>
     public static async Task<bool> InCourseAsync(IApplicationDbContext context, CancellationToken cancellationToken)

@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.OnlinePayments;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -18,6 +19,19 @@ namespace FoodParkDigital.Infrastructure.Tests.BackgroundJobs;
 /// </summary>
 public class OnlinePaymentsWorkerTests
 {
+    [Fact]
+    public void EachKindOfWork_ShouldGetItsTurn_InAPass()
+    {
+        Guid[] payments = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
+        Guid[] keys = [Guid.NewGuid()];
+        Guid[] deposits = [Guid.NewGuid(), Guid.NewGuid()];
+
+        // Fase 31O: a busy hour of payments does not leave the keys to renew or the deposits to give back out of a pass.
+        Assert.Equal([payments[0], keys[0], deposits[0], payments[1], deposits[1], payments[2]],
+            OnlinePaymentsWorkerService.InTurns(payments, keys, deposits));
+        Assert.Equal(payments, OnlinePaymentsWorkerService.InTurns(payments, [], []));
+    }
+
     [Fact]
     public async Task Pass_ShouldReview_TheAccountsNotReviewedLately_WhoseKeyWorks_InTheirOwnScope()
     {
@@ -69,6 +83,58 @@ public class OnlinePaymentsWorkerTests
         // The account reviewed longest ago goes first, not the one still reviewed until the oldest date.
         Assert.Equal([behind, second, third, behind], sent.Reviews);
     }
+
+    [Fact]
+    public async Task Pass_ShouldSweep_TheBusinessesWithADepositHeldOnARequestWhoseTimeCame_AndNoOther()
+    {
+        // Fase 31O (ADR 0095): a request booked with a deposit that nobody answered before its time gives it back in the sweep,
+        // even in a business with no payment waiting and no key to renew.
+        var sent = new SentCommands();
+        await using var host = OutboxTestHost.Create(configure: services =>
+        {
+            services.AddSingleton<IOnlinePaymentGateway, ConfiguredGateway>();
+            services.AddSingleton(sent);
+            services.AddScoped<ISender, RecordingSender>();
+            services.AddSingleton<OnlinePaymentsWorkerService>();
+        });
+        var now = host.Clock.UtcNow;
+        var late = await AddDepositRequestAsync(host, "vencida", now.AddMinutes(-30));
+        var onTime = await AddDepositRequestAsync(host, "hora-justa", now);
+        // Its time has not come, the business accepted it, its deposit went back already, or it asks none: no sweep.
+        await AddDepositRequestAsync(host, "futura", now.AddMinutes(1));
+        await AddDepositRequestAsync(host, "confirmada", now.AddMinutes(-30), accepted: true);
+        await AddDepositRequestAsync(host, "devuelta", now.AddMinutes(-30), returned: true);
+        await AddDepositRequestAsync(host, "sin-anticipo", now.AddMinutes(-30), deposit: null);
+        var worker = host.Get<OnlinePaymentsWorkerService>();
+
+        Assert.Equal(2, await worker.RunPassAsync(CancellationToken.None));
+
+        // The one waiting longest first, each in its own scope.
+        Assert.Equal([late, onTime], sent.Sweeps);
+        Assert.Empty(sent.Reviews);
+    }
+
+    private static Task<Guid> AddDepositRequestAsync(
+        OutboxTestHost host, string slug, DateTimeOffset startAt, decimal? deposit = 45m, bool accepted = false, bool returned = false)
+        => host.InScopeAsync(async services =>
+        {
+            var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Service, $"{slug}@demo.com");
+            services.GetRequiredService<ICurrentTenantService>().SetTenant(tenant.Id);
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            var request = Appointment.RequestOnline(
+                tenant.Id, "Valeria Ruiz", "+525522107765", Guid.NewGuid(), "Corte de cabello", startAt, startAt.AddMinutes(45),
+                null, null, Guid.NewGuid(), new string(slug[0], 43), deposit: deposit);
+            if (accepted)
+                request.Accept(startAt.AddDays(-1));
+            if (returned)
+                request.ReturnDeposit();
+            context.Tenants.Add(tenant);
+            context.Appointments.Add(request);
+            // The row version SQL Server writes.
+            context.Entry(request).Property("Version").CurrentValue = new byte[8];
+            await context.SaveChangesAsync();
+            return tenant.Id;
+        });
 
     private static Task<Guid> AddAccountAsync(OutboxTestHost host, string slug, DateTimeOffset? reviewedUntil, DateTimeOffset keyExpiresAt)
         => host.InScopeAsync(async services =>

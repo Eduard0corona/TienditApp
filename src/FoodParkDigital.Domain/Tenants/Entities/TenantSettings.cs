@@ -260,6 +260,19 @@ public class TenantSettings : BaseEntity, ITenantScoped
         AnswerReminderMinutes = minutes;
     }
 
+    /// <summary>
+    /// The share of a service's price its customer pays online to book it (Fase 31O, ADR 0095), from
+    /// <see cref="BookingDeposits.MinPercent"/> to <see cref="BookingDeposits.MaxPercent"/>; null asks none, as by default.
+    /// </summary>
+    public int? BookingDepositPercent { get; private set; }
+
+    public void SetBookingDepositPercent(int? percent)
+    {
+        if (percent is < BookingDeposits.MinPercent or > BookingDeposits.MaxPercent)
+            throw new DomainException(BookingDeposits.PercentMessage);
+        BookingDepositPercent = percent;
+    }
+
     public void UpdateOnlineBooking(bool enabled, int capacity)
     {
         if (capacity is < 1 or > OnlineBookingRules.MaxCapacity)
