@@ -147,6 +147,8 @@ public class BookingDepositFlowTests
         var status = await shop.ConfirmAsync(started.CheckoutId, payment.Id, started.ReturnKey);
 
         Assert.Equal(OnlineCheckoutStatus.Placed, status!.Status);
+        // In line with the other bookings of the business, as a request of the booking page.
+        Assert.Equal([shop.Tenant.Id], shop.BookingLock.Tenants);
         var appointment = await shop.Context.Appointments.AsNoTracking().SingleAsync();
         Assert.Equal((AppointmentStatus.Requested, AppointmentChannel.Online, (decimal?)45m, (AppointmentDepositStatus?)AppointmentDepositStatus.Held, (Guid?)key),
             (appointment.Status, appointment.Channel, appointment.DepositAmount, appointment.DepositStatus, appointment.ClientRequestId));
@@ -197,6 +199,27 @@ public class BookingDepositFlowTests
         Assert.Equal(BookingDepositOffer.StoppedBookingMessage, (await shop.Context.OnlineCheckouts.AsNoTracking().SingleAsync(c => c.Id == stopped.CheckoutId)).FailureMessage);
         // Only the team's appointment exists.
         Assert.Equal(AppointmentChannel.Business, (await shop.Context.Appointments.AsNoTracking().SingleAsync()).Channel);
+    }
+
+    [Fact]
+    public async Task TwoPaymentsOfTheSameRequest_ShouldBookItOnce_AndGiveTheOtherBack()
+    {
+        await using var shop = await Shop.OpenAsync(percent: 30);
+        // The same request went to pay twice (its key), each payment for its own checkout.
+        var key = Guid.NewGuid();
+        var first = (await shop.StartAsync(shop.Haircut.Id, MondayTen, key: key)).Value!;
+        var second = (await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(1), key: key)).Value!;
+        var firstPayment = shop.Gateway.Approve(first.CheckoutId, 45m, SalesTestFixture.Now.AddMinutes(5));
+        var secondPayment = shop.Gateway.Approve(second.CheckoutId, 45m, SalesTestFixture.Now.AddMinutes(6));
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddMinutes(7);
+
+        Assert.Equal(OnlineCheckoutStatus.Placed, (await shop.ConfirmAsync(first.CheckoutId, firstPayment.Id, first.ReturnKey))!.Status);
+        var again = await shop.ConfirmAsync(second.CheckoutId, secondPayment.Id, second.ReturnKey);
+
+        Assert.Equal((OnlineCheckoutStatus.NotPlaced, RequestPublicAppointmentCommandHandler.AlreadySentMessage),
+            (again!.Status, again.FailureMessage));
+        Assert.Equal(MondayTen, (await shop.Context.Appointments.AsNoTracking().SingleAsync()).StartAt);
+        Assert.Equal(secondPayment.Id, (await shop.Context.OnlinePaymentRefunds.AsNoTracking().SingleAsync()).PaymentId);
     }
 
     [Fact]
@@ -371,6 +394,8 @@ public class BookingDepositFlowTests
         public Product Haircut { get; }
         public FakeOnlinePaymentGateway Gateway { get; } = new();
         public FakeSecretProtector Protector { get; } = new();
+        /// <summary>The businesses whose booking lock the payments took, in order.</summary>
+        public RecordingBookingLock BookingLock { get; } = new();
         public SalesDbContext Context => Fixture.Context;
         public SalesClock Clock => Fixture.Clock;
         public AppointmentNotices Notices => new(Context, new PhoneNormalizationService(), Clock);
@@ -557,7 +582,7 @@ public class BookingDepositFlowTests
                 new OrderInventoryService(Context, Clock, folios, NullLogger<OrderInventoryService>.Instance),
                 folios, phones, new OrderCashService(Context, Fixture.CurrentUser),
                 NullLogger<ApplyOnlinePaymentCommandHandler>.Instance,
-                new NoBookingLock());
+                BookingLock);
             return (TResponse)(object)await handler.Handle(apply, cancellationToken);
         }
 
@@ -582,6 +607,17 @@ public class BookingDepositFlowTests
         private sealed class NoBookingLock : IAppointmentBookingLock
         {
             public Task AcquireAsync(Guid tenantId, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+
+        public sealed class RecordingBookingLock : IAppointmentBookingLock
+        {
+            public List<Guid> Tenants { get; } = [];
+
+            public Task AcquireAsync(Guid tenantId, CancellationToken cancellationToken)
+            {
+                Tenants.Add(tenantId);
+                return Task.CompletedTask;
+            }
         }
     }
 }
