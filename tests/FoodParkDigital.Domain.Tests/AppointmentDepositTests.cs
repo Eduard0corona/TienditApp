@@ -191,10 +191,16 @@ public class AppointmentDepositTests
     [Fact]
     public void TheBusiness_ShouldGiveBackOneHeldOrKept_NeverOneSoldReturnedOrNone()
     {
-        var held = Accepted(Now.AddHours(2));
+        var held = Accepted(Now.AddDays(2));
         held.ReturnDeposit();
         AssertReturned(held);
         Assert.Equal(BookingDeposits.NothingToReturnMessage, Assert.Throws<DomainException>(() => held.ReturnDeposit()).Message);
+        // Given back already, cancelling it gives nothing back again, days before or not.
+        Assert.False(held.CustomerCancelReturnsDeposit(Now));
+        held.ClearDomainEvents();
+        held.CancelByCustomer(Now);
+        Assert.Equal(AppointmentDepositStatus.Returned, held.DepositStatus);
+        Assert.DoesNotContain(held.DomainEvents, e => e is AppointmentDepositReturnedEvent);
 
         var kept = Accepted(Now.AddHours(2));
         kept.ChangeStatus(AppointmentStatus.NoShow);
