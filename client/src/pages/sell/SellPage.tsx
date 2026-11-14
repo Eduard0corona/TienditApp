@@ -58,6 +58,7 @@ import {
   NO_SALE_DETAILS,
   categoriesInUse,
   preselectedOptions,
+  chargeOfSale,
   readAppointmentId,
   readChatOrigin,
   readCustomerPrefill,
@@ -305,6 +306,8 @@ export default function SellPage() {
     () => saleTotals(cart, pricesIncludeTax, defaultTaxRate, deliveryZone, appointment?.visitFee),
     [cart, pricesIncludeTax, deliveryZone, defaultTaxRate, appointment?.visitFee],
   );
+  // What is charged now, with the deposit paid online taken off (Fase 31O): the same for the ticket, F9 and the phone's bar.
+  const { due, depositAboveSale } = chargeOfSale(appointment, totals.total, cart.length);
   const { phoneError, folioProblem, orderIdProblem, platformProblem, folioError, orderIdError, deliveryProblem, deliveryHint } = checkSale({
     details,
     platform,
@@ -421,7 +424,8 @@ export default function SellPage() {
   const openCharge = useCallback(() => {
     // A table's round is sent to the kitchen and charged when the table leaves (Mesas). Without the charge
     // permission (a waiter) the order is saved for the cashier.
-    if (cart.length === 0 || submitting || tabTarget || !canCharge || pricesPending) return;
+    // A sale of less than the deposit paid online is not charged: the ticket says why.
+    if (cart.length === 0 || submitting || tabTarget || !canCharge || pricesPending || depositAboveSale) return;
     // An order of a platform the courier pays now: its folio first, before taking the money.
     if (platformProblem) {
       if (folioProblem) setFolioChecked(true);
@@ -443,7 +447,7 @@ export default function SellPage() {
       return;
     }
     setChargeOpen(true);
-  }, [cart.length, submitting, tabTarget, canCharge, pricesPending, platformProblem, folioProblem, orderIdProblem, deliveryProblem, cashClosed, online]);
+  }, [cart.length, submitting, tabTarget, canCharge, pricesPending, depositAboveSale, platformProblem, folioProblem, orderIdProblem, deliveryProblem, cashClosed, online]);
 
   const orderRequest = (): CreateOrderRequest => buildOrderRequest({
     cart, details, totals, platform, chatOrigin, delivery, appointment, isFood, hasServices, branchId: saleBranchId,
@@ -734,12 +738,12 @@ export default function SellPage() {
 
       <SellPhoneBar
         articles={countArticles(cart)}
-        total={totals.total}
+        total={due}
         actionLabel={tabTarget ? 'Enviar' : platform ? 'Registrar' : canCharge ? 'Cobrar' : 'Guardar'}
         onAction={tabTarget
           ? () => void sendToKitchen()
           : platform ? registerFromPhoneBar : canCharge ? openCharge : () => void submitSale(null)}
-        actionDisabled={cart.length === 0 || submitting || pricesPending || (platform !== null && !online)}
+        actionDisabled={cart.length === 0 || submitting || pricesPending || depositAboveSale || (platform !== null && !online)}
         ticketOpen={cartOpenOnPhone}
         onOpenTicket={() => setCartOpenOnPhone(true)}
         onCloseTicket={() => setCartOpenOnPhone(false)}
@@ -770,7 +774,7 @@ export default function SellPage() {
       <ChargeModal
         show={chargeOpen}
         // What the customer already paid online to book the appointment (Fase 31O) is not charged again.
-        amountDue={Math.max(0, totals.total - (appointment?.deposit ?? 0))}
+        amountDue={due}
         paidOnline={appointment?.deposit ?? null}
         total={totals.total}
         submitting={submitting}

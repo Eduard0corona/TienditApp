@@ -141,6 +141,24 @@ export interface SaleAppointment {
   deposit?: number | null;
 }
 
+/**
+ * What is charged now of a sale (Fase 31O): its total, less the deposit paid online to book the appointment it charges;
+ * the server decides it. A sale of less than that deposit is refused (the difference would have nowhere to go): nothing
+ * charges it or saves it, from the ticket, F9 or the phone's bar.
+ */
+export function chargeOfSale(appointment: SaleAppointment | null | undefined, total: number, lines: number): {
+  deposit: number | null;
+  due: number;
+  depositAboveSale: boolean;
+} {
+  const deposit = appointment?.deposit ?? null;
+  return {
+    deposit,
+    due: deposit != null ? Math.max(0, total - deposit) : total,
+    depositAboveSale: deposit != null && lines > 0 && deposit > total,
+  };
+}
+
 /** The appointment a link asks to charge (?appointment=), read once. */
 export function readAppointmentId(params: URLSearchParams): string | null {
   return params.get('appointment')?.trim() || null;

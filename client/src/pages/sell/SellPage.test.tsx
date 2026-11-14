@@ -1452,6 +1452,8 @@ describe('SellPage with a platform order and no connection', () => {
       expect(await ticket().findByText(/Cobro de la cita de/)).toHaveTextContent('Ana Ruiz');
       expect(ticket().getByText('Anticipo pagado en línea').nextSibling).toHaveTextContent('−$120.00');
       expect(ticket().getByText('Por cobrar').nextSibling).toHaveTextContent('$280.00');
+      // The phone's bar says what is charged too.
+      expect(screen.getByRole('button', { name: /^1 artículo ·/ })).toHaveTextContent('$280.00');
       await userEvent.click(ticket().getByRole('button', { name: 'Cobrar $280.00 F9' }));
       const charge = within(await screen.findByRole('dialog', { name: 'Cobrar' }));
       expect(charge.getByText(/ya pagó en línea un anticipo de/)).toHaveTextContent('$120.00');
@@ -1506,6 +1508,11 @@ describe('SellPage with a platform order and no connection', () => {
       expect(ticket().getByText(/La venta es menor que el anticipo que el cliente pagó en línea/)).toHaveTextContent('$450.00');
       expect(ticket().getByRole('button', { name: 'Cobrar $0.00 F9' })).toBeDisabled();
       expect(ticket().getByRole('button', { name: 'Guardar sin cobrar' })).toBeDisabled();
+      // Neither F9 nor the phone's bar opens the charge.
+      await userEvent.keyboard('{F9}');
+      expect(screen.queryByRole('dialog', { name: 'Cobrar' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Cobrar$/ })).toBeDisabled();
+      expect(ordersApi.create).not.toHaveBeenCalled();
     });
 
     it('stops being the charge of the appointment when the cashier says so', async () => {

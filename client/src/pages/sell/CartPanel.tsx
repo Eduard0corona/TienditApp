@@ -11,7 +11,7 @@ import DeliveryOrderFields from './DeliveryOrderFields';
 import PlatformOrderFields from './PlatformOrderFields';
 import PlatformOriginPicker from './PlatformOriginPicker';
 import SaleDetailsForm from './SaleDetailsForm';
-import type { CartLine, ChatOrigin, SaleAppointment, SaleDelivery, SaleDetails, TabTarget } from './sellModel';
+import { chargeOfSale, type CartLine, type ChatOrigin, type SaleAppointment, type SaleDelivery, type SaleDetails, type TabTarget } from './sellModel';
 
 interface CartPanelProps {
   /** A table's tab: the sale goes to the kitchen instead of being charged. */
@@ -80,11 +80,8 @@ interface CartPanelProps {
 /** The ticket of the sale: where it came from and where it goes, its lines, the customer, the totals and what to do with it. */
 export default function CartPanel(props: CartPanelProps) {
   const { tabTarget, tabOrder, chatOrigin, cart, totals, submitting, platform, pricesPending } = props;
-  // What is charged now: the total, less the deposit paid online to book the appointment (Fase 31O); the server decides it.
-  const deposit = props.appointment?.deposit ?? null;
-  const due = deposit != null ? Math.max(0, totals.total - deposit) : totals.total;
-  // A sale of less than that deposit is refused: the difference would have nowhere to go.
-  const depositAboveSale = deposit != null && cart.length > 0 && deposit > totals.total;
+  // What is charged now: the total, less the deposit paid online to book the appointment (Fase 31O).
+  const { deposit, due, depositAboveSale } = chargeOfSale(props.appointment, totals.total, cart.length);
   // Nothing is charged, registered or sent at prices that are about to change.
   const blocked = cart.length === 0 || submitting || pricesPending || depositAboveSale;
   // A chat is a WhatsApp order, a tab goes to a table and an appointment is charged at the counter: none comes from a
