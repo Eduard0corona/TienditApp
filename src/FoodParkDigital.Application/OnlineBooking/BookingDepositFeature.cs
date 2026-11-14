@@ -227,12 +227,8 @@ public class StartAppointmentDepositCommandHandler : IRequestHandler<StartAppoin
         if (request.ExpectedDeposit is { } expected && expected != deposit)
             return Result.Failure<OnlineCheckoutStartedDto>(BookingDepositOffer.DepositChangedMessage(deposit.Value));
 
-        // The same spam guard as a request: its requests waiting and its deposits in course count together (one that never
-        // reached Mercado Pago does not count).
-        var paying = await _context.OnlineCheckouts.CountAsync(c => c.ForAppointment
-            && c.Status == OnlineCheckoutStatus.AwaitingPayment
-            && c.CustomerPhone == phone
-            && c.PreferenceId != null, cancellationToken);
+        // The same spam guard as a request: its requests waiting and its deposits in course count together.
+        var paying = await DepositsInCourseAsync(phone, request.IdempotencyKey, now, cancellationToken);
         if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, account?.Id, now, cancellationToken, alsoPending: paying) is { } refused)
             return Result.Failure<OnlineCheckoutStartedDto>(refused);
         if (PublicAppointmentPlacement.TooFar(business.Settings, request.StartAt, now))
@@ -296,6 +292,25 @@ public class StartAppointmentDepositCommandHandler : IRequestHandler<StartAppoin
             ExpiresAt = checkout.ExpiresAt,
             ReturnKey = OnlineCheckoutRules.ReturnKey(_protector, tenant.Id, checkout.Id)
         });
+    }
+
+    /// <summary>
+    /// The deposits of this phone still being paid: only one that reached Mercado Pago and can still be paid counts, and the
+    /// same request paid again (back from Mercado Pago without paying, and once more) counts once; never this one.
+    /// </summary>
+    private async Task<int> DepositsInCourseAsync(string phone, Guid? key, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var requests = await _context.OnlineCheckouts
+            .AsNoTracking()
+            .Where(c => c.ForAppointment
+                && c.Status == OnlineCheckoutStatus.AwaitingPayment
+                && c.CustomerPhone == phone
+                && c.PreferenceId != null
+                && c.ExpiresAt > now)
+            .Select(c => c.Request)
+            .ToListAsync(cancellationToken);
+        var keys = requests.Select(r => BookingDepositOffer.Deserialize(r)?.IdempotencyKey).ToList();
+        return keys.Count(k => k is null) + keys.OfType<Guid>().Where(k => k != key).Distinct().Count();
     }
 }
 

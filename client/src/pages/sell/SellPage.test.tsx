@@ -1463,6 +1463,37 @@ describe('SellPage with a platform order and no connection', () => {
       })));
     });
 
+    it('reads the appointment again when the server says its deposit changed, and charges what it holds (Fase 31O)', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);
+      vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, haircut], totalCount: 2 } } as never);
+      // Returned at the agenda while the sale was on screen: the second reading has it no more.
+      vi.mocked(appointmentsApi.getById)
+        .mockResolvedValueOnce({ data: { ...appointment, visit: null, channel: 1, depositAmount: 120, depositStatus: 1 } } as never)
+        .mockResolvedValueOnce({ data: { ...appointment, visit: null, channel: 1, depositAmount: 120, depositStatus: 3 } } as never);
+      const headers = new AxiosHeaders();
+      const detail = 'El anticipo de esta cita cambió (se devolvió o ya entró a otra venta): revisa la venta antes de cobrar.';
+      vi.mocked(ordersApi.create)
+        .mockRejectedValueOnce(new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+          status: 400, data: { detail }, statusText: '', headers, config: { headers },
+        } as AxiosResponse))
+        .mockResolvedValueOnce({ data: { orderNumber: 'ORD-000005', stockWarnings: [] } } as never);
+      renderAt('/sell?appointment=a1');
+
+      expect(await ticket().findByText('Anticipo pagado en línea')).toBeInTheDocument();
+      await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+
+      expect(await ticket().findByText(detail)).toBeInTheDocument();
+      // The ticket says what the appointment holds now, and the next try sends it.
+      await waitFor(() => expect(ticket().queryByText('Anticipo pagado en línea')).not.toBeInTheDocument());
+      expect(appointmentsApi.getById).toHaveBeenCalledTimes(2);
+      expect(ticket().getByRole('button', { name: /Cobrar \$400\.00/ })).toBeEnabled();
+      await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+      await waitFor(() => expect(ordersApi.create).toHaveBeenLastCalledWith(expect.objectContaining({
+        appointmentId: 'a1', expectedTotal: 400, expectedAppointmentDeposit: 0,
+      })));
+      expect(ordersApi.create).toHaveBeenNthCalledWith(1, expect.objectContaining({ expectedAppointmentDeposit: 120 }));
+    });
+
     it('charges nothing while the sale is less than the deposit paid online (Fase 31O)', async () => {
       signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);
       vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, haircut], totalCount: 2 } } as never);

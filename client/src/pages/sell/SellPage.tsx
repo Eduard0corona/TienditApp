@@ -252,6 +252,21 @@ export default function SellPage() {
     }
   }, [cart.length, confirm, products, setCart, toCartLine, toast]);
 
+  // The appointment's deposit as it holds it now (Fase 31O). The server refuses a sale that took off another one (returned
+  // at the agenda meanwhile, or a sale saved on the device before it was taken off): the screen reads it again, so the
+  // ticket and the next charge say what the server holds.
+  const refreshAppointmentDeposit = useCallback(async (appointmentId: string) => {
+    try {
+      const { data } = await appointmentsApi.getById(appointmentId);
+      const { deposit } = saleOfAppointment(data, products).appointment;
+      setDetails((current) => (current.appointment?.id === appointmentId
+        ? { ...current, appointment: { ...current.appointment, deposit } }
+        : current));
+    } catch {
+      // Read again with the next refusal.
+    }
+  }, [products]);
+
   // Once the catalog is in (its first load also brings back the sale saved on the device).
   useEffect(() => {
     const appointmentId = pendingAppointment.current;
@@ -525,6 +540,8 @@ export default function SellPage() {
       if (!charge) toast.error(message);
       // A price or availability may have changed: refresh the catalog and the cart prices.
       void catalog.reload();
+      // So may the deposit of the appointment it charges.
+      if (request.appointmentId) void refreshAppointmentDeposit(request.appointmentId);
       // Refused on credit, or with the balance: what the customer owes or has may have changed at another register, so the
       // panel reads it again.
       if (charge?.onCredit || usesBalance) refreshCredit();

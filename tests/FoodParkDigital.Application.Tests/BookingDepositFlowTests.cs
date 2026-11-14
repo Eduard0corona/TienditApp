@@ -153,6 +153,26 @@ public class BookingDepositFlowTests
     }
 
     [Fact]
+    public async Task TheSameRequestPaidAgain_AndADepositNoLongerPayable_ShouldNotFillThePhonesLimit()
+    {
+        await using var shop = await Shop.OpenAsync(percent: 30);
+        // Back from Mercado Pago without paying, and once more: the same request, four times, counts once.
+        var key = Guid.NewGuid();
+        for (var attempt = 0; attempt < 4; attempt++)
+            Assert.True((await shop.StartAsync(shop.Haircut.Id, MondayTen, key: key)).IsSuccess);
+        Assert.True((await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(1))).IsSuccess);
+        Assert.True((await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(2))).IsSuccess);
+        // Three requests in course: a fourth waits, but the first one paid again does not count against itself.
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage, (await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(3))).Error);
+        Assert.True((await shop.StartAsync(shop.Haircut.Id, MondayTen, key: key)).IsSuccess);
+
+        // Once their time to pay ran out, before the sweep marks them, they no longer count.
+        shop.Clock.UtcNow = SalesTestFixture.Now + OnlineCheckout.TimeToPay;
+        Assert.True((await shop.StartAsync(shop.Haircut.Id, MondayTen.AddHours(3))).IsSuccess);
+        Assert.Equal(8, await shop.Context.OnlineCheckouts.CountAsync(c => c.Status == OnlineCheckoutStatus.AwaitingPayment));
+    }
+
+    [Fact]
     public async Task AnApprovedDeposit_ShouldBookTheRequest_WithTheDepositHeld_AndTheBusinessHearsOfIt()
     {
         await using var shop = await Shop.OpenAsync(percent: 30);
