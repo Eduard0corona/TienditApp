@@ -159,7 +159,7 @@ export default function MyOrders() {
           <div className="row g-3">
             {inProgress.map((order) => (
               <div className="col-12 col-lg-6" key={order.id}>
-                <OrderCard order={order} onOrderAgain={orderAgain} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
+                <OrderCard order={order} onOrderAgain={(repeated) => void orderAgain(repeated)} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
               </div>
             ))}
           </div>
@@ -172,7 +172,7 @@ export default function MyOrders() {
           <div className="row g-3">
             {past.map((order) => (
               <div className="col-12 col-lg-6" key={order.id}>
-                <OrderCard order={order} onOrderAgain={orderAgain} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
+                <OrderCard order={order} onOrderAgain={(repeated) => void orderAgain(repeated)} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
               </div>
             ))}
           </div>

@@ -4,7 +4,8 @@ import { accountApi } from '../api/accountApi';
 import { markPostalCodePending, pendingPostalCode, readPostalCode, savePostalCode } from '../utils/postalCodePreference';
 import { useCustomerAccount } from './useCustomerAccount';
 
-const ACCOUNT_POSTAL_CODE_KEY = ['me', 'postal-code'];
+/** The account's postal code, as React Query keeps it (Explorar, the store and the visit page read the same). */
+export const ACCOUNT_POSTAL_CODE_KEY = ['me', 'postal-code'];
 
 /**
  * The postal code Explorar answers for («Entregar en…», Fase 24B), remembered on this device and, with a customer account,

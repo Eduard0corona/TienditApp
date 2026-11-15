@@ -120,7 +120,7 @@ export default function MyOrderPage() {
                     <button
                       type="button"
                       className="btn btn-primary"
-                      onClick={() => orderAgain(order)}
+                      onClick={() => void orderAgain(order)}
                       aria-label={`Pedir otra vez ${order.orderNumber} de ${order.businessName}`}
                     >
                       <i className="ri-restart-line me-1" aria-hidden="true"></i>Pedir otra vez

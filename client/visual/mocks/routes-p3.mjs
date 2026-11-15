@@ -1,5 +1,5 @@
 // Phase 3 endpoints for the fake backend: CFDI preview, option groups, tables, open tabs and kitchen rounds.
-import { NOW_ISO } from './data.mjs';
+import { NOW_ISO, uuid } from './data.mjs';
 
 const ago = (minutes) => new Date(new Date(NOW_ISO).getTime() - minutes * 60000).toISOString();
 const r2 = (value) => Math.round(value * 100) / 100;
@@ -10,19 +10,19 @@ function seedPhase3(data) {
   if (latte) {
     latte.optionGroups = [
       { id: 'g-size', name: 'Tamaño', minSelections: 1, maxSelections: 1, options: [
-        { id: 'o-ch', name: 'Chico', priceDelta: -5, isAvailable: true },
-        { id: 'o-md', name: 'Mediano', priceDelta: 0, isAvailable: true },
-        { id: 'o-gr', name: 'Grande', priceDelta: 12, isAvailable: true },
+        { id: uuid('option:o-ch'), name: 'Chico', priceDelta: -5, isAvailable: true },
+        { id: uuid('option:o-md'), name: 'Mediano', priceDelta: 0, isAvailable: true },
+        { id: uuid('option:o-gr'), name: 'Grande', priceDelta: 12, isAvailable: true },
       ] },
       { id: 'g-milk', name: 'Leche', minSelections: 0, maxSelections: 1, options: [
-        { id: 'o-des', name: 'Deslactosada', priceDelta: 0, isAvailable: true },
-        { id: 'o-alm', name: 'Almendra', priceDelta: 8, isAvailable: true },
-        { id: 'o-ave', name: 'Avena', priceDelta: 8, isAvailable: false },
+        { id: uuid('option:o-des'), name: 'Deslactosada', priceDelta: 0, isAvailable: true },
+        { id: uuid('option:o-alm'), name: 'Almendra', priceDelta: 8, isAvailable: true },
+        { id: uuid('option:o-ave'), name: 'Avena', priceDelta: 8, isAvailable: false },
       ] },
       { id: 'g-extra', name: 'Extras', minSelections: 0, maxSelections: 2, options: [
-        { id: 'o-shot', name: 'Shot extra', priceDelta: 10, isAvailable: true },
-        { id: 'o-crema', name: 'Crema batida', priceDelta: 7, isAvailable: true },
-        { id: 'o-canela', name: 'Canela', priceDelta: 0, isAvailable: true },
+        { id: uuid('option:o-shot'), name: 'Shot extra', priceDelta: 10, isAvailable: true },
+        { id: uuid('option:o-crema'), name: 'Crema batida', priceDelta: 7, isAvailable: true },
+        { id: uuid('option:o-canela'), name: 'Canela', priceDelta: 0, isAvailable: true },
       ] },
     ];
   }

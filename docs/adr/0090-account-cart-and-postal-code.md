@@ -36,8 +36,16 @@ El dueño del producto pidió avanzar los puntos de la lista sin esperar su resp
 - **Compatibilidad:** la versión desplegada no conoce la tabla ni la columna; sigue guardando el carrito y el código postal en el dispositivo. Volver a ella funciona sin `rollback.sql`.
 - **Lo que limita:**
   - **Dos dispositivos que cambian el mismo carrito a la vez:** gana el último que guarda, como con el resto del perfil.
-  - **«Pedir otra vez» no viaja:** el aviso de lo que no volvió se queda en el dispositivo donde se pidió; la cuenta guarda las líneas.
+  - **«Pedir otra vez» no viaja:** el aviso de lo que no volvió se queda en el dispositivo donde se pidió; la cuenta guarda las líneas. *(Actualizado en la Fase 31P: viaja; ver abajo.)*
   - **Sin conexión,** la cuenta se entera del carrito con el siguiente cambio que sí llegue. Mientras no llega, ese carrito lleva la hora del dispositivo, y es la que se compara.
-  - **Las páginas de la tienda y de la visita** siguen tomando el código postal del dispositivo (que Explorar ya alinea con la cuenta) y, con sesión, las direcciones de la cuenta.
+  - **Las páginas de la tienda y de la visita** siguen tomando el código postal del dispositivo (que Explorar ya alinea con la cuenta) y, con sesión, las direcciones de la cuenta. *(Actualizado en la Fase 31P: toman el de la cuenta; ver abajo.)*
   - **Un carrito sin pedir** se queda en la cuenta hasta una semana: el cliente lo ve en otro dispositivo aunque ya no lo quiera, hasta que lo vacíe.
 - **Decisiones por omisión** (sin preferencia expresa del dueño): gana el más reciente en lugar de juntar los dos; 10 carritos y una semana, como el dispositivo; el código postal de la cuenta gana sobre el del dispositivo; detener el rollback en lugar de perder lo guardado.
+
+## Actualización 2026-11-15 (Fase 31P)
+
+Pulir lo que quedó del punto 16, sin migración ni cambio de contrato (solo el cliente):
+
+- **«Pedir otra vez» viaja.** La cuenta ya guardaba con el carrito su `reorderOf` y lo que no volvió (`skipped`), y la tienda de otro dispositivo trae el aviso con el carrito; faltaba que llegara a tiempo: el carrito se guardaba en la cuenta hasta que la tienda abría, con su espera de siempre. Ahora «Pedir otra vez» (Mis pedidos y el detalle del pedido) lo guarda en el dispositivo y, con sesión, lo manda a la cuenta en ese momento y abre la tienda cuando la cuenta lo guardó, con la hora del servidor; si la cuenta no contesta en 2 segundos (`ORDER_AGAIN_ACCOUNT_WAIT_MS`), abre la tienda con el del dispositivo, que la tienda vuelve a mandar como cualquier carrito restaurado.
+- **La tienda y la visita toman el código postal de la cuenta.** Con sesión, la dirección empieza con el código postal que guarda la cuenta (`useRememberedPostalCode`), el de Explorar desde cualquier dispositivo, salvo que este dispositivo lo cambió y la cuenta no lo pudo guardar (sin conexión: el de aquí es más nuevo); sin sesión, o si el de la cuenta no se puede leer, el del dispositivo. La página espera a la cuenta antes de elegir la dirección, para no empezar con uno que va a cambiar, y no pisa lo que el cliente ya escribió. Las direcciones guardadas de la cuenta siguen primero.
+- **Lo que queda:** sin sesión todo sigue solo en el dispositivo; la tienda y la visita leen el código postal de la cuenta, no lo cambian (lo cambia Explorar).

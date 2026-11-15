@@ -926,6 +926,6 @@ export function withRappiPrices(data) {
   const product = (name) => data.products.find((candidate) => candidate.name === name).id;
   data.platformPrices[3] = {
     products: { [product('Café americano')]: 42, [product('Croissant de mantequilla')]: 45, [product('Latte')]: 66 },
-    options: { 'o-gr': 15, 'o-alm': 10 },
+    options: { [uuid('option:o-gr')]: 15, [uuid('option:o-alm')]: 10 },
   };
 }

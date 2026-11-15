@@ -8,6 +8,7 @@ import { HomeVisitChargePolicy, QuoteTime, ResponseTime } from '../../api/genera
 import { publicMenuApi, type PublicBookingSlots, type PublicHomeVisit } from '../../api/publicMenuApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import { resetLinkUploads } from '../../hooks/useProblemPhotoUploads';
+import { savePostalCode } from '../../utils/postalCodePreference';
 import PublicHomeVisitPage from './PublicHomeVisitPage';
 
 vi.mock('../../api/publicMenuApi', () => ({
@@ -15,7 +16,7 @@ vi.mock('../../api/publicMenuApi', () => ({
     getHomeVisit: vi.fn(), getHomeVisitCoverage: vi.fn(), getHomeVisitSlots: vi.fn(), requestHomeVisit: vi.fn(), addAppointmentPhoto: vi.fn(),
   },
 }));
-vi.mock('../../api/accountApi', () => ({ accountApi: { getAddresses: vi.fn() } }));
+vi.mock('../../api/accountApi', () => ({ accountApi: { getAddresses: vi.fn(), getPostalCode: vi.fn() } }));
 
 const api = vi.mocked(publicMenuApi);
 const account = vi.mocked(accountApi);
@@ -416,6 +417,37 @@ describe('PublicHomeVisitPage', () => {
 
     expect(await screen.findByRole('radio', { name: /Casa/ })).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByLabelText('Código postal')).not.toBeInTheDocument();
+  });
+
+  it('starts with the postal code the account keeps once its session arrives, over this device\'s, unless something was typed (Fase 31P)', async () => {
+    savePostalCode('72009');
+    account.getAddresses.mockResolvedValue([] as never);
+    account.getPostalCode.mockResolvedValue({ postalCode: '72000' } as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (auth: Partial<AuthContextType>) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={auth as AuthContextType}>
+          <MemoryRouter initialEntries={['/m/plomeria-hernandez/visita']}>
+            <Routes><Route path="/m/:slug/visita" element={<PublicHomeVisitPage />} /></Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree({ isAuthenticated: false, isLoading: true, user: null }));
+    // While the session is read, the code this device gave in Explorar.
+    expect(await screen.findByLabelText('Código postal')).toHaveValue('72009');
+
+    rerender(tree({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        id: 'u1', email: 'valeria@correo.mx', firstName: 'Valeria', lastName: 'Ruiz', fullName: 'Valeria Ruiz',
+        phoneNumber: '+525522107765', phoneNumberConfirmed: true, emailConfirmed: true, role: 'Customer', permissions: [],
+      } as unknown as AuthContextType['user'],
+    }));
+
+    await waitFor(() => expect(screen.getByLabelText('Código postal')).toHaveValue('72000'));
+    expect(account.getPostalCode).toHaveBeenCalled();
   });
 
   it('asks again when the business changed what the visit costs since the page showed it', async () => {
