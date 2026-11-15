@@ -115,4 +115,43 @@ describe('usePostalCodePreference (Fase 31J)', () => {
     await waitFor(() => expect(next.result.current[0]).toBe('04000'));
     expect(pendingPostalCode()).toBeNull();
   });
+
+  const renderPreference = () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={customer}>{children}</AuthContext.Provider>
+      </QueryClientProvider>
+    );
+    return renderHook(() => usePostalCodePreference(), { wrapper });
+  };
+
+  it('marks a change on the device while it goes to the account, and not once the account keeps it (Fase 31P)', async () => {
+    savePostalCode('11111');
+    account.getPostalCode.mockResolvedValue({ postalCode: '11111' });
+    let kept: (value: { postalCode: string | null }) => void = () => undefined;
+    account.savePostalCode.mockReturnValue(new Promise((resolve) => { kept = resolve; }) as never);
+    const { result } = renderPreference();
+    await waitFor(() => expect(account.getPostalCode).toHaveBeenCalled());
+    await waitFor(() => expect(result.current[0]).toBe('11111'));
+
+    act(() => result.current[1]('22222'));
+    await waitFor(() => expect(account.savePostalCode).toHaveBeenCalledWith('22222'));
+    // A store opened now knows this device's is newer than what the account answers.
+    expect(pendingPostalCode()).toBe('22222');
+    await act(async () => { kept({ postalCode: '22222' }); });
+
+    expect(pendingPostalCode()).toBeNull();
+  });
+
+  it('forgets a mark of the code the account already has, without sending it again', async () => {
+    // A save whose answer never came (the page closed): the account kept 22222 all the same.
+    savePostalCode('22222');
+    markPostalCodePending('22222');
+    account.getPostalCode.mockResolvedValue({ postalCode: '22222' });
+    renderPreference();
+
+    await waitFor(() => expect(pendingPostalCode()).toBeNull());
+    expect(account.savePostalCode).not.toHaveBeenCalled();
+  });
 });

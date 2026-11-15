@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { BusinessTheme, DayOfWeek, SpecialDayKind } from '../../types';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import { goToExternalPage } from '../../utils/externalNavigation';
 import { onlineCheckoutReturnKey } from '../../utils/onlineCheckouts';
+import { savePostalCode } from '../../utils/postalCodePreference';
 import { readCart, saveCart } from '../../utils/savedCart';
 import { cancelAccountCartSaves } from '../../utils/accountCartSync';
 import { applyBusinessTheme } from '../../utils/theme';
@@ -37,7 +38,7 @@ vi.mock('../../api/accountApi', () => ({
   accountApi: {
     getAddresses: vi.fn(), saveAddress: vi.fn(), updateAddress: vi.fn(), deleteAddress: vi.fn(),
     getFavorites: vi.fn(), saveFavorite: vi.fn(), removeFavorite: vi.fn(),
-    getCarts: vi.fn(), saveCart: vi.fn(),
+    getCarts: vi.fn(), saveCart: vi.fn(), getPostalCode: vi.fn(),
   },
 }));
 
@@ -697,6 +698,90 @@ describe('PublicMenuPage', () => {
       ), { timeout: 3000 });
       // What came from the account is not sent back to it as it was.
       expect(account.saveCart).toHaveBeenCalledTimes(1);
+    });
+
+    it('brings back on another device the cart of «Pedir otra vez» the account kept, with its notice (Fase 31P)', async () => {
+      account.getCarts.mockResolvedValue([{
+        ...accountCart(2, new Date(Date.now() - 3_600_000).toISOString()),
+        lines: [{ productId: 'p1', optionIds: [], quantity: 2, notes: null }, { productId: 'ya-no', optionIds: [], quantity: 1, notes: null }],
+        reorderOf: 3,
+        skipped: 1,
+      }]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toBeInTheDocument();
+      expect(screen.getByRole('status', { name: '' })).toHaveTextContent(
+        'Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora; 1 producto se pide por peso: agrégalo con su cantidad.',
+      );
+      // This device keeps it as the account does, and does not send it back.
+      expect(readCart('cafe-luna')).toEqual(expect.objectContaining({ reorderOf: 3, skipped: 1 }));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      expect(account.saveCart).not.toHaveBeenCalled();
+    });
+
+    it('starts the address with the postal code the account keeps, over this device\'s (Fase 31P)', async () => {
+      savePostalCode('72009');
+      account.getCarts.mockResolvedValue([]);
+      account.getAddresses.mockResolvedValue([]);
+      // The account's code arrives late, after the customer chose «A domicilio».
+      let answer: (value: { postalCode: string }) => void = () => undefined;
+      account.getPostalCode.mockReturnValue(new Promise((resolve) => { answer = resolve; }) as never);
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true }));
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => ({
+        postalCode, covered: true, fee: 35, minimumOrder: 0, freeDeliveryFrom: null,
+      }));
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
+      await userEvent.click(within(cart).getByRole('radio', { name: 'A domicilio' }));
+      // It waits for it: no code of this device that it would replace.
+      expect(within(cart).getByLabelText('Código postal')).toHaveValue('');
+      await act(async () => answer({ postalCode: '72000' }));
+
+      await waitFor(() => expect(within(cart).getByLabelText('Código postal')).toHaveValue('72000'));
+      expect(api.getDeliveryQuote).toHaveBeenCalledWith('cafe-luna', '72000');
+      expect(api.getDeliveryQuote).not.toHaveBeenCalledWith('cafe-luna', '72009');
+    });
+
+    it('takes the account\'s last address without waiting for its postal code (Fase 31P)', async () => {
+      savePostalCode('72009');
+      account.getCarts.mockResolvedValue([]);
+      account.getAddresses.mockResolvedValue([
+        { id: 'a1', label: 'Casa', postalCode: '72000', addressLine: 'Av. Juárez 120', references: null, lastUsedAt: '2026-10-12T19:00:00Z' },
+      ]);
+      // The account's code never arrives: a saved address does not need it.
+      account.getPostalCode.mockReturnValue(new Promise(() => undefined) as never);
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true }));
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => ({
+        postalCode, covered: true, fee: 35, minimumOrder: 0, freeDeliveryFrom: null,
+      }));
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
+      await userEvent.click(within(cart).getByRole('radio', { name: 'A domicilio' }));
+
+      expect(await within(cart).findByRole('radio', { name: /^Casa/ })).toHaveAttribute('aria-checked', 'true');
+      await waitFor(() => expect(api.getDeliveryQuote).toHaveBeenCalledWith('cafe-luna', '72000'));
+    });
+
+    it('does not ask the account for its postal code in a store that does not deliver (Fase 31P)', async () => {
+      account.getCarts.mockResolvedValue([]);
+      account.getAddresses.mockResolvedValue([]);
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await waitFor(() => expect(account.getCarts).toHaveBeenCalled());
+
+      expect(account.getPostalCode).not.toHaveBeenCalled();
     });
 
     it('keeps what the customer adds while the account\'s carts are read, with the cart that comes back', async () => {

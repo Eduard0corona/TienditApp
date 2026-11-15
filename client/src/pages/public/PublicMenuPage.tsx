@@ -35,7 +35,7 @@ import { estimateOrderTotals, resolveProductVat } from '../../utils/orderTotals'
 import { isPostalCode } from '../../utils/postalCodes';
 import { getOptionsLabel, getPriceWithOptions } from '../../utils/productOptions';
 import { localPhone } from '../../utils/phones';
-import { readPostalCode } from '../../utils/postalCodePreference';
+import { useRememberedPostalCode } from '../../hooks/useRememberedPostalCode';
 import {
   cartLineKey,
   fromAccountCart,
@@ -297,21 +297,23 @@ export default function PublicMenuPage() {
       : cartSignature(restoredCart.current?.kept ?? { lines: [] });
   }
 
-  // The first time the order goes to an address: the account's last one used, or the postal code given in Explorar.
+  // The first time the order goes to an address: the account's last one used, or the postal code given in Explorar (with a
+  // customer account, the one the account keeps, Fase 31P; only waited for when no saved address will be taken).
+  const remembered = useRememberedPostalCode(deliveryOffered);
   const chooseAddress = (saved: AccountAddress | null) => {
     setAddressChoice(saved?.id ?? null);
     setAddress((current) => (saved
       ? { ...current, postalCode: saved.postalCode, addressLine: saved.addressLine, references: saved.references ?? '' }
-      : { ...current, postalCode: readPostalCode(), addressLine: '', references: '' }));
+      : { ...current, postalCode: remembered.postalCode, addressLine: '', references: '' }));
   };
-  if (delivering && addressChoice === undefined && (!customer || !addresses.isPending)) {
-    // Not over an address the customer started writing while the account's ones loaded.
-    if (savedAddresses[0] && address.addressLine.trim() === '') {
+  // Not over an address the customer started writing while the account's ones loaded.
+  const takeSavedAddress = !!savedAddresses[0] && address.addressLine.trim() === '';
+  if (delivering && addressChoice === undefined && (!customer || !addresses.isPending) && (takeSavedAddress || !remembered.pending)) {
+    if (takeSavedAddress) {
       chooseAddress(savedAddresses[0]);
     } else {
       setAddressChoice(null);
-      const remembered = readPostalCode();
-      if (remembered && !address.postalCode) setAddress((current) => ({ ...current, postalCode: remembered }));
+      if (remembered.postalCode && !address.postalCode) setAddress((current) => ({ ...current, postalCode: remembered.postalCode }));
     }
   }
   const usingSavedAddress = savedAddresses.some((saved) => saved.id === addressChoice);

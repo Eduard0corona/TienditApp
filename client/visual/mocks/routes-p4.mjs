@@ -1,5 +1,5 @@
 // Phase 4C endpoints for the fake backend: archived categories, purchase order actions, agenda order and stock policy.
-import { NOW_ISO } from './data.mjs';
+import { NOW_ISO, uuid } from './data.mjs';
 
 const r2 = (value) => Math.round(value * 100) / 100;
 
@@ -148,7 +148,7 @@ export function phase4Routes(data, { ok, notFound, paginate, createMockOrder }) 
         { id: 'my-2', orderNumber: 'ORD-000088', businessName: 'Lavandería Burbujas', businessSlug: 'lavanderia-burbujas', canOrderAgain: false, status: 1, orderType: 1, step: 1, stepLabel: 'Aceptado', total: 180, paidAmount: 0, writtenOffAmount: 0, createdAt: new Date(new Date(NOW_ISO).getTime() - 2 * 86400_000).toISOString(),
           items: [item('Lavado por kilo', 4.5)] },
         { id: 'my-3', orderNumber: 'ORD-000390', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', canOrderAgain: true, status: 7, orderType: 0, step: 5, stepLabel: 'Entregado', total: 95, paidAmount: 95, writtenOffAmount: 0, createdAt: new Date(new Date(NOW_ISO).getTime() - 9 * 86400_000).toISOString(),
-          items: [item('Latte', 1, ['o-gr']), item('Croissant', 1, [], 'Croissant de mantequilla')] },
+          items: [item('Latte', 1, [uuid('option:o-gr')]), item('Croissant', 1, [], 'Croissant de mantequilla')] },
       ];
       // MyOrdersScope: 1 in progress, 2 before, 0 all.
       const finished = (order) => [6, 7, 99].includes(order.status);

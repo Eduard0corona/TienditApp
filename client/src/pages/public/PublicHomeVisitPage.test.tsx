@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { HomeVisitChargePolicy, QuoteTime, ResponseTime } from '../../api/genera
 import { publicMenuApi, type PublicBookingSlots, type PublicHomeVisit } from '../../api/publicMenuApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import { resetLinkUploads } from '../../hooks/useProblemPhotoUploads';
+import { savePostalCode } from '../../utils/postalCodePreference';
 import PublicHomeVisitPage from './PublicHomeVisitPage';
 
 vi.mock('../../api/publicMenuApi', () => ({
@@ -15,7 +16,7 @@ vi.mock('../../api/publicMenuApi', () => ({
     getHomeVisit: vi.fn(), getHomeVisitCoverage: vi.fn(), getHomeVisitSlots: vi.fn(), requestHomeVisit: vi.fn(), addAppointmentPhoto: vi.fn(),
   },
 }));
-vi.mock('../../api/accountApi', () => ({ accountApi: { getAddresses: vi.fn() } }));
+vi.mock('../../api/accountApi', () => ({ accountApi: { getAddresses: vi.fn(), getPostalCode: vi.fn() } }));
 
 const api = vi.mocked(publicMenuApi);
 const account = vi.mocked(accountApi);
@@ -392,6 +393,8 @@ describe('PublicHomeVisitPage', () => {
     account.getAddresses.mockResolvedValue([
       { id: 'casa', label: 'Casa', postalCode: '72000', addressLine: 'Calle 5 de Mayo 8', references: null },
     ] as never);
+    // The account's postal code never arrives: its address does not need it (Fase 31P).
+    account.getPostalCode.mockReturnValue(new Promise(() => undefined) as never);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const tree = (auth: Partial<AuthContextType>) => (
       <QueryClientProvider client={queryClient}>
@@ -416,6 +419,109 @@ describe('PublicHomeVisitPage', () => {
 
     expect(await screen.findByRole('radio', { name: /Casa/ })).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByLabelText('Código postal')).not.toBeInTheDocument();
+  });
+
+  it('starts with the postal code the account keeps once its session arrives, not with this device\'s meanwhile (Fase 31P)', async () => {
+    savePostalCode('72009');
+    account.getAddresses.mockResolvedValue([] as never);
+    account.getPostalCode.mockResolvedValue({ postalCode: '72000' } as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (auth: Partial<AuthContextType>) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={auth as AuthContextType}>
+          <MemoryRouter initialEntries={['/m/plomeria-hernandez/visita']}>
+            <Routes><Route path="/m/:slug/visita" element={<PublicHomeVisitPage />} /></Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree({ isAuthenticated: false, isLoading: true, user: null }));
+    // While the session is read, none: the page does not start with one it is about to replace.
+    expect(await screen.findByLabelText('Código postal')).toHaveValue('');
+
+    rerender(tree({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        id: 'u1', email: 'valeria@correo.mx', firstName: 'Valeria', lastName: 'Ruiz', fullName: 'Valeria Ruiz',
+        phoneNumber: '+525522107765', phoneNumberConfirmed: true, emailConfirmed: true, role: 'Customer', permissions: [],
+      } as unknown as AuthContextType['user'],
+    }));
+
+    await waitFor(() => expect(screen.getByLabelText('Código postal')).toHaveValue('72000'));
+    expect(account.getPostalCode).toHaveBeenCalled();
+    expect(api.getHomeVisitCoverage).not.toHaveBeenCalledWith('plomeria-hernandez', '72009', expect.anything());
+  });
+
+  it('takes the account\'s postal code over this device\'s when the customer signs in with the page open (Fase 31P)', async () => {
+    savePostalCode('72009');
+    account.getAddresses.mockResolvedValue([] as never);
+    account.getPostalCode.mockResolvedValue({ postalCode: '72000' } as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (auth: Partial<AuthContextType>) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={auth as AuthContextType}>
+          <MemoryRouter initialEntries={['/m/plomeria-hernandez/visita']}>
+            <Routes><Route path="/m/:slug/visita" element={<PublicHomeVisitPage />} /></Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree({ isAuthenticated: false, isLoading: false, user: null }));
+    // A visitor: the code this device gave in Explorar.
+    expect(await screen.findByLabelText('Código postal')).toHaveValue('72009');
+
+    rerender(tree({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        id: 'u1', email: 'valeria@correo.mx', firstName: 'Valeria', lastName: 'Ruiz', fullName: 'Valeria Ruiz',
+        phoneNumber: '+525522107765', phoneNumberConfirmed: true, emailConfirmed: true, role: 'Customer', permissions: [],
+      } as unknown as AuthContextType['user'],
+    }));
+
+    // Nothing typed: the account's replaces it.
+    await waitFor(() => expect(screen.getByLabelText('Código postal')).toHaveValue('72000'));
+  });
+
+  it.each(['Dirección', 'Referencias (opcional)'])('keeps the %s typed before the account\'s session and addresses arrive (Fase 31P)', async (field) => {
+    const user = userEvent.setup();
+    savePostalCode('72000');
+    account.getAddresses.mockResolvedValue([
+      { id: 'casa', label: 'Casa', postalCode: '72000', addressLine: 'Calle 5 de Mayo 8', references: null },
+    ] as never);
+    account.getPostalCode.mockResolvedValue({ postalCode: '72000' } as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (auth: Partial<AuthContextType>) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={auth as AuthContextType}>
+          <MemoryRouter initialEntries={['/m/plomeria-hernandez/visita']}>
+            <Routes><Route path="/m/:slug/visita" element={<PublicHomeVisitPage />} /></Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree({ isAuthenticated: false, isLoading: false, user: null }));
+    // The code this device gave in Explorar; the customer only types where.
+    expect(await screen.findByLabelText('Código postal')).toHaveValue('72000');
+    await user.click(await screen.findByRole('button', { name: '10:00 a. m.' }));
+    await user.click(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Tu visita' }));
+    await user.type(sheet.getByLabelText(field), 'Av. Juárez 123');
+
+    rerender(tree({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        id: 'u1', email: 'valeria@correo.mx', firstName: 'Valeria', lastName: 'Ruiz', fullName: 'Valeria Ruiz',
+        phoneNumber: '+525522107765', phoneNumberConfirmed: true, emailConfirmed: true, role: 'Customer', permissions: [],
+      } as unknown as AuthContextType['user'],
+    }));
+    await waitFor(() => expect(account.getAddresses).toHaveBeenCalled());
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(sheet.getByLabelText(field)).toHaveValue('Av. Juárez 123');
   });
 
   it('asks again when the business changed what the visit costs since the page showed it', async () => {

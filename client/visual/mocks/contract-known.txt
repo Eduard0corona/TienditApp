@@ -52,7 +52,6 @@ GET /api/v1/customers: $.items[].addresses falta
 GET /api/v1/dashboard/metrics: $.onlineCollected falta
 GET /api/v1/dashboard/metrics: $.platformCollected falta
 GET /api/v1/delivery-platforms/{channel}/prices: $.items[].optionGroups[].id debía ser un uuid
-GET /api/v1/delivery-platforms/{channel}/prices: $.items[].optionGroups[].options[].id debía ser un uuid
 GET /api/v1/delivery-zones: $[].id debía ser un uuid
 GET /api/v1/employees: $.items[].noticeEmails falta
 GET /api/v1/employees: $.items[].tenantUserId debía ser un uuid
@@ -98,7 +97,6 @@ GET /api/v1/me/orders/{id}: $.items[].productId debía ser un uuid
 GET /api/v1/me/orders/{id}: $.writtenOffAmount falta
 GET /api/v1/me/orders/{id}: el parámetro {id} de la ruta debía ser un uuid y la API contesta 404
 GET /api/v1/me/orders: $.items[].id debía ser un uuid
-GET /api/v1/me/orders: $.items[].items[].optionIds[] debía ser un uuid
 GET /api/v1/me/orders: $.items[].items[].productId debía ser un uuid
 GET /api/v1/messaging/campaigns: $.items[].id debía ser un uuid
 GET /api/v1/messaging/campaigns: $.items[].templateId debía ser un uuid
@@ -176,14 +174,11 @@ GET /api/v1/platform/plans: $[].id debía ser un uuid
 GET /api/v1/platform/tenants: $.items[].planId debía ser un uuid
 GET /api/v1/platform/tenants: $.items[].tenantId debía ser un uuid
 GET /api/v1/products/{id}: $.optionGroups[].id debía ser un uuid
-GET /api/v1/products/{id}: $.optionGroups[].options[].id debía ser un uuid
 GET /api/v1/products: $.items[].optionGroups[].id debía ser un uuid
-GET /api/v1/products: $.items[].optionGroups[].options[].id debía ser un uuid
 GET /api/v1/public/directory: $.products[].id debía ser un uuid
 GET /api/v1/public/directory: $.services[].id debía ser un uuid
 GET /api/v1/public/menu/{slug}: $.booksOnline falta
 GET /api/v1/public/menu/{slug}: $.categories[].products[].optionGroups[].id debía ser un uuid
-GET /api/v1/public/menu/{slug}: $.categories[].products[].optionGroups[].options[].id debía ser un uuid
 GET /api/v1/public/menu/{slug}: $.deliveryAvailable falta
 GET /api/v1/public/menu/{slug}: $.paysOnline falta
 GET /api/v1/quotes/settings: $.whatsAppTemplateId debía ser un uuid
@@ -220,7 +215,6 @@ POST /api/v1/customers/account/write-offs/{id}/reversal: el parámetro {id} de l
 POST /api/v1/customers/account/write-offs: $.recentWriteOffs[].id debía ser un uuid
 POST /api/v1/orders: $.id debía ser un uuid
 POST /api/v1/orders: $.items[].id debía ser un uuid
-POST /api/v1/orders: $.items[].options[].optionId debía ser un uuid
 POST /api/v1/orders: $.payments[].id debía ser un uuid
 POST /api/v1/orders: $.workAppointments falta
 POST /api/v1/orders: $.writeOffs falta

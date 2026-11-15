@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountApi, type MyOrder } from '../../api/accountApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { OrderAgainButton } from '../../components/account/OrderAgainButton';
 import PageTitle from '../../components/common/PageTitle';
 import ReviewButton from '../../components/reviews/ReviewButton';
 import ReviewDialog, { type ReviewedBusiness } from '../../components/reviews/ReviewDialog';
@@ -25,12 +26,14 @@ const toPayCents = (order: MyOrder) => toCents(order.total) - toCents(order.paid
 interface OrderCardProps {
   order: MyOrder;
   onOrderAgain: (order: MyOrder) => void;
+  /** The order whose store is opening, if any (Fase 31P). */
+  opening: string | null;
   /** Whether the account already rated its business, and how to open the dialog (Fase 24H). */
   reviewed: boolean;
   onReview: (business: ReviewedBusiness) => void;
 }
 
-function OrderCard({ order, onOrderAgain, reviewed, onReview }: OrderCardProps) {
+function OrderCard({ order, onOrderAgain, opening, reviewed, onReview }: OrderCardProps) {
   const cancelled = order.step === OrderTrackingStep.Cancelled;
   // An order received is what lets the account rate its business, as the API decides.
   const received = order.status === OrderStatus.Delivered || order.status === OrderStatus.Completed;
@@ -75,14 +78,7 @@ function OrderCard({ order, onOrderAgain, reviewed, onReview }: OrderCardProps) 
               Ver pedido
             </Link>
             {order.canOrderAgain && (
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                onClick={() => onOrderAgain(order)}
-                aria-label={`Pedir otra vez ${order.orderNumber} de ${order.businessName}`}
-              >
-                <i className="ri-restart-line me-1" aria-hidden="true"></i>Pedir otra vez
-              </button>
+              <OrderAgainButton order={order} opening={opening} onClick={() => onOrderAgain(order)} className="btn btn-sm btn-primary" />
             )}
           </span>
         </div>
@@ -99,7 +95,7 @@ function OrderCard({ order, onOrderAgain, reviewed, onReview }: OrderCardProps) 
 export default function MyOrders() {
   const [page, setPage] = useState(1);
   const [reviewing, setReviewing] = useState<ReviewedBusiness | null>(null);
-  const orderAgain = useOrderAgain();
+  const { orderAgain, opening } = useOrderAgain();
   const myReviews = useMyReviews();
   const queryClient = useQueryClient();
   // A change of an order arrives at once (Fase 31A); the polling below stays behind it.
@@ -159,7 +155,7 @@ export default function MyOrders() {
           <div className="row g-3">
             {inProgress.map((order) => (
               <div className="col-12 col-lg-6" key={order.id}>
-                <OrderCard order={order} onOrderAgain={orderAgain} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
+                <OrderCard order={order} onOrderAgain={(repeated) => void orderAgain(repeated)} opening={opening} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
               </div>
             ))}
           </div>
@@ -172,7 +168,7 @@ export default function MyOrders() {
           <div className="row g-3">
             {past.map((order) => (
               <div className="col-12 col-lg-6" key={order.id}>
-                <OrderCard order={order} onOrderAgain={orderAgain} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
+                <OrderCard order={order} onOrderAgain={(repeated) => void orderAgain(repeated)} opening={opening} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
               </div>
             ))}
           </div>

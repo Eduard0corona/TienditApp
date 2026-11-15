@@ -4,15 +4,17 @@ import { accountApi } from '../api/accountApi';
 import { markPostalCodePending, pendingPostalCode, readPostalCode, savePostalCode } from '../utils/postalCodePreference';
 import { useCustomerAccount } from './useCustomerAccount';
 
-const ACCOUNT_POSTAL_CODE_KEY = ['me', 'postal-code'];
+/** The account's postal code, as React Query keeps it (Explorar, the store and the visit page read the same). */
+export const ACCOUNT_POSTAL_CODE_KEY = ['me', 'postal-code'];
 
 /**
  * The postal code Explorar answers for («Entregar en…», Fase 24B), remembered on this device and, with a customer account,
  * in the account (Fase 31J), so it follows the customer to another device. Each visit the two agree: the account's is the
- * device's too, and one given only on this device goes to the account. A change goes to both; one the account could not
- * keep (offline) stays on the device, newer than the account's, and goes again on the next visit. One chosen before the
- * account's is read wins over that answer. When the customer leaves, the page shows what the device kept: nothing of
- * theirs.
+ * device's too, and one given only on this device goes to the account. A change goes to both, marked on the device until
+ * the account keeps it (Fase 31P: the store and the visit page, opened meanwhile, know the device's is newer); one the
+ * account could not keep (offline) stays marked, newer than the account's, and goes again on the next visit. One chosen
+ * before the account's is read wins over that answer. When the customer leaves, the page shows what the device kept:
+ * nothing of theirs.
  */
 export function usePostalCodePreference(): [string, (postalCode: string) => void] {
   const { customer, checking } = useCustomerAccount();
@@ -43,6 +45,9 @@ export function usePostalCodePreference(): [string, (postalCode: string) => void
     // One changed here that the account could not keep (offline) is newer than the account's: it goes again.
     if (pendingPostalCode() === postalCode && kept !== postalCode) {
       setToAccount({ code: postalCode });
+    } else if (kept === postalCode && pendingPostalCode() === postalCode) {
+      // The account has it: a mark left by a save whose answer never came (the page closed) says nothing anymore.
+      markPostalCodePending(null);
     } else if (kept && kept !== postalCode) {
       // The account's wins: a mark of another code (one the account got from somewhere else since) is old.
       markPostalCodePending(null);
@@ -55,14 +60,16 @@ export function usePostalCodePreference(): [string, (postalCode: string) => void
 
   useEffect(() => {
     if (toAccount === null) return;
-    const markedBefore = pendingPostalCode();
+    // Marked until the account keeps it: a page opened meanwhile takes this one over the account's older answer.
+    markPostalCodePending(toAccount.code);
     void accountApi.savePostalCode(toAccount.code)
       .then((saved) => {
         client.setQueryData(ACCOUNT_POSTAL_CODE_KEY, saved);
-        // The account has a code newer than any marked before (unless another failed meanwhile, newer than this one).
-        if (pendingPostalCode() === markedBefore) markPostalCodePending(null);
+        // Kept, unless a newer change was marked meanwhile.
+        if (pendingPostalCode() === toAccount.code) markPostalCodePending(null);
       })
-      .catch(() => markPostalCodePending(toAccount.code));
+      // Not kept (offline): it stays marked and goes again on the next visit.
+      .catch(() => undefined);
   }, [toAccount, client]);
 
   const change = (code: string) => {

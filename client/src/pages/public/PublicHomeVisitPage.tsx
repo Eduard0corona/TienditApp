@@ -22,7 +22,7 @@ import { describeAccountAddress } from '../../utils/accountAddresses';
 import { visitPolicyNote, visitPriceText } from '../../utils/businessCategories';
 import { ADDRESS_LINE_MAX_LENGTH, REFERENCES_MAX_LENGTH, normalizePostalCode } from '../../utils/homeDelivery';
 import { describeDuration, shortDayLabel, upperFirst } from '../../utils/onlineBooking';
-import { readPostalCode } from '../../utils/postalCodePreference';
+import { useRememberedPostalCode } from '../../hooks/useRememberedPostalCode';
 import { quoteTimeLabel, responseTimeLabel } from '../../utils/responseTime';
 import { isPostalCode } from '../../utils/postalCodes';
 import { localPhone } from '../../utils/phones';
@@ -95,28 +95,31 @@ export default function PublicHomeVisitPage() {
   const [address, setAddress] = useState<VisitAddress>({ postalCode: '', addressLine: '', references: '' });
   // The customer picked or typed where: the page no longer chooses for them.
   const [addressTouched, setAddressTouched] = useState(false);
+  // The postal code given in Explorar: with a customer account, the one the account keeps (Fase 31P).
+  const remembered = useRememberedPostalCode();
   const applyAddress = (saved: AccountAddress | null) => {
     setAddressChoice(saved?.id ?? null);
     setAddress(saved
       ? { postalCode: saved.postalCode, addressLine: saved.addressLine, references: saved.references ?? '' }
-      : { postalCode: readPostalCode(), addressLine: '', references: '' });
+      : { postalCode: remembered.postalCode, addressLine: '', references: '' });
   };
   const chooseAddress = (saved: AccountAddress | null) => {
     setAddressTouched(true);
     applyAddress(saved);
   };
   // Where it starts, for a visitor and again once the account's session and addresses arrive (the session is read after
-  // the page opens): the account's last address used, or the postal code given in Explorar; never over what was typed.
+  // the page opens): the account's last address used, or the postal code given in Explorar, once read (the account's is
+  // not waited for when its address is taken); never over what was typed.
   const [addressDefaultFor, setAddressDefaultFor] = useState<string | null>(null);
   const addressOwner = customer?.id ?? '';
-  if (addressDefaultFor !== addressOwner && (!customer || !addresses.isPending)) {
+  if (addressDefaultFor !== addressOwner && (!customer || !addresses.isPending) && (!!savedAddresses[0] || !remembered.pending)) {
     setAddressDefaultFor(addressOwner);
     if (!addressTouched) {
       if (savedAddresses[0]) {
         applyAddress(savedAddresses[0]);
-      } else {
-        const remembered = readPostalCode();
-        if (remembered) setAddress((current) => ({ ...current, postalCode: current.postalCode || remembered }));
+      } else if (remembered.postalCode) {
+        // The account's replaces the one this device gave before the session was read (nothing typed yet).
+        setAddress((current) => ({ ...current, postalCode: customer ? remembered.postalCode : current.postalCode || remembered.postalCode }));
       }
     }
   }
@@ -543,13 +546,19 @@ export default function PublicHomeVisitPage() {
                   <label className="form-label small mb-1" htmlFor={`${fieldId}-address`}>Dirección</label>
                   <input id={`${fieldId}-address`} className="form-control" required maxLength={ADDRESS_LINE_MAX_LENGTH}
                     autoComplete="street-address" placeholder="Calle, número y colonia"
-                    value={address.addressLine} onChange={(event) => setAddress((current) => ({ ...current, addressLine: event.target.value }))} />
+                    value={address.addressLine} onChange={(event) => {
+                      setAddressTouched(true);
+                      setAddress((current) => ({ ...current, addressLine: event.target.value }));
+                    }} />
                 </div>
                 <div className="col-12">
                   <label className="form-label small mb-1" htmlFor={`${fieldId}-references`}>Referencias (opcional)</label>
                   <input id={`${fieldId}-references`} className="form-control" maxLength={REFERENCES_MAX_LENGTH}
                     placeholder="Ej. portón verde, entre qué calles"
-                    value={address.references} onChange={(event) => setAddress((current) => ({ ...current, references: event.target.value }))} />
+                    value={address.references} onChange={(event) => {
+                      setAddressTouched(true);
+                      setAddress((current) => ({ ...current, references: event.target.value }));
+                    }} />
                 </div>
                 <div className="col-sm-6">
                   <label className="form-label small mb-1" htmlFor={`${fieldId}-name`}>Tu nombre</label>
