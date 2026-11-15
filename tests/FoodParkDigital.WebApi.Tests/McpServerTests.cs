@@ -181,6 +181,27 @@ public sealed class McpServerTests : IClassFixture<PublicPagesTests.PagesApi>
     }
 
     [Fact]
+    public async Task SearchBusinesses_ShouldPutTheDishesFirst_ThenTheServices_AndTheBusinessesLast()
+    {
+        _api.Sender.Directory = new PublicDirectoryDto
+        {
+            Businesses = new PaginatedList<PublicDirectoryBusinessDto>(
+                [new PublicDirectoryBusinessDto { Name = "Sushi Go", Slug = "sushi-go", Category = BusinessCategory.Food }], 1, 1, StoreTools.PageSize),
+            Products = [new PublicDirectoryProductDto { Id = Latte, Name = "Sushi", Price = 180m, BusinessName = "Sushi Go", BusinessSlug = "sushi-go" }],
+            Services = [new PublicDirectoryServiceDto { Id = Grande, Name = "Clase de sushi", Price = 400m, BusinessName = "Sushi Go", BusinessSlug = "sushi-go" }]
+        };
+
+        var text = await ToolAsync("buscar_negocios", new JsonObject { ["texto"] = "sushi" });
+
+        // What the customer asked for comes first: the assistant reads the dish before the list of businesses.
+        var products = text.IndexOf("## Productos que coinciden", StringComparison.Ordinal);
+        var services = text.IndexOf("## Servicios que coinciden", StringComparison.Ordinal);
+        var businesses = text.IndexOf("## Negocios", StringComparison.Ordinal);
+        Assert.True(products >= 0 && products < services && services < businesses, text);
+        Assert.Contains("## Negocios\n\nPágina 1 de 1 (1 negocio).\n\n### Sushi Go\n", text);
+    }
+
+    [Fact]
     public async Task SearchBusinesses_ShouldSayNothingWasFound_OnlyWhenNoBusinessProductOrServiceWas()
     {
         _api.Sender.Directory = new PublicDirectoryDto
