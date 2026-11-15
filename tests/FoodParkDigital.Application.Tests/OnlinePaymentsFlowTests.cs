@@ -16,6 +16,7 @@ using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
 using FoodParkDigital.Domain.OnlinePayments.Events;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -185,6 +186,29 @@ public partial class OnlinePaymentsFlowTests
         Assert.Null((await shop.ConfirmAsync(started.CheckoutId, payment.Id))!.TrackingToken);
         Assert.Null((await shop.ConfirmAsync(started.CheckoutId, payment.Id, other.ReturnKey))!.TrackingToken);
         Assert.Equal(order.OrderNumber, (await shop.ConfirmAsync(started.CheckoutId, payment.Id, "v1.no-es-una-llave"))!.OrderNumber);
+    }
+
+    [Fact]
+    public async Task PaidOrder_FromTheLinkAnAssistantPrepared_ShouldConfirmIt_WithTheOrderThePaymentPlaced()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var prepared = AssistantOrder.Prepare(shop.Tenant.Id, OrderTracking.NewToken(),
+            [new AccountCartLine(shop.Product.Id, [], 2, null)], null, 110m, "Claude", SalesTestFixture.Now.AddMinutes(-10));
+        shop.Context.AssistantOrders.Add(prepared);
+        await shop.Context.SaveChangesAsync();
+
+        // Going to pay sends nothing yet: the link waits for the payment, kept with the rest of what the customer asked.
+        var started = (await shop.CheckoutAsync(quantity: 2, assistantOrderToken: prepared.Token)).Value;
+        Assert.Equal(AssistantOrderStatus.Pending, (await shop.Context.AssistantOrders.AsNoTracking().SingleAsync()).Status);
+        var payment = shop.Gateway.Approve(started.CheckoutId, 110m, SalesTestFixture.Now.AddMinutes(5));
+
+        Assert.Equal(OnlinePaymentApplication.Placed, (await shop.NotifyAsync(payment.Id)).Value);
+
+        var order = await shop.Context.Orders.SingleAsync();
+        var confirmed = await shop.Context.AssistantOrders.AsNoTracking().SingleAsync();
+        Assert.Equal((AssistantOrderStatus.Confirmed, (Guid?)order.Id, (DateTimeOffset?)SalesTestFixture.Now),
+            (confirmed.Status, confirmed.OrderId, confirmed.ConfirmedAt));
+        Assert.Empty(confirmed.Lines);
     }
 
     [Fact]
@@ -807,7 +831,7 @@ public partial class OnlinePaymentsFlowTests
                 .Handle(new GetPublicMenuQuery(Slug), CancellationToken.None)!;
 
         public Task<Common.Models.Result<OnlineCheckoutStartedDto>> CheckoutAsync(
-            int quantity = 1, decimal? expectedTotal = null, string phone = "5512345678")
+            int quantity = 1, decimal? expectedTotal = null, string phone = "5512345678", string? assistantOrderToken = null)
             => new CreateOnlineCheckoutCommandHandler(
                     Context, Fixture.TenantService, Fixture.CurrentUser, new PhoneNormalizationService(), Clock, Gateway, Protector,
                     new Links(), NullLogger<CreateOnlineCheckoutCommandHandler>.Instance)
@@ -817,7 +841,8 @@ public partial class OnlinePaymentsFlowTests
                     CustomerName = "Ana",
                     CustomerPhone = phone,
                     Items = [new CreateOrderItemDto { ProductId = Product.Id, Quantity = quantity }],
-                    ExpectedTotal = expectedTotal
+                    ExpectedTotal = expectedTotal,
+                    AssistantOrderToken = assistantOrderToken
                 }, CancellationToken.None);
 
         public Task<OnlineCheckoutStatusDto?> ConfirmAsync(Guid checkoutId, string? paymentId, string? returnKey = null)
