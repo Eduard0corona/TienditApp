@@ -46,3 +46,7 @@ En la 24D quedó como la segunda parte, «buscadores», sin decisiones del dueñ
   - Una tienda recién sacada de Explorar sigue en el índice del buscador hasta que vuelva a leerla y vea el `noindex`.
   - Configurar `AppUrl` en Azure evita que la dirección canónica dependa del nombre con que llegó la petición.
 - **Reversibilidad:** no hay migración. Volver a la versión anterior regresa al `index.html` sin encabezado y quita `robots.txt` y `sitemap.xml`.
+
+## Actualización 2026-11-15 (Fase 32A)
+
+La página de una tienda también apunta a su menú en texto para un asistente de IA ([ADR 0096](0096-orders-from-ai-assistants.md)): un `<link rel="alternate" type="text/markdown">` a `/m/{slug}/menu.md` en su encabezado y un `<noscript>` primero en su cuerpo con su nombre, su línea y ese enlace, escapados como todo lo que escribe el negocio. `/llms.txt` dice cómo usar TienditApp. El menú en texto lleva `X-Robots-Tag: noindex`: los buscadores siguen listando la página de la tienda.

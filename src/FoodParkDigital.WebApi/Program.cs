@@ -331,6 +331,8 @@ app.MapHub<QuoteHub>("/hubs/quotes", options => options.CloseOnAuthenticationExp
 app.MapHub<MyOrdersHub>("/hubs/my-orders", options => options.CloseOnAuthenticationExpiration = true);
 // The store pages, robots.txt and sitemap.xml for search engines and link previews (Fase 24D-2, ADR 0027).
 app.MapPublicPages();
+// What an AI assistant reads to help a customer order: /llms.txt and each store's menu in Markdown (Fase 32A, ADR 0096).
+app.MapAgentPages();
 app.MapClientFallback();
 
 if (usesEphemeralJwtSecret)

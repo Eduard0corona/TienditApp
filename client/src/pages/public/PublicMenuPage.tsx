@@ -55,6 +55,7 @@ import { bookingPath } from '../../utils/onlineBooking';
 import { featuredProducts, mapsUrl, optionGroupsOf, searchMenu, storePageTitle } from '../../utils/storeMenu';
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
+import { ORDER_LINK_PARAMETER, orderLinkMessage, orderLinkOf, type OrderLink } from '../../utils/orderLink';
 import { newUuid } from '../../utils/uuid';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 import { goToExternalPage } from '../../utils/externalNavigation';
@@ -126,6 +127,13 @@ export default function PublicMenuPage() {
   const tableLabel = searchParams.get('mesa')?.trim().slice(0, 50) || '';
   // A product found in Explorar opens on its sheet (Fase 24F): ?producto={id}.
   const linkedProductId = searchParams.get('producto');
+  // A link that fills the cart (Fase 32A, ADR 0096), built by an AI assistant from the store's menu in text: read as the
+  // page opens, used once its menu is read, and then gone from the address (reloading does not fill the cart again).
+  const [orderLink] = useState<{ slug: string; link: OrderLink } | null>(() => {
+    const link = orderLinkOf(searchParams.getAll(ORDER_LINK_PARAMETER));
+    return link ? { slug, link } : null;
+  });
+  const [orderLinkRead, setOrderLinkRead] = useState(false);
   const atTable = tableLabel !== '';
   const menu = useQuery({
     queryKey: ['public-menu', slug, tableLabel],
@@ -210,6 +218,16 @@ export default function PublicMenuPage() {
   useEffect(() => {
     if (linkedNotOnMenu) leaveLinkedProduct();
   }, [linkedNotOnMenu, leaveLinkedProduct]);
+  // Once read, the link's cart is gone from the address: reloading or going back does not fill the cart again.
+  useEffect(() => {
+    if (!orderLinkRead) return;
+    setSearchParams((current) => {
+      if (!current.has(ORDER_LINK_PARAMETER)) return current;
+      const next = new URLSearchParams(current);
+      next.delete(ORDER_LINK_PARAMETER);
+      return next;
+    }, { replace: true });
+  }, [orderLinkRead, setSearchParams]);
   // The saved address chosen; null while another one is written; undefined until the cart first goes to an address.
   const [addressChoice, setAddressChoice] = useState<string | null | undefined>(undefined);
   const [keepAddress, setKeepAddress] = useState(true);
@@ -274,21 +292,41 @@ export default function PublicMenuPage() {
     const accountRead = !!customer && accountCarts.isSuccess;
     const kept = accountRead ? accountCarts.data?.find((cart) => cart.slug === slug) ?? null : null;
     const fromAccount = kept ? fromAccountCart(kept) : null;
-    const saved = newerCart(readCart(slug), fromAccount);
-    const restored = saved && saved.lines.length > 0
-      ? restoreLines(saved.lines, data.categories.flatMap((item) => item.products))
-      : null;
+    // The cart of a link (Fase 32A) takes the place of this device's and the account's: it is the order the customer just
+    // put together. Only where the store takes orders, never at a table; one with no product leaves the cart as it was.
+    const products = data.categories.flatMap((item) => item.products);
+    const link = orderLink?.slug === slug && !orderLinkRead ? orderLink.link : null;
+    if (link) setOrderLinkRead(true);
+    // A link none of whose products the menu can take now leaves the cart the customer had.
+    const linkRestored = link && data.acceptsOrders && !atTable && link.lines.length > 0 ? restoreLines(link.lines, products) : null;
+    const fromLink = link && linkRestored && linkRestored.lines.length > 0 ? link : null;
+    const saved = fromLink
+      ? { businessName: data.businessName, savedAt: new Date().toISOString(), lines: fromLink.lines }
+      : newerCart(readCart(slug), fromAccount);
+    const restored = fromLink ? linkRestored : saved && saved.lines.length > 0 ? restoreLines(saved.lines, products) : null;
     restoredCart.current = saved && restored
       ? {
           signature: cartSignature({ lines: savedLinesOf(restored.lines) }),
-          kept: { lines: saved.lines, reorderOf: saved.reorderOf, skipped: saved.skipped },
+          // Of a link, only what the menu has: a product it does not know is not kept for later.
+          kept: fromLink
+            ? { lines: savedLinesOf(restored.lines) }
+            : { lines: saved.lines, reorderOf: saved.reorderOf, skipped: saved.skipped },
           savedAt: new Date(saved.savedAt),
         }
       : null;
     if (saved && restored) {
       // The menu shows while the session and the account's carts are read: what was added meanwhile stays, with it.
       setLines((added) => joinLines(restored.lines, added));
-      setRestoredNotice(restoredMessage(restored.lines.length, restored.dropped, saved.skipped ?? 0, saved.reorderOf !== undefined));
+      setRestoredNotice(fromLink
+        ? orderLinkMessage(restored.lines.length, restored.dropped + fromLink.invalid)
+        : restoredMessage(restored.lines.length, restored.dropped, saved.skipped ?? 0, saved.reorderOf !== undefined));
+      // The order of the link, open to review and send.
+      if (fromLink && restored.lines.length > 0) setCartOpen(true);
+    }
+    if (link && !fromLink) {
+      setRestoredNotice(!data.acceptsOrders
+        ? 'Este negocio no recibe pedidos en línea: el enlace no puede llenar tu pedido. Mira su menú.'
+        : atTable ? '' : orderLinkMessage(0, link.invalid + (linkRestored?.dropped ?? 0)));
     }
     // What the account has: the same cart is not sent again. When it could not be read, what this device restores: only
     // a change made here goes then, never this device's cart over a newer one of the account.
