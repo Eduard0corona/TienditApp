@@ -226,6 +226,19 @@ public class AppointmentsController : ControllerBase
     }
 
     /// <summary>
+    /// Gives back the deposit the appointment was booked with online (Fase 31O, ADR 0095): one still held (the whole appointment
+    /// is charged then) or one the business kept. It goes back through the Mercado Pago account that took it.
+    /// </summary>
+    [HttpPost("{id:guid}/deposit/return")]
+    public async Task<ActionResult<AppointmentDto>> ReturnDeposit(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ReturnAppointmentDepositCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Takes back the mark of a request declined as fake (Fase 29V): it stays declined, now, its customer hears it, it counts
     /// again and its phone may request again. It cannot be marked again.
     /// </summary>

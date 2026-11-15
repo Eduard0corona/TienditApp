@@ -15,6 +15,21 @@ const ONLINE = 1;
 
 /** The link of an appointment booked online: 43 characters, as the API gives it. */
 export const APPOINTMENT_LINK = 'Zc8Lm2Qv7RtW4yXk9PbN1sDf5GhJ3aEu6Ki0Oo-_CtA';
+/** The link of the cata booked with its deposit paid (Fase 31O). */
+export const DEPOSIT_APPOINTMENT_LINK = 'Dp4Lm2Qv7RtW4yXk9PbN1sDf5GhJ3aEu6Ki0Oo-_AnT';
+/** The payment of that deposit, back from Mercado Pago with the key this device kept; and one that came too late. */
+export const DEPOSIT_CHECKOUT_ID = '7a3e9c51-4b2d-4f8a-9e6c-1d5b8f2a0c47';
+export const DEPOSIT_RETURN_KEY = 'llave-del-regreso-de-la-cata';
+export const LATE_DEPOSIT_CHECKOUT_ID = '3c8f1a92-6e4b-4d7c-a1f5-9b2e0d6c8a14';
+/** The cata of Monday that María Fernanda booked paying its deposit, to charge in Vender. */
+export const DEPOSIT_APPOINTMENT_ID = uuid('appt:anticipo-mafer');
+
+// AppointmentDepositStatus, OnlineCheckoutStatus and OnlinePaymentRefundStatus as the contract numbers them (Fase 31O).
+const DEPOSIT_HELD = 1;
+const DEPOSIT_RETURNED = 3;
+const CHECKOUT_PLACED = 1;
+const CHECKOUT_NOT_PLACED = 3;
+const REFUND_COMPLETED = 1;
 
 const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -65,6 +80,14 @@ interface BookingService {
   price: number;
   durationMinutes: number;
   imageUrl: null;
+}
+
+/** The deposit of a price at the share the scene asks (BookingDeposits.For): none without one, nor under $10. */
+function depositOf(data: DemoData, price: number): number | null {
+  const percent = data.bookingDepositPercent as number | undefined;
+  if (!percent) return null;
+  const amount = Math.round(price * percent) / 100;
+  return amount < 10 ? null : amount;
 }
 
 /** The services Café La Esquina books online (PublicBookingServiceDto): its catas, talleres and the molino. */
@@ -128,13 +151,29 @@ function week(data: DemoData, serviceId: string, from: string | null, staffId: s
 }
 
 /** The appointments of María Fernanda's account and of the guest's link (CustomerAppointmentDto). */
-function customerAppointment(id: string, name: string, date: string, minutes: number, duration: number, status: number, statusLabel: string, canCancel: boolean) {
+function customerAppointment(
+  id: string, name: string, date: string, minutes: number, duration: number, status: number, statusLabel: string, canCancel: boolean,
+  deposit: { depositAmount: number; depositStatus: number; cancelReturnsDeposit: boolean } | null = null,
+) {
   return {
     id, serviceName: name, startAt: instant(date, minutes), endAt: instant(date, minutes + duration), dateLabel: dateLabel(date),
     timeLabel: timeLabel(minutes), status, statusLabel, canCancel, businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina',
     businessContactPhone: '5512345678', address: 'Av. Álvaro Obregón 120, Roma Norte, 06700 Ciudad de México, CDMX',
+    cancelReturnsDeposit: false, ...deposit,
   };
 }
+
+/** The cata of Monday at 4:00 p. m. with its deposit of $105 held: cancelled today, more than a day before, it goes back. */
+const DEPOSIT_CATA = () => customerAppointment('mc-5', 'Cata de café de especialidad', '2026-10-05', 16 * 60, 90, REQUESTED, 'Por confirmar', true,
+  { depositAmount: 105, depositStatus: DEPOSIT_HELD, cancelReturnsDeposit: true });
+
+/** The receipt of that cata (PublicAppointmentReceiptDto), as the return page shows it with this device's key. */
+const DEPOSIT_RECEIPT = {
+  serviceName: 'Cata de café de especialidad', startAt: instant('2026-10-05', 16 * 60), endAt: instant('2026-10-05', 17 * 60 + 30),
+  dateLabel: dateLabel('2026-10-05'), timeLabel: timeLabel(16 * 60), businessName: 'Café La Esquina', contactPhone: '5512345678',
+  address: 'Av. Álvaro Obregón 120, Roma Norte, 06700 Ciudad de México, CDMX', staffName: null, linkedToAccount: false,
+  trackingToken: DEPOSIT_APPOINTMENT_LINK,
+};
 
 function myAppointments(scope: string | null) {
   return scope === '1'
@@ -158,10 +197,11 @@ const bookingRoutes: ExtraRoutes = (data, helpers) => [
     ? helpers.ok({
       businessName: data.tenant.name, slug: data.tenant.slug, logoUrl: null, contactPhone: data.tenant.contactPhone,
       theme: data.tenant.theme, address: 'Av. Álvaro Obregón 120, Roma Norte, 06700 Ciudad de México, CDMX',
-      pricesIncludeTax: true, daysAhead: 30,
+      pricesIncludeTax: true, daysAhead: 30, depositCancelHours: 24,
       services: services(data).map((service) => ({
         ...service,
         staffIds: people(data).filter((person) => offers(person, service.name)).map((person) => person.id),
+        depositAmount: depositOf(data, service.price),
       })),
       staff: people(data).map(({ id, name }) => ({ id, name })),
     })
@@ -183,9 +223,22 @@ const bookingRoutes: ExtraRoutes = (data, helpers) => [
       staffName: people(data).find((person) => person.id === body?.staffId)?.name ?? people(data)[0]?.name ?? null,
     });
   }],
-  ['POST', /^\/public\/appointments\/tracking$/, (_match, _query, body: { token?: string }) => (body?.token === APPOINTMENT_LINK
-    ? helpers.ok(customerAppointment('mc-1', 'Cata de café de especialidad', '2026-10-06', 17 * 60, 90, REQUESTED, 'Por confirmar', true))
-    : problem(404, 'No encontramos esa cita. El enlace pudo haber vencido.'))],
+  ['POST', /^\/public\/appointments\/tracking$/, (_match, _query, body: { token?: string }) => {
+    if (body?.token === APPOINTMENT_LINK)
+      return helpers.ok(customerAppointment('mc-1', 'Cata de café de especialidad', '2026-10-06', 17 * 60, 90, REQUESTED, 'Por confirmar', true));
+    return body?.token === DEPOSIT_APPOINTMENT_LINK ? helpers.ok(DEPOSIT_CATA()) : problem(404, 'No encontramos esa cita. El enlace pudo haber vencido.');
+  }],
+  // The return of the deposit's payment (Fase 31O): the cata booked, with its link for the key this device kept; or the
+  // payment that came when the time was already taken, and went back whole.
+  ['POST', /^\/public\/menu\/([^/]+)\/appointments\/deposit\/([^/]+)\/confirm$/, (match, _query, body: { returnKey?: string | null }) => {
+    const answer = { amount: 105, expiresAt: utc(TODAY, 13 * 60 + 50), businessName: data.tenant.name, contactPhone: '5512345678', checkoutUrl: null };
+    if (match[2] === DEPOSIT_CHECKOUT_ID) {
+      return helpers.ok({ ...answer, status: CHECKOUT_PLACED, failureMessage: null, ...(body?.returnKey === DEPOSIT_RETURN_KEY ? { receipt: DEPOSIT_RECEIPT } : {}) });
+    }
+    return match[2] === LATE_DEPOSIT_CHECKOUT_ID
+      ? helpers.ok({ ...answer, status: CHECKOUT_NOT_PLACED, failureMessage: 'Esa hora ya no está libre. Elige otra.', refundStatus: REFUND_COMPLETED })
+      : problem(404, 'No encontramos ese pago.');
+  }],
   ['POST', /^\/public\/appointments\/tracking\/cancel$/, () => helpers.ok(
     customerAppointment('mc-1', 'Cata de café de especialidad', '2026-10-06', 17 * 60, 90, CANCELLED, 'La cancelaste', false))],
   ['GET', /^\/me\/appointments$/, (_match, query) => {
@@ -253,9 +306,39 @@ function withRequestFromTeam(data: DemoData) {
   jorge.fromTeam = true;
 }
 
-/** Online booking is on and customers book: the owner's card links the booking page. */
+/** Online booking is on and customers book: the owner's card links the booking page. Mercado Pago is not connected. */
 function bookingOn(data: DemoData) {
-  data.onlineBooking = { enabled: true, capacity: 2, maxCapacity: 20, booksOnline: true, missing: [], slug: data.tenant.slug, staffCount: 0 };
+  data.onlineBooking = {
+    enabled: true, capacity: 2, maxCapacity: 20, booksOnline: true, missing: [], slug: data.tenant.slug, staffCount: 0,
+    depositPercent: null, depositAvailable: false, depositCancelHours: 24,
+  };
+}
+
+/** Fase 31O (ADR 0095): with its Mercado Pago account connected, Café La Esquina asks 30 % of the price to book online. */
+function bookingWithDeposit(data: DemoData) {
+  bookingOn(data);
+  Object.assign(data.onlineBooking, { depositPercent: 30, depositAvailable: true });
+  data.bookingDepositPercent = 30;
+}
+
+/**
+ * The agenda with the deposits (Fase 31O): María Fernanda's request came with its deposit of $105 paid, Rodrigo cancelled
+ * his cata and his went back, and Valeria's cata of Monday, already confirmed, waits for its sale with hers.
+ */
+function agendaWithDeposits(data: DemoData) {
+  withRequests(data);
+  const deposits: Record<string, number> = { [uuid('appt:en-linea-mafer')]: DEPOSIT_HELD, [uuid('appt:en-linea-rodrigo')]: DEPOSIT_RETURNED };
+  for (const appointment of data.appointments as { id: string; depositAmount?: number; depositStatus?: number }[]) {
+    if (appointment.id in deposits) Object.assign(appointment, { depositAmount: 105, depositStatus: deposits[appointment.id] });
+  }
+  const cata = data.products.find((product: { name: string }) => product.name === 'Cata de café de especialidad');
+  data.appointments.push({
+    id: DEPOSIT_APPOINTMENT_ID, customerName: 'Valeria Ruiz', customerPhone: '55 6620 1408', serviceName: cata.name,
+    serviceProductId: cata.id, staffName: null, staffUserId: null, startAt: utc('2026-10-05', 16 * 60), endAt: utc('2026-10-05', 17 * 60 + 30),
+    status: SCHEDULED, notes: null, visit: null, saleOrderId: null, saleCancelled: false, channel: ONLINE, cancelledByCustomer: false,
+    depositAmount: 105, depositStatus: DEPOSIT_HELD,
+  });
+  data.appointments.sort((a: { startAt: string }, b: { startAt: string }) => b.startAt.localeCompare(a.startAt));
 }
 
 /** The booking page of Café La Esquina says who attends (Fase 24J): Carlos and Paola. */
@@ -291,5 +374,7 @@ export const AGENDA_SOLICITUDES = asOption(withRequests);
 export const AGENDA_SOLICITUDES_A_TIEMPO = asOption(withRequestsInTime);
 export const AGENDA_SOLICITUD_DEL_EQUIPO = asOption(withRequestFromTeam);
 export const CITAS_PRENDIDAS = asOption(bookingOn);
+export const CITAS_CON_ANTICIPO = asOption(bookingWithDeposit);
+export const AGENDA_ANTICIPOS = asOption(agendaWithDeposits);
 export const CITAS_CON_PERSONAS = asOption(withPeople);
 export const QUIEN_ATIENDE = asOption(staffSet);

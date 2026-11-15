@@ -45,7 +45,7 @@ public class AuthorizationBehaviorTests
         Assert.Equal(
         [
             "AcceptInvitationCommand", "AddVisitProblemPhotoCommand", "ApplyOnlinePaymentCommand", "ApplyOnlinePaymentNotificationCommand", "ApplyWhatsAppStatusesCommand", "CancelPublicAppointmentCommand", "CancelPublicOrderCommand",
-            "ChangeUnconfirmedPhoneCommand", "CheckInvoiceCancellationsCommand", "ConfirmEmailCommand", "ConfirmOnlineCheckoutCommand", "ConfirmPhoneCommand", "ConfirmQuoteDepositCommand",
+            "ChangeUnconfirmedPhoneCommand", "CheckInvoiceCancellationsCommand", "ConfirmAppointmentDepositCommand", "ConfirmEmailCommand", "ConfirmOnlineCheckoutCommand", "ConfirmPhoneCommand", "ConfirmQuoteDepositCommand",
             "CreateOnlineCheckoutCommand",
             "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicAppointmentQuery", "GetPublicBookingQuery",
             "GetPublicBookingSlotsQuery", "GetPublicCfdiFileQuery", "GetPublicCfdiQuery", "GetPublicDeliveryQuoteQuery",
@@ -61,7 +61,7 @@ public class AuthorizationBehaviorTests
             "RequestPublicAppointmentCommand", "RequestPublicHomeVisitCommand", "RequestSelfInvoiceCommand", "ResendConfirmationEmailCommand",
             "ResendPhoneConfirmationCommand", "ResendSelfInvoiceCommand", "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand",
             "ReviewOnlinePaymentsCommand", "SelfInvoiceCommand",
-            "StampPendingInvoicesCommand", "StartQuoteDepositCommand", "SweepOnlinePaymentsCommand",
+            "StampPendingInvoicesCommand", "StartAppointmentDepositCommand", "StartQuoteDepositCommand", "SweepOnlinePaymentsCommand",
             "VerifyWhatsAppWebhookTokenQuery"
         ], anonymous);
     }

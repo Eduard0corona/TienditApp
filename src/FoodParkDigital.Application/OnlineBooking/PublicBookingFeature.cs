@@ -9,6 +9,7 @@ using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.Hours;
@@ -52,6 +53,11 @@ public class PublicBookingDto
     /// it answers within a day. Null otherwise.
     /// </summary>
     public ResponseTime? ResponseTime { get; set; }
+    /// <summary>
+    /// Hours before an agendada appointment its customer may cancel and get the deposit back (Fase 31O, ADR 0095); later, the
+    /// business keeps it. Said with every service that asks one.
+    /// </summary>
+    public int DepositCancelHours { get; set; } = (int)BookingDeposits.FreeCancellationNotice.TotalHours;
 }
 
 /// <summary>
@@ -80,6 +86,11 @@ public class PublicBookingServiceDto
     public string? ImageUrl { get; set; }
     /// <summary>The people who do it, of <see cref="PublicBookingDto.Staff"/>; empty when customers do not choose.</summary>
     public List<Guid> StaffIds { get; set; } = [];
+    /// <summary>
+    /// What its customer pays online to book it (Fase 31O, ADR 0095): the business's share of its price; null when it asks
+    /// none (or one under $10), or cannot collect it now. With one, it is booked by paying it.
+    /// </summary>
+    public decimal? DepositAmount { get; set; }
 }
 
 /// <summary>The free times of a service, one week at a time, with the words the customer reads.</summary>
@@ -150,19 +161,22 @@ public class GetPublicBookingQueryHandler : IRequestHandler<GetPublicBookingQuer
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly PublicDirectoryCache _directory;
     private readonly ILogger<GetPublicBookingQueryHandler> _logger;
+    private readonly IOnlinePaymentGateway? _gateway;
 
     public GetPublicBookingQueryHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         IDateTimeProvider dateTimeProvider,
         PublicDirectoryCache directory,
-        ILogger<GetPublicBookingQueryHandler> logger)
+        ILogger<GetPublicBookingQueryHandler> logger,
+        IOnlinePaymentGateway? gateway = null)
     {
         _context = context;
         _tenantService = tenantService;
         _dateTimeProvider = dateTimeProvider;
         _directory = directory;
         _logger = logger;
+        _gateway = gateway;
     }
 
     public async Task<PublicBookingDto?> Handle(GetPublicBookingQuery request, CancellationToken cancellationToken)
@@ -187,6 +201,9 @@ public class GetPublicBookingQueryHandler : IRequestHandler<GetPublicBookingQuer
         }
 
         var tenant = business.Tenant;
+        // Fase 31O (ADR 0095): the share of each service's price its customer pays to book it, when the business asks one and
+        // can collect it now.
+        var depositPercent = await BookingDepositOffer.PercentAsync(_context, _gateway, business, _dateTimeProvider.UtcNow, cancellationToken);
         return new PublicBookingDto
         {
             BusinessName = tenant.Name,
@@ -205,7 +222,8 @@ public class GetPublicBookingQueryHandler : IRequestHandler<GetPublicBookingQuer
                 Price = s.PriceAmount,
                 DurationMinutes = (int)OnlineBookingRules.ServiceDuration(s.PreparationTimeMinutes).TotalMinutes,
                 ImageUrl = ProductImageUrlsDto.FromBaseUrl(s.ImageUrl)?.Medium,
-                StaffIds = staff.Where(person => person.Offers(s.Id)).Select(person => person.Id).ToList()
+                StaffIds = staff.Where(person => person.Offers(s.Id)).Select(person => person.Id).ToList(),
+                DepositAmount = BookingDeposits.For(depositPercent, s.PriceAmount)
             }).ToList(),
             Staff = staff.Select(PublicBookingStaffDto.From).ToList(),
             ResponseTime = await PublicResponseTime.ShownAsync(
@@ -411,6 +429,7 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
     private readonly IAppointmentBookingLock _bookingLock;
     private readonly AppointmentNotices _notices;
     private readonly IOutgoingMessageSignal? _signal;
+    private readonly IOnlinePaymentGateway? _gateway;
 
     public RequestPublicAppointmentCommandHandler(
         IApplicationDbContext context,
@@ -420,7 +439,8 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         IDateTimeProvider clock,
         IAppointmentBookingLock bookingLock,
         AppointmentNotices notices,
-        IOutgoingMessageSignal? signal = null)
+        IOutgoingMessageSignal? signal = null,
+        IOnlinePaymentGateway? gateway = null)
     {
         _context = context;
         _tenantService = tenantService;
@@ -430,6 +450,7 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         _bookingLock = bookingLock;
         _notices = notices;
         _signal = signal;
+        _gateway = gateway;
     }
 
     public async Task<Result<PublicAppointmentReceiptDto>> Handle(RequestPublicAppointmentCommand request, CancellationToken cancellationToken)
@@ -454,18 +475,14 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
 
         var tenantId = business.Tenant.Id;
         var now = _clock.UtcNow;
+        // Fase 31O (ADR 0095): a service that asks a deposit is booked by paying it (StartAppointmentDepositCommand).
+        if (await BookingDepositOffer.ForServiceAsync(_context, _gateway, business, service, now, cancellationToken) is not null)
+            return Result.Failure<PublicAppointmentReceiptDto>(BookingDepositOffer.DepositRequiredMessage);
         // Until the business decides them, a phone cannot keep piling up requests.
         if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, account?.Id, now, cancellationToken) is { } refused)
             return Result.Failure<PublicAppointmentReceiptDto>(refused);
 
-        var settings = business.Settings;
-        var zone = TenantDateTimeResolver.Resolve(settings.TimeZone);
-        var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(now, settings.TimeZone));
-        var lastDay = today.AddDays(OnlineBookingRules.DaysAhead - 1);
-        var startAt = request.StartAt;
-        // The last day offered may end after midnight, in the day after it.
-        var startDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(startAt, zone).DateTime);
-        if (startDate > lastDay.AddDays(1))
+        if (PublicAppointmentPlacement.TooFar(business.Settings, request.StartAt, now))
             return Result.Failure<PublicAppointmentReceiptDto>(TooFarMessage);
 
         // Fase 29M (ADR 0067): one from the business's own team does not count in Explorar. Read before the lock below: it
@@ -480,57 +497,17 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
             return answered;
         if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, account?.Id, now, cancellationToken) is { } refusedNow)
             return Result.Failure<PublicAppointmentReceiptDto>(refusedNow);
-        var hours = await BusinessHours.ReadAsync(_context, tenantId, settings.OpeningHours, settings.TimeZone, now, cancellationToken);
-        var endAt = startAt + service.Duration;
-        var earliest = now.AddMinutes(OnlineBookingRules.MinNoticeMinutes);
-        var takenMessage = startDate > lastDay ? TooFarMessage : TimeTakenMessage;
-        var staff = await OnlineBookingCalendar.StaffAsync(_context, tenantId, cancellationToken);
-        BookableStaff? attends = null;
-        if (staff.Count > 0)
-        {
-            // Who attends it: the person the customer chose, free for all of it, or whoever is free.
-            var forService = staff.Where(person => person.Offers(service.Id)).ToList();
-            if (forService.Count == 0)
-                return Result.Failure<PublicAppointmentReceiptDto>(ServiceNotBookedMessage);
-            if (request.StaffId is { } chosenId && forService.All(person => person.Id != chosenId))
-                return Result.Failure<PublicAppointmentReceiptDto>(StaffGoneMessage);
-            var bookings = await OnlineBookingCalendar.BookingsAsync(_context, tenantId, startAt.AddDays(-1), endAt.AddDays(1), cancellationToken);
-            var (calendars, unassigned) = OnlineBookingCalendar.Calendars(forService, bookings, settings.HomeVisitTravelMinutes);
-            var free = StaffSlots.FreeAt(hours?.Schedule, zone, startAt, service.Duration, calendars, unassigned, earliest, lastDay);
-            if (free.Count == 0 || (request.StaffId is { } chosen && !free.Contains(chosen)))
-                return Result.Failure<PublicAppointmentReceiptDto>(takenMessage);
-            var attendsId = request.StaffId ?? StaffSlots.Choose(
-                free,
-                forService.ToDictionary(person => person.Id, person => bookings.Count(booking => booking.StaffUserId == person.UserId
-                    && DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(booking.StartAt, zone).DateTime) == startDate)),
-                forService.ToDictionary(person => person.Id, person => person.Name));
-            attends = forService.Single(person => person.Id == attendsId);
-        }
-        else
-        {
-            if (request.StaffId is not null)
-                return Result.Failure<PublicAppointmentReceiptDto>(StaffGoneMessage);
-            var booked = await OnlineBookingCalendar.BookedAsync(
-                _context, tenantId, startAt.AddDays(-1), endAt.AddDays(1), settings.HomeVisitTravelMinutes, cancellationToken);
-            if (!BookingSlots.IsFree(hours?.Schedule, zone, startAt, service.Duration, booked, settings.OnlineBookingCapacity, earliest, lastDay))
-                return Result.Failure<PublicAppointmentReceiptDto>(takenMessage);
-        }
-
-        var appointment = Appointment.RequestOnline(
-            tenantId,
-            request.CustomerName.Trim(),
-            phone,
-            service.Id,
-            service.Name,
-            startAt,
-            endAt,
-            request.Notes,
+        var (appointment, attends, refusal) = await PublicAppointmentPlacement.PlaceAsync(
+            _context,
+            business,
+            service,
+            new PublicAppointmentAsk(service.Id, request.StartAt, request.CustomerName.Trim(), phone, request.Notes, request.IdempotencyKey, request.StaffId, fromTeam),
             account?.Id,
-            request.IdempotencyKey,
-            OrderTracking.NewToken(),
-            attends?.UserId,
-            attends?.FullName,
-            fromTeam);
+            deposit: null,
+            now,
+            cancellationToken);
+        if (appointment is null)
+            return Result.Failure<PublicAppointmentReceiptDto>(refusal!);
         _context.Appointments.Add(appointment);
         var noticeQueued = await _notices.QueueRequestedAsync(appointment, cancellationToken);
         try
@@ -579,8 +556,9 @@ internal static class PublicAppointmentReceipts
     /// the Fase 30A (ADR 0081), a customer signed in to its account (<paramref name="accountId"/>) also counts the requests and
     /// cancellations of that account made with its other phones: changing the phone does not start the count again.
     /// </summary>
+    /// <param name="alsoPending">Deposits of this phone still being paid (Fase 31O): they count as requests waiting.</param>
     public static async Task<string?> RefusalForPhoneAsync(
-        IApplicationDbContext context, string phone, Guid? accountId, DateTimeOffset now, CancellationToken cancellationToken)
+        IApplicationDbContext context, string phone, Guid? accountId, DateTimeOffset now, CancellationToken cancellationToken, int alsoPending = 0)
     {
         var key = MessagingPhone.ToKey(phone);
         var fakeSince = ResponseTimes.Since(now);
@@ -596,7 +574,7 @@ internal static class PublicAppointmentReceipts
             : context.Appointments.Where(a => a.RequestPhone == key);
         var counted = await ofTheCustomer.CountAsync(a => a.Channel == AppointmentChannel.Online
             && ((a.Status == AppointmentStatus.Requested && a.StartAt > now) || a.CancelledByCustomerAt >= since), cancellationToken);
-        return counted >= OnlineBookingRules.MaxPendingPerPhone
+        return counted + alsoPending >= OnlineBookingRules.MaxPendingPerPhone
             ? RequestPublicAppointmentCommandHandler.TooManyPendingMessage
             : null;
     }
@@ -654,6 +632,19 @@ internal static class PublicAppointmentReceipts
             return Result.Failure<PublicAppointmentReceiptDto>(RequestPublicAppointmentCommandHandler.AlreadySentMessage);
         if (appointment.Status == AppointmentStatus.Cancelled)
             return Result.Failure<PublicAppointmentReceiptDto>(RequestPublicAppointmentCommandHandler.AlreadyCancelledMessage);
+        return Result.Success(await ForAsync(context, appointment, tenant, settings, mainBranch, account, cancellationToken));
+    }
+
+    /// <summary>The receipt of a request already stored, with who attends it by the name the business gave them.</summary>
+    public static async Task<PublicAppointmentReceiptDto> ForAsync(
+        IApplicationDbContext context,
+        Appointment appointment,
+        Tenant tenant,
+        TenantSettings settings,
+        Branch? mainBranch,
+        Domain.Identity.Entities.ApplicationUser? account,
+        CancellationToken cancellationToken)
+    {
         var staffName = appointment.StaffUserId is { } staffUserId
             ? await context.OnlineBookingStaff
                 .AsNoTracking()
@@ -661,7 +652,7 @@ internal static class PublicAppointmentReceipts
                 .Select(s => s.Name)
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
-        return Result.Success(Build(appointment, tenant, settings, mainBranch, account, staffName));
+        return Build(appointment, tenant, settings, mainBranch, account, staffName);
     }
 }
 
@@ -703,12 +694,160 @@ internal sealed record PublicBookingBusiness(Tenant Tenant, TenantSettings Setti
         var service = await OnlineBookingCalendar.BookableServices(context)
             .AsNoTracking()
             .Where(p => p.Id == serviceProductId)
-            .Select(p => new { p.Id, p.Name, p.PreparationTimeMinutes })
+            .Select(p => new { p.Id, p.Name, p.PreparationTimeMinutes, p.PriceAmount })
             .FirstOrDefaultAsync(cancellationToken);
         return service is null
             ? null
-            : new BookableService(service.Id, service.Name, OnlineBookingRules.ServiceDuration(service.PreparationTimeMinutes));
+            : new BookableService(service.Id, service.Name, OnlineBookingRules.ServiceDuration(service.PreparationTimeMinutes), service.PriceAmount);
+    }
+
+    /// <summary>
+    /// The active business <paramref name="tenantId"/> with its menu published, in the scope already entered (a payment applied
+    /// by the notification, the customer's return or the sweep, Fase 31O), or null; <see cref="BooksOnline"/> says whether it
+    /// books online now.
+    /// </summary>
+    public static async Task<PublicBookingBusiness?> ForTenantAsync(IApplicationDbContext context, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tenant = await context.Tenants
+            .AsNoTracking()
+            .Include(t => t.Settings)
+            .FirstOrDefaultAsync(t => t.Id == tenantId && t.Status == TenantStatus.Active, cancellationToken);
+        if (tenant?.Settings is null || tenant.Settings.OnlineMenuMode == OnlineMenuMode.Off)
+            return null;
+
+        var settings = tenant.Settings;
+        var mainBranch = await context.Branches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.TenantId == tenant.Id && b.IsDefault, cancellationToken);
+        var booksOnline = OnlineBookingAvailability.BooksOnline(
+            settings.OnlineBookingEnabled,
+            TenantCapabilityRules.NormalizeCapabilities(settings.Capabilities, tenant.BusinessType),
+            settings.OnlineMenuMode,
+            mainBranch?.ServiceMode,
+            settings.OpeningHours is not null);
+        return new PublicBookingBusiness(tenant, settings, mainBranch, booksOnline);
     }
 }
 
-internal sealed record BookableService(Guid Id, string Name, TimeSpan Duration);
+/// <param name="Price">What it costs in the catalog: the share of a deposit is of it (Fase 31O).</param>
+internal sealed record BookableService(Guid Id, string Name, TimeSpan Duration, decimal Price);
+
+/// <summary>
+/// What a customer asks for when they book online: the service, the time, who attends (or whoever is free) and their details,
+/// with the phone as the booking page normalized it. Since the Fase 31O (ADR 0095) a checkout keeps it while its deposit is
+/// paid, so <see cref="FromTeam"/> is decided when it is asked.
+/// </summary>
+internal sealed record PublicAppointmentAsk(
+    Guid ServiceProductId,
+    DateTimeOffset StartAt,
+    string CustomerName,
+    string CustomerPhone,
+    string? Notes,
+    Guid? IdempotencyKey,
+    Guid? StaffId,
+    bool FromTeam);
+
+/// <summary>
+/// Books a time a customer asked for online (Fase 24D, ADR 0025): the booking page's request, and since the Fase 31O (ADR 0095)
+/// the payment of its deposit. Inside the business's booking lock, already held: the time is free for all of it, of who the
+/// customer chose or of whoever is free, as the booking page offered it.
+/// </summary>
+internal static class PublicAppointmentPlacement
+{
+    /// <summary>Whether a time starts after the last day offered (which may end after midnight, in the day after it).</summary>
+    public static bool TooFar(TenantSettings settings, DateTimeOffset startAt, DateTimeOffset now)
+    {
+        var zone = TenantDateTimeResolver.Resolve(settings.TimeZone);
+        var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(now, settings.TimeZone));
+        var lastDay = today.AddDays(OnlineBookingRules.DaysAhead - 1);
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(startAt, zone).DateTime) > lastDay.AddDays(1);
+    }
+
+    /// <summary>
+    /// The request for <paramref name="ask"/>, not added yet, with who attends it; or why the time cannot be booked now.
+    /// </summary>
+    /// <param name="deposit">What its customer already paid to book it (Fase 31O), or none.</param>
+    /// <param name="askedAt">
+    /// When the customer asked for it, if before <paramref name="now"/>: a deposit paid in Mercado Pago books the time the page
+    /// offered when they went to pay (Fase 31O). The hour of notice and the days ahead count from then, never into the past;
+    /// whether the time is free is decided now.
+    /// </param>
+    public static async Task<(Appointment? Appointment, BookableStaff? Attends, string? Refusal)> PlaceAsync(
+        IApplicationDbContext context,
+        PublicBookingBusiness business,
+        BookableService service,
+        PublicAppointmentAsk ask,
+        Guid? accountId,
+        decimal? deposit,
+        DateTimeOffset now,
+        CancellationToken cancellationToken,
+        DateTimeOffset? askedAt = null)
+    {
+        var tenantId = business.Tenant.Id;
+        var settings = business.Settings;
+        var zone = TenantDateTimeResolver.Resolve(settings.TimeZone);
+        var asked = askedAt is { } then && then < now ? then : now;
+        var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(asked, settings.TimeZone));
+        var lastDay = today.AddDays(OnlineBookingRules.DaysAhead - 1);
+        var startAt = ask.StartAt;
+        // The last day offered may end after midnight, in the day after it.
+        var startDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(startAt, zone).DateTime);
+        if (startDate > lastDay.AddDays(1))
+            return (null, null, RequestPublicAppointmentCommandHandler.TooFarMessage);
+
+        var hours = await BusinessHours.ReadAsync(context, tenantId, settings.OpeningHours, settings.TimeZone, now, cancellationToken);
+        var endAt = startAt + service.Duration;
+        var noticeFrom = asked.AddMinutes(OnlineBookingRules.MinNoticeMinutes);
+        var earliest = noticeFrom > now ? noticeFrom : now;
+        var takenMessage = startDate > lastDay ? RequestPublicAppointmentCommandHandler.TooFarMessage : RequestPublicAppointmentCommandHandler.TimeTakenMessage;
+        var staff = await OnlineBookingCalendar.StaffAsync(context, tenantId, cancellationToken);
+        BookableStaff? attends = null;
+        if (staff.Count > 0)
+        {
+            // Who attends it: the person the customer chose, free for all of it, or whoever is free.
+            var forService = staff.Where(person => person.Offers(service.Id)).ToList();
+            if (forService.Count == 0)
+                return (null, null, RequestPublicAppointmentCommandHandler.ServiceNotBookedMessage);
+            if (ask.StaffId is { } chosenId && forService.All(person => person.Id != chosenId))
+                return (null, null, RequestPublicAppointmentCommandHandler.StaffGoneMessage);
+            var bookings = await OnlineBookingCalendar.BookingsAsync(context, tenantId, startAt.AddDays(-1), endAt.AddDays(1), cancellationToken);
+            var (calendars, unassigned) = OnlineBookingCalendar.Calendars(forService, bookings, settings.HomeVisitTravelMinutes);
+            var free = StaffSlots.FreeAt(hours?.Schedule, zone, startAt, service.Duration, calendars, unassigned, earliest, lastDay);
+            if (free.Count == 0 || (ask.StaffId is { } chosen && !free.Contains(chosen)))
+                return (null, null, takenMessage);
+            var attendsId = ask.StaffId ?? StaffSlots.Choose(
+                free,
+                forService.ToDictionary(person => person.Id, person => bookings.Count(booking => booking.StaffUserId == person.UserId
+                    && DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(booking.StartAt, zone).DateTime) == startDate)),
+                forService.ToDictionary(person => person.Id, person => person.Name));
+            attends = forService.Single(person => person.Id == attendsId);
+        }
+        else
+        {
+            if (ask.StaffId is not null)
+                return (null, null, RequestPublicAppointmentCommandHandler.StaffGoneMessage);
+            var booked = await OnlineBookingCalendar.BookedAsync(
+                context, tenantId, startAt.AddDays(-1), endAt.AddDays(1), settings.HomeVisitTravelMinutes, cancellationToken);
+            if (!BookingSlots.IsFree(hours?.Schedule, zone, startAt, service.Duration, booked, settings.OnlineBookingCapacity, earliest, lastDay))
+                return (null, null, takenMessage);
+        }
+
+        var appointment = Appointment.RequestOnline(
+            tenantId,
+            ask.CustomerName,
+            ask.CustomerPhone,
+            service.Id,
+            service.Name,
+            startAt,
+            endAt,
+            ask.Notes,
+            accountId,
+            ask.IdempotencyKey,
+            OrderTracking.NewToken(),
+            attends?.UserId,
+            attends?.FullName,
+            ask.FromTeam,
+            deposit);
+        return (appointment, attends, null);
+    }
+}

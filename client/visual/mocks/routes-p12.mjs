@@ -11,7 +11,11 @@ const CANCELLED = 99;
 
 /** Café La Esquina has the agenda, its menu published and its hours: online booking only waits for its owner. */
 export function demoOnlineBooking(data) {
-  return { enabled: false, capacity: 1, maxCapacity: 20, booksOnline: false, missing: [], slug: data.tenant.slug, staffCount: 0 };
+  return {
+    enabled: false, capacity: 1, maxCapacity: 20, booksOnline: false, missing: [], slug: data.tenant.slug, staffCount: 0,
+    // Fase 31O: no deposit to book, and Mercado Pago not connected to ask one.
+    depositPercent: null, depositAvailable: false, depositCancelHours: 24,
+  };
 }
 
 /** The services Café La Esquina books online, as the owner gives them to each person. */
@@ -68,6 +72,8 @@ export function phase24dRoutes(data, { ok, notFound }) {
         enabled,
         capacity: body?.capacity ?? data.onlineBooking.capacity,
         booksOnline: enabled && data.onlineBooking.missing.length === 0,
+        // 0 takes the deposit off; none leaves it as it was (Fase 31O).
+        depositPercent: body?.depositPercent == null ? data.onlineBooking.depositPercent : body.depositPercent || null,
       };
       return ok(data.onlineBooking);
     }],

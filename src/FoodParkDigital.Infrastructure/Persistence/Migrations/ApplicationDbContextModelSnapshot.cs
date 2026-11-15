@@ -183,6 +183,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CustomerUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<decimal?>("DepositAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("DepositStatus")
+                        .HasColumnType("int");
+
                     b.Property<DateTimeOffset>("EndAt")
                         .HasColumnType("datetimeoffset");
 
@@ -292,6 +299,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "StaffUserId", "StartAt");
 
+                    b.HasIndex(new[] { "StartAt", "TenantId" }, "IX_Appointments_DepositHeld_Requests")
+                        .HasFilter("[DepositStatus] = 1 AND [Status] = 5");
+
                     b.HasIndex(new[] { "CreatedAt" }, "IX_Appointments_OnlineRequests_CreatedAt")
                         .HasFilter("[Channel] = 1");
 
@@ -305,6 +315,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("Appointments", null, t =>
                         {
                             t.HasCheckConstraint("CK_Appointments_Channel", "[Channel] IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_Appointments_Deposit", "([DepositAmount] IS NULL AND [DepositStatus] IS NULL) OR ([DepositAmount] IS NOT NULL AND [DepositStatus] IS NOT NULL AND [DepositAmount] > 0 AND [DepositStatus] IN (1, 2, 3, 4) AND [Channel] = 1)");
 
                             t.HasCheckConstraint("CK_Appointments_TrackingToken", "[TrackingToken] IS NULL OR LEN([TrackingToken]) = 43");
 
@@ -4242,6 +4254,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<Guid?>("AppointmentId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("CheckoutUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -4275,6 +4290,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("FailureMessage")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
+
+                    b.Property<bool>("ForAppointment")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<Guid?>("OrderId")
                         .HasColumnType("uniqueidentifier");
@@ -4322,6 +4342,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AppointmentId")
+                        .IsUnique()
+                        .HasFilter("[AppointmentId] IS NOT NULL");
+
                     b.HasIndex("CustomerUserId");
 
                     b.HasIndex("OrderId")
@@ -4344,9 +4368,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_OnlineCheckouts_Amount", "[Amount] > 0");
 
+                            t.HasCheckConstraint("CK_OnlineCheckouts_Appointment", "([ForAppointment] = 0 AND [AppointmentId] IS NULL AND ([Status] <> 1 OR [OrderId] IS NOT NULL)) OR ([ForAppointment] = 1 AND [QuoteId] IS NULL AND ([Status] <> 1 OR [AppointmentId] IS NOT NULL))");
+
                             t.HasCheckConstraint("CK_OnlineCheckouts_Dispute", "([Dispute] = 0 AND [DisputeUpdatedAt] IS NULL) OR ([Dispute] IN (1, 2, 3) AND [Status] = 1 AND [DisputeUpdatedAt] IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_OnlineCheckouts_Outcome", "([Status] = 0 AND ([Request] IS NOT NULL OR [QuoteId] IS NOT NULL) AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [Failure] IS NULL) OR ([Status] = 1 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL AND [OrderId] IS NOT NULL AND [Failure] IS NULL) OR ([Status] = 2 AND [Request] IS NULL AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [Failure] IS NULL) OR ([Status] = 3 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL AND [OrderId] IS NULL AND [Failure] IS NOT NULL AND [Failure] BETWEEN 1 AND 4)");
+                            t.HasCheckConstraint("CK_OnlineCheckouts_Outcome", "([Status] = 0 AND ([Request] IS NOT NULL OR [QuoteId] IS NOT NULL) AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [AppointmentId] IS NULL AND [Failure] IS NULL) OR ([Status] = 1 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL AND ([OrderId] IS NOT NULL OR [AppointmentId] IS NOT NULL) AND [Failure] IS NULL) OR ([Status] = 2 AND [Request] IS NULL AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [AppointmentId] IS NULL AND [Failure] IS NULL) OR ([Status] = 3 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL AND [OrderId] IS NULL AND [AppointmentId] IS NULL AND [Failure] IS NOT NULL AND [Failure] BETWEEN 1 AND 4)");
 
                             t.HasCheckConstraint("CK_OnlineCheckouts_Quote", "[QuoteId] IS NULL OR [Request] IS NULL");
 
@@ -4547,7 +4573,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_OnlinePaymentRefunds_Amount", "[Amount] > 0");
 
-                            t.HasCheckConstraint("CK_OnlinePaymentRefunds_Link", "([Reason] IN (1, 2) AND [CheckoutId] IS NOT NULL AND [OrderId] IS NULL AND [OrderRefundId] IS NULL) OR ([Reason] IN (3, 4, 5, 6) AND [CheckoutId] IS NULL AND [OrderId] IS NOT NULL AND [OrderRefundId] IS NOT NULL)");
+                            t.HasCheckConstraint("CK_OnlinePaymentRefunds_Link", "([Reason] IN (1, 2, 7) AND [CheckoutId] IS NOT NULL AND [OrderId] IS NULL AND [OrderRefundId] IS NULL) OR ([Reason] IN (3, 4, 5, 6) AND [CheckoutId] IS NULL AND [OrderId] IS NOT NULL AND [OrderRefundId] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_OnlinePaymentRefunds_MadeInMercadoPago", "[Reason] NOT IN (4, 5, 6) OR ([Status] = 1 AND ([Reason] = 6 OR [ProviderRefundId] IS NOT NULL))");
 
@@ -7007,6 +7033,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("AutoCloseCounterSales")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("BookingDepositPercent")
+                        .HasColumnType("int");
+
                     b.Property<int>("Capabilities")
                         .HasColumnType("int");
 
@@ -7132,6 +7161,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("TenantSettings", null, t =>
                         {
                             t.HasCheckConstraint("CK_TenantSettings_AnswerReminderMinutes", "[AnswerReminderMinutes] IN (0, 30, 60, 120, 180)");
+
+                            t.HasCheckConstraint("CK_TenantSettings_BookingDepositPercent", "[BookingDepositPercent] IS NULL OR [BookingDepositPercent] BETWEEN 10 AND 100");
 
                             t.HasCheckConstraint("CK_TenantSettings_CreditDueSoonDaysBefore", "[CreditDueSoonDaysBefore] >= 1 AND [CreditDueSoonDaysBefore] <= 7");
 
@@ -8344,6 +8375,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.OnlinePayments.Entities.OnlineCheckout", b =>
                 {
+                    b.HasOne("FoodParkDigital.Domain.Appointments.Entities.Appointment", null)
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("CustomerUserId")

@@ -67,6 +67,11 @@ interface ChargePanelProps {
   uploadEvidence?: (file: File) => Promise<{ url: string; fileName: string }>;
   /** Offers a tip on top of what is owed (the counter, the tables and the orders). */
   allowTip?: boolean;
+  /**
+   * What the tip's percentages are of, when not what is owed now: the whole sale of an appointment whose deposit was paid
+   * online (Fase 31O), though only the rest is charged here.
+   */
+  tipBase?: number;
   /** Offers «Fiar» the rest to this customer, within what they may still owe (the server checks it again). */
   credit?: ChargeCredit;
   /** Offers «Saldo a favor» as a way to pay, up to what this customer has (the server checks it again). */
@@ -105,6 +110,7 @@ export default function ChargePanel({
   onCancel,
   uploadEvidence,
   allowTip = true,
+  tipBase,
   credit,
   balance,
   allowChangeInFavor = false,
@@ -139,7 +145,7 @@ export default function ChargePanel({
     ? 0
     : tipChoice === 'other'
       ? Math.max(0, toCents(parseMoneyInput(tipInput) ?? 0))
-      : Math.round((dueCents * tipChoice) / 100);
+      : Math.round((toCents(tipBase ?? amountDue) * tipChoice) / 100);
   const tipIsValid = tipChoice !== 'other' || tipInput.trim() === '' || parseMoneyInput(tipInput) !== null;
 
   // Cash: what was handed over covers the remaining amount (and the tip) and the difference is change. Left empty,
@@ -162,8 +168,9 @@ export default function ChargePanel({
   const keepsChange = allowChangeInFavor && changeInFavor && isCash && changeCents > 0;
   const coveredCents = addedCents + (currentIsValid ? currentCents : 0);
   const missingCents = Math.max(0, dueCents - coveredCents);
-  // More tip than bill is a typing mistake (the server refuses it too).
-  const tipFits = tipCents <= dueCents;
+  // More tip than bill is a typing mistake (the server refuses it too). With a deposit paid online taken off it, the bill
+  // is the whole sale, as for the percentages.
+  const tipFits = tipCents <= toCents(tipBase ?? amountDue);
   const canSubmit = !submitting && !uploading && currentIsValid && tipIsValid && tipFits && !tipWithBalance
     && (allowPartial ? coveredCents > 0 : missingCents === 0);
   const canAddAnother = currentIsValid && currentCents > 0 && currentCents < remainingCents;

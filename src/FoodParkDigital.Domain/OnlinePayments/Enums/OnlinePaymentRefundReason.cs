@@ -25,5 +25,11 @@ public enum OnlinePaymentRefundReason
     /// The customer's bank took it back with a chargeback, and the dispute ended in the customer's favor (Fase 24K): what
     /// was left paid online.
     /// </summary>
-    Chargeback = 6
+    Chargeback = 6,
+
+    /// <summary>
+    /// The deposit that booked an appointment online goes back (Fase 31O, ADR 0095): declined, not answered in time,
+    /// cancelled in time, or given back by the business, before any sale took it.
+    /// </summary>
+    AppointmentDeposit = 7
 }

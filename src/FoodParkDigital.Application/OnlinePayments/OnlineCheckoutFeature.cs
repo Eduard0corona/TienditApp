@@ -313,10 +313,11 @@ public class ConfirmOnlineCheckoutCommandHandler : IRequestHandler<ConfirmOnline
             return null;
 
         _tenantService.SetTenant(tenant.Id);
-        // The deposit of a quote (Fase 31N) answers only with the quote's link (ConfirmQuoteDepositCommand), never by its id.
+        // The deposit of a quote (Fase 31N) answers only with the quote's link (ConfirmQuoteDepositCommand), never by its id;
+        // the one of an appointment (Fase 31O), on its own return page (ConfirmAppointmentDepositCommand).
         var status = await _context.OnlineCheckouts
             .AsNoTracking()
-            .Where(c => c.Id == request.CheckoutId && c.QuoteId == null)
+            .Where(c => c.Id == request.CheckoutId && c.QuoteId == null && !c.ForAppointment)
             .Select(c => new { c.Status, c.PreferenceId })
             .FirstOrDefaultAsync(cancellationToken);
         if (status is null)

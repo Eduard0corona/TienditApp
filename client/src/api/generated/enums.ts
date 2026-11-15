@@ -2,6 +2,7 @@
 // The API exchanges these enums as numbers; the names are the server's.
 
 export { AppointmentChannel } from './enums/AppointmentChannel';
+export { AppointmentDepositStatus } from './enums/AppointmentDepositStatus';
 export { AppointmentStatus } from './enums/AppointmentStatus';
 export { BranchServiceMode } from './enums/BranchServiceMode';
 export { BusinessCategory } from './enums/BusinessCategory';

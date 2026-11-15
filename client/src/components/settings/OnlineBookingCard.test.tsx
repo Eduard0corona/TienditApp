@@ -22,7 +22,8 @@ const NO_HOURS = 'Pon el horario de tu negocio: los horarios libres salen de él
 function settings(overrides: Partial<OnlineBookingSettings> = {}): OnlineBookingSettings {
   return {
     enabled: false, capacity: 1, maxCapacity: 20, booksOnline: false, missing: [], slug: 'barberia-luis', staffCount: 0,
-    answerReminderMinutes: 60, answerReminderChoices: [30, 60, 120, 180], ...overrides,
+    answerReminderMinutes: 60, answerReminderChoices: [30, 60, 120, 180], depositPercent: null, depositAvailable: false,
+    depositCancelHours: 24, ...overrides,
   };
 }
 
@@ -66,7 +67,7 @@ describe('OnlineBookingCard', () => {
     await user.type(screen.getByLabelText('Citas a la vez'), '2');
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
-    await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 2, 60));
+    await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 2, 60, 0));
     expect(toast.success).toHaveBeenCalledWith('Guardado.');
     expect(await screen.findByText(/Tus clientes todavía no pueden agendar en línea/)).toBeInTheDocument();
   });
@@ -88,8 +89,55 @@ describe('OnlineBookingCard', () => {
     expect(reminder).toHaveAccessibleDescription('Solo te llega el correo de cada solicitud cuando llega.');
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
-    await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 1, 0));
+    await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 1, 0, 0));
     expect(await screen.findByRole('combobox', { name: 'Recordatorio de solicitudes sin responder' })).toHaveValue('0');
+  });
+
+  it('asks a deposit to book only while Mercado Pago can collect it (Fase 31O)', async () => {
+    api.getOnlineBooking.mockResolvedValue(settings({ enabled: true }) as never);
+    renderCard();
+
+    // Without the account, it cannot be asked: the select says why and links to connect it.
+    const unavailable = await screen.findByRole('combobox', { name: 'Anticipo para reservar' });
+    expect(unavailable).toBeDisabled();
+    expect(unavailable).toHaveAccessibleDescription(/Para pedir anticipo, conecta tu cuenta de Mercado Pago en Pagos en línea/);
+    expect(screen.getByRole('link', { name: 'Pagos en línea' })).toHaveAttribute('href', '/settings/online-payments');
+  });
+
+  it('saves the share of the price a customer pays to book, with what happens to it', async () => {
+    const user = userEvent.setup();
+    api.getOnlineBooking.mockResolvedValue(settings({ enabled: true, depositAvailable: true }) as never);
+    api.updateOnlineBooking.mockResolvedValue(settings({ enabled: true, depositAvailable: true, depositPercent: 30 }) as never);
+    renderCard();
+
+    const deposit = await screen.findByRole('combobox', { name: 'Anticipo para reservar' });
+    expect(deposit).toHaveValue('0');
+    expect(deposit).toHaveAccessibleDescription('Tus clientes piden su cita sin pagar nada en línea, como hasta ahora.');
+    await user.selectOptions(deposit, '30 % del precio del servicio');
+    // The three cases in which the server gives it back when the customer cancels, as BookingDeposits.CustomerCancelReturns.
+    expect(deposit).toHaveAccessibleDescription(new RegExp('paga en línea el 30 % del precio del servicio.*si la cancela mientras no la confirmas, '
+      + 'después de que la cambiaste de la hora que pidió o con al menos 24 horas; si la cancela ya confirmada con menos tiempo, o no llega, te lo quedas'));
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 1, 60, 30));
+    expect(await screen.findByRole('combobox', { name: 'Anticipo para reservar' })).toHaveValue('30');
+  });
+
+  it('lets a deposit already asked go off while the account cannot collect it', async () => {
+    const user = userEvent.setup();
+    api.getOnlineBooking.mockResolvedValue(settings({ enabled: true, depositPercent: 30, depositAvailable: false }) as never);
+    api.updateOnlineBooking.mockResolvedValue(settings({ enabled: true }) as never);
+    renderCard();
+
+    const deposit = await screen.findByRole('combobox', { name: 'Anticipo para reservar' });
+    expect(deposit).toBeEnabled();
+    expect(deposit).toHaveAccessibleDescription(/Ahora tu cuenta de Mercado Pago no puede cobrar, y no se pide/);
+    // Only taking it off, or keeping it, while it cannot collect.
+    expect(screen.getByRole('option', { name: '50 % del precio del servicio' })).toBeDisabled();
+    await user.selectOptions(deposit, 'Sin anticipo');
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(api.updateOnlineBooking).toHaveBeenCalledWith(true, 1, 60, 0));
   });
 
   it('keeps the hour of always when the API answering is one of before (Fase 30B)', async () => {

@@ -11,7 +11,7 @@ import DeliveryOrderFields from './DeliveryOrderFields';
 import PlatformOrderFields from './PlatformOrderFields';
 import PlatformOriginPicker from './PlatformOriginPicker';
 import SaleDetailsForm from './SaleDetailsForm';
-import type { CartLine, ChatOrigin, SaleAppointment, SaleDelivery, SaleDetails, TabTarget } from './sellModel';
+import { chargeOfSale, type CartLine, type ChatOrigin, type SaleAppointment, type SaleDelivery, type SaleDetails, type TabTarget } from './sellModel';
 
 interface CartPanelProps {
   /** A table's tab: the sale goes to the kitchen instead of being charged. */
@@ -80,8 +80,10 @@ interface CartPanelProps {
 /** The ticket of the sale: where it came from and where it goes, its lines, the customer, the totals and what to do with it. */
 export default function CartPanel(props: CartPanelProps) {
   const { tabTarget, tabOrder, chatOrigin, cart, totals, submitting, platform, pricesPending } = props;
+  // What is charged now: the total, less the deposit paid online to book the appointment (Fase 31O).
+  const { deposit, due, depositAboveSale } = chargeOfSale(props.appointment, totals.total, cart.length);
   // Nothing is charged, registered or sent at prices that are about to change.
-  const blocked = cart.length === 0 || submitting || pricesPending;
+  const blocked = cart.length === 0 || submitting || pricesPending || depositAboveSale;
   // A chat is a WhatsApp order, a tab goes to a table and an appointment is charged at the counter: none comes from a
   // platform's app.
   const showOrigin = !tabTarget && !chatOrigin && !props.appointment && props.activePlatforms.length > 0;
@@ -225,6 +227,24 @@ export default function CartPanel(props: CartPanelProps) {
           <span>Total</span>
           <span className="ta-money">{formatMoney(totals.total)}</span>
         </div>
+        {/* The deposit the customer paid online to book the appointment (Fase 31O): the sale takes it, the rest is charged. */}
+        {deposit != null && (
+          <>
+            <div className="d-flex justify-content-between small">
+              <span>Anticipo pagado en línea</span>
+              <span className="ta-money">−{formatMoney(deposit)}</span>
+            </div>
+            <div className="d-flex justify-content-between fw-semibold">
+              <span>Por cobrar</span>
+              <span className="ta-money">{formatMoney(due)}</span>
+            </div>
+            {depositAboveSale && (
+              <div className="small text-danger" role="status">
+                La venta es menor que el anticipo que el cliente pagó en línea: cobra al menos <span className="ta-money">{formatMoney(deposit)}</span>.
+              </div>
+            )}
+          </>
+        )}
         {platform && !pricesPending && <div className="small text-muted">Con tus precios de {platformName}</div>}
       </div>
 
@@ -298,7 +318,7 @@ export default function CartPanel(props: CartPanelProps) {
             onClick={props.onOpenCharge}
             disabled={blocked}
           >
-            Cobrar {formatMoney(totals.total)} <span className="sell-kbd">F9</span>
+            Cobrar {formatMoney(due)} <span className="sell-kbd">F9</span>
           </button>
           <button
             type="button"

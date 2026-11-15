@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import type { CustomerAppointment } from '../../api/publicMenuApi';
 import ReviewButton from '../reviews/ReviewButton';
 import { AppointmentStatus } from '../../types';
+import { customerDepositLine } from '../../utils/bookingDeposits';
 import { endSentence } from '../../utils/dates';
 import { addressMapUrl, bookingPath, customerAppointmentChip, homeVisitPath, upperFirst } from '../../utils/onlineBooking';
 import { photoCount } from '../../utils/problemPhotos';
@@ -21,7 +22,7 @@ interface CustomerAppointmentCardProps {
 /**
  * An appointment booked online, as its customer sees it (Fase 24D): the service, the business, when, who attends it (Fase
  * 24J), where (a visit to quote, Fase 29B: at home, by its postal code only), its status in
- * the business's words, and what the customer can do with it: cancel it while it has not started, write to the business,
+ * the business's words, the deposit it was booked with (Fase 31O), and what the customer can do with it: cancel it while it has not started, write to the business,
  * book another one (or ask for another visit), or rate the business once it was attended (Fase 24H).
  */
 export default function CustomerAppointmentCard({
@@ -69,6 +70,13 @@ export default function CustomerAppointmentCard({
             <i className="ri-map-pin-line me-1" aria-hidden="true"></i>
             {appointment.address}{' '}
             <a className="text-nowrap" href={addressMapUrl(appointment.address)} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
+          </p>
+        )}
+        {/* The deposit it was booked with, where it stands (Fase 31O). */}
+        {customerDepositLine(appointment) && (
+          <p className="small mb-1">
+            <i className="ri-secure-payment-line me-1" aria-hidden="true"></i>
+            {customerDepositLine(appointment)}
           </p>
         )}
         {appointment.status === AppointmentStatus.Requested && (

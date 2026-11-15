@@ -68,6 +68,7 @@ const PublicBookingPage = lazy(() => import('./pages/public/PublicBookingPage'))
 const PublicHomeVisitPage = lazy(() => import('./pages/public/PublicHomeVisitPage'));
 const OnlinePaymentReturnPage = lazy(() => import('./pages/public/OnlinePaymentReturnPage'));
 const QuoteDepositReturnPage = lazy(() => import('./pages/public/QuoteDepositReturnPage'));
+const AppointmentDepositReturnPage = lazy(() => import('./pages/public/AppointmentDepositReturnPage'));
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
 const ReceivablesPage = lazy(() => import('./pages/customers/ReceivablesPage'));
@@ -120,6 +121,8 @@ export default function App() {
             <Route path="/m/:slug/visita" element={<PublicHomeVisitPage />} />
             {/* Where Mercado Pago sends the customer back after paying an order online (Fase 24I). */}
             <Route path="/m/:slug/pago/:checkoutId" element={<OnlinePaymentReturnPage />} />
+            {/* After paying the deposit that books an appointment (Fase 31O). */}
+            <Route path="/m/:slug/cita/pago/:checkoutId" element={<AppointmentDepositReturnPage />} />
             {/* And after paying the deposit that accepts a quote (Fase 31N). */}
             <Route path="/cotizacion/pago/:checkoutId" element={<QuoteDepositReturnPage />} />
 

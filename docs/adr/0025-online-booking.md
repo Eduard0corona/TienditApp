@@ -56,7 +56,7 @@ Las decisiones del dueño para la Fase 24D-1:
    - Las solicitudes llevan «Por confirmar» y el chip «En línea», con Aceptar, Rechazar (con confirmación) y Editar para moverla antes.
    - Un aviso arriba de la lista cuenta las que esperan, y la campana y «Requiere atención» de Inicio también (`appointmentRequests`, urgentes las de hoy), con un enlace a la agenda filtrada.
    - Aceptar y rechazar piden `ManageAppointments` y el módulo de agenda. Prender las citas en línea y elegir cuántas a la vez piden ser dueño o administrador del negocio, y quedan en la actividad (`OnlineBookingUpdated`).
-7. **Sin anticipo:** el negocio cobra la cita en Vender como siempre, después de aceptarla.
+7. **Sin anticipo:** el negocio cobra la cita en Vender como siempre, después de aceptarla. Desde la Fase 31O el negocio puede pedir un anticipo para reservar, un porcentaje del precio del servicio que el cliente paga por Mercado Pago antes de mandar la solicitud ([ADR 0095](0095-appointment-deposit.md)).
 
 ## Consecuencias
 
@@ -70,7 +70,7 @@ Las decisiones del dueño para la Fase 24D-1:
   - El paso de media hora, la hora de anticipación y los 30 días son fijos, no por negocio.
   - Una solicitud que nadie decide sigue ocupando su hora hasta que pasa; Inicio la marca urgente el mismo día.
   - Sin SQL Server el candado no hace nada: el índice único de la llave evita la doble petición, pero no dos clientes distintos en la última hora.
-  - Sin anticipo, quien no llega deja la hora vacía: la agenda lo marca «No asistió» como antes.
+  - Sin anticipo, quien no llega deja la hora vacía: la agenda lo marca «No asistió» como antes. Desde la Fase 31O, con anticipo, el negocio se lo queda ([ADR 0095](0095-appointment-deposit.md)).
   - Sin tiempo real: la agenda abierta ve una solicitud nueva al volver a cargar, como la campana.
   - Cualquiera puede pedir una cita con un teléfono que no es suyo, y el negocio le manda el aviso por WhatsApp: los únicos frenos son 3 solicitudes por teléfono y el límite de peticiones por IP, sin captcha ni verificación del teléfono.
   - Cuando el cliente cancela, el negocio no recibe aviso: lo ve en la agenda («La canceló el cliente»).

@@ -1,6 +1,6 @@
 // Appointments: the agenda, its visits and the appointments of a job.
 
-import type { AppointmentChannel, AppointmentStatus, HomeVisitChargePolicy } from '../api/generated/enums';
+import type { AppointmentChannel, AppointmentDepositStatus, AppointmentStatus, HomeVisitChargePolicy } from '../api/generated/enums';
 
 export { AppointmentStatus, AppointmentChannel, MyAppointmentsScope } from '../api/generated/enums';
 
@@ -51,6 +51,12 @@ export interface AppointmentDto {
    * and its phone may not request again in the business for 90 days.
    */
   markedFake?: boolean;
+  /**
+   * What its customer paid online to book it (Fase 31O), with where it stands: held for its sale, in its sale, given back
+   * or kept by the business. Null when it was booked without one.
+   */
+  depositAmount?: number | null;
+  depositStatus?: AppointmentDepositStatus | null;
 }
 
 /** One appointment that does (part of) the job of a service order that came from a quote (Fase 29F). */

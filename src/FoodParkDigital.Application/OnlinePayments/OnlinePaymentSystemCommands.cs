@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -300,7 +301,8 @@ public class ReviewOnlinePaymentsCommandHandler : IRequestHandler<ReviewOnlinePa
 /// The sweep of a business's payments in course (the online payments worker sends it in the business's scope): it asks
 /// Mercado Pago about the checkouts the notification and the customer's return have not settled yet, and expires the ones
 /// whose time to pay ended without an approved payment (what they kept about the customer is forgotten). It renews the
-/// account's key when little time is left.
+/// account's key when little time is left. Since the Fase 31O (ADR 0095) it also gives back the deposit of the requests the
+/// business did not answer before their time.
 /// </summary>
 [AllowAnonymousRequest("Lo envía el barrido de pagos en línea (sistema), sin usuario, en el alcance del negocio.")]
 public record SweepOnlinePaymentsCommand : IRequest<Result<OnlinePaymentSweep>>;
@@ -308,7 +310,8 @@ public record SweepOnlinePaymentsCommand : IRequest<Result<OnlinePaymentSweep>>;
 /// <param name="Checked">Checkouts looked up in Mercado Pago.</param>
 /// <param name="Expired">Checkouts that ended without an approved payment.</param>
 /// <param name="KeyRenewed">The account's key was renewed.</param>
-public sealed record OnlinePaymentSweep(int Checked, int Expired, bool KeyRenewed);
+/// <param name="DepositsReturned">Requests not answered by their time whose deposit goes back (Fase 31O).</param>
+public sealed record OnlinePaymentSweep(int Checked, int Expired, bool KeyRenewed, int DepositsReturned = 0);
 
 public class SweepOnlinePaymentsCommandHandler : IRequestHandler<SweepOnlinePaymentsCommand, Result<OnlinePaymentSweep>>
 {
@@ -408,7 +411,43 @@ public class SweepOnlinePaymentsCommandHandler : IRequestHandler<SweepOnlinePaym
                 expired++;
         }
 
-        return Result.Success(new OnlinePaymentSweep(checkedCount, expired, keyRenewed));
+        var depositsReturned = await ReturnUnansweredDepositsAsync(now, cancellationToken);
+        return Result.Success(new OnlinePaymentSweep(checkedCount, expired, keyRenewed, depositsReturned));
+    }
+
+    /// <summary>
+    /// The requests booked with a deposit that the business did not answer before their time (Fase 31O, ADR 0095): their
+    /// deposit goes back (the queue asks Mercado Pago for it), each on its own. One the business answers meanwhile collides
+    /// on its version and is read again in the next pass, as it is then; the others are not held back by it.
+    /// </summary>
+    private async Task<int> ReturnUnansweredDepositsAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        _context.ChangeTracker.Clear();
+        var due = await _context.Appointments
+            .Where(a => a.DepositStatus == AppointmentDepositStatus.Held && a.Status == AppointmentStatus.Requested && a.StartAt <= now)
+            .OrderBy(a => a.StartAt)
+            .Select(a => a.Id)
+            .Take(MaxPerSweep)
+            .ToListAsync(cancellationToken);
+        var returned = 0;
+        foreach (var id in due)
+        {
+            _context.ChangeTracker.Clear();
+            var appointment = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+            if (appointment is null || !appointment.ReturnUnansweredDeposit(now))
+                continue;
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                returned++;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Answered meanwhile: the next pass reads it as it is then.
+            }
+        }
+        _context.ChangeTracker.Clear();
+        return returned;
     }
 
     private async Task<bool> ExpireAsync(Guid checkoutId, DateTimeOffset now, CancellationToken cancellationToken)

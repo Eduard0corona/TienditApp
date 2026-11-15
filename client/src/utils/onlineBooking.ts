@@ -1,6 +1,7 @@
 // Appointments booked online (Fase 24D, ADR 0025): what the booking page, the appointment's link and Mis citas show. The
 // server decides the free times, the status and whether the customer may still cancel; these only put them in words.
 import { AppointmentStatus } from '../types';
+import { cancelDepositSentence } from './bookingDeposits';
 
 /** «45 min», «1 h», «1 h 30 min»: how long a service takes. */
 export function describeDuration(minutes: number): string {
@@ -47,7 +48,9 @@ export function addressMapUrl(address: string): string {
 export const upperFirst = (text: string) => text.charAt(0).toLocaleUpperCase('es-MX') + text.slice(1);
 
 /** What the customer confirms before cancelling: the time is freed and the business sees it cancelled. */
-export function cancelAppointmentMessage(appointment: { serviceName: string; dateLabel: string; timeLabel: string }): string {
+export function cancelAppointmentMessage(
+  appointment: { serviceName: string; dateLabel: string; timeLabel: string } & Parameters<typeof cancelDepositSentence>[0],
+): string {
   return `Tu cita de ${appointment.serviceName} del ${appointment.dateLabel} a las ${appointment.timeLabel} se cancela y `
-    + 'el horario queda libre para alguien más.';
+    + `el horario queda libre para alguien más.${cancelDepositSentence(appointment)}`;
 }

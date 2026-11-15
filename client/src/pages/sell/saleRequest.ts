@@ -95,6 +95,9 @@ export function buildOrderRequest(sale: SaleContext): CreateOrderRequest {
       }
       : undefined,
     appointmentId: sale.appointment?.id,
+    // The deposit paid online this screen took off (Fase 31O): if the appointment no longer holds it, the server refuses
+    // the sale instead of saving it short.
+    expectedAppointmentDeposit: sale.appointment ? sale.appointment.deposit ?? 0 : undefined,
   };
 }
 

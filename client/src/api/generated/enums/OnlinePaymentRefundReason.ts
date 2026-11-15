@@ -8,5 +8,6 @@ export const OnlinePaymentRefundReason = {
   InMercadoPago: 4,
   Claim: 5,
   Chargeback: 6,
+  AppointmentDeposit: 7,
 } as const;
 export type OnlinePaymentRefundReason = (typeof OnlinePaymentRefundReason)[keyof typeof OnlinePaymentRefundReason];

@@ -994,10 +994,33 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <param name="paidAt">When it is recorded: a late notification must not rewrite a closed day.</param>
     public OrderPayment RegisterOnlineDeposit(string paymentReference, decimal amount, DateTimeOffset paidAt, Guid? inventoryLocationId)
     {
-        if (string.IsNullOrWhiteSpace(paymentReference))
-            throw new DomainException("El pago en línea necesita su referencia.");
         if (OrderType != OrderType.Service)
             throw new DomainException(OnlineDepositOnlyServiceMessage);
+        return AddOnlineDeposit(paymentReference, amount, paidAt, inventoryLocationId);
+    }
+
+    public const string AppointmentDepositFirstMessage = "El anticipo de la cita se registra antes que cualquier otro cobro de la venta.";
+
+    /// <summary>
+    /// The deposit the customer paid online to book the appointment this sale charges (Fase 31O, ADR 0095): taken with the
+    /// sale, before any other payment, never into a drawer and never more than its total (a sale of less is refused: the
+    /// difference would have nowhere to go). One per sale; what is refunded of it goes back «En línea».
+    /// </summary>
+    /// <param name="paymentReference">The gateway's id of the payment, which its refunds use.</param>
+    /// <param name="paidAt">When the sale takes it: the day it is charged, not the day it was paid.</param>
+    public OrderPayment RegisterAppointmentDeposit(string paymentReference, decimal amount, DateTimeOffset paidAt, Guid? inventoryLocationId)
+    {
+        if (_payments.Count > 0)
+            throw new DomainException(AppointmentDepositFirstMessage);
+        if (amount > 0 && decimal.Round(amount, 2) == amount && amount + WrittenOffAmount > Total)
+            throw new DomainException(Appointments.OnlineBooking.BookingDeposits.AboveSaleMessage);
+        return AddOnlineDeposit(paymentReference, amount, paidAt, inventoryLocationId);
+    }
+
+    private OrderPayment AddOnlineDeposit(string paymentReference, decimal amount, DateTimeOffset paidAt, Guid? inventoryLocationId)
+    {
+        if (string.IsNullOrWhiteSpace(paymentReference))
+            throw new DomainException("El pago en línea necesita su referencia.");
         if (_payments.Any(p => p.Method is OrderPaymentMethod.Online or OrderPaymentMethod.Platform))
             throw new DomainException(OnlineDepositOnceMessage);
         if (Status == OrderStatus.Cancelled)

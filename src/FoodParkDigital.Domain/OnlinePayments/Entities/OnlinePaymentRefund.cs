@@ -63,6 +63,20 @@ public class OnlinePaymentRefund : AuditableEntity, IAggregateRoot, ITenantScope
         return Request(tenantId, paymentId, amount, reason, now, refund => refund.CheckoutId = checkoutId);
     }
 
+    /// <summary>
+    /// The deposit that booked an appointment goes back to its customer (Fase 31O, ADR 0095), from the checkout it was paid
+    /// with: whole, once (the base keeps one per checkout).
+    /// </summary>
+    public static OnlinePaymentRefund ForAppointmentDeposit(
+        Guid tenantId, Guid checkoutId, string paymentId, decimal amount, DateTimeOffset now)
+    {
+        if (checkoutId == Guid.Empty)
+            throw new DomainException("La devolución necesita su pago en línea.");
+
+        return Request(tenantId, paymentId, amount, OnlinePaymentRefundReason.AppointmentDeposit, now,
+            refund => refund.CheckoutId = checkoutId);
+    }
+
     /// <summary>The business refunded (or voided) an order paid online with the «En línea» method.</summary>
     public static OnlinePaymentRefund ForOrder(
         Guid tenantId, Guid orderId, Guid orderRefundId, string paymentId, decimal amount, DateTimeOffset now)

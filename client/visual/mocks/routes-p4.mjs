@@ -107,6 +107,9 @@ export function phase4Routes(data, { ok, notFound, paginate, createMockOrder }) 
       if (q.has('homeVisit')) rows = rows.filter((a) => Boolean(a.visit) === (q.get('homeVisit') === 'true'));
       // By status: the agenda counts the requests booked online that wait (Fase 24D).
       if (q.has('status')) rows = rows.filter((a) => a.status === Number(q.get('status')));
+      // By customer or service, as the search of the agenda asks.
+      const search = (q.get('search') ?? '').toLowerCase();
+      if (search) rows = rows.filter((a) => `${a.customerName} ${a.serviceName}`.toLowerCase().includes(search));
       const history = !from && to;
       rows = [...rows].sort((a, b) => (history ? b.startAt.localeCompare(a.startAt) : a.startAt.localeCompare(b.startAt)));
       return ok(paginate(rows, q, 10));

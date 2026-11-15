@@ -120,6 +120,48 @@ public class PublicMenuController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Pays the deposit the service asks to be booked (Fase 31O, ADR 0095): what is asked is checked as a request would be now,
+    /// and the answer is Mercado Pago's page, where the customer pays into the business's account within 30 minutes. The request
+    /// is booked when the payment is approved.
+    /// </summary>
+    [HttpPost("appointments/deposit")]
+    [EnableRateLimiting("public-order")]
+    public async Task<ActionResult<OnlineCheckoutStartedDto>> StartAppointmentDeposit(
+        string slug, [FromBody] StartAppointmentDepositRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new StartAppointmentDepositCommand
+        {
+            Slug = slug,
+            ServiceProductId = request.ServiceProductId,
+            StartAt = request.StartAt,
+            CustomerName = request.CustomerName,
+            CustomerPhone = request.CustomerPhone,
+            Notes = request.Notes,
+            IdempotencyKey = request.IdempotencyKey,
+            StaffId = request.StaffId,
+            ExpectedDeposit = request.ExpectedDeposit
+        }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// How the deposit of an appointment stands, after asking Mercado Pago (the customer's return page, Fase 31O): to pay, the
+    /// request booked (with its link, only with the browser's return key), or paid but not booked and going back. 404 for a
+    /// payment that is not the deposit of an appointment of this business.
+    /// </summary>
+    [HttpPost("appointments/deposit/{checkoutId:guid}/confirm")]
+    [EnableRateLimiting("online-payment-status")]
+    public async Task<ActionResult<AppointmentDepositStatusDto>> ConfirmAppointmentDeposit(
+        string slug, Guid checkoutId, [FromBody] ConfirmOnlineCheckoutRequest? request, CancellationToken cancellationToken)
+    {
+        var status = await _mediator.Send(
+            new ConfirmAppointmentDepositCommand(slug, checkoutId, request?.PaymentId, request?.ReturnKey), cancellationToken);
+        return status is null ? this.ApiError(StatusCodes.Status404NotFound, "No encontramos ese pago.") : Ok(status);
+    }
+
     /// <summary>The visit to quote a customer requests online (Fase 29B); not found while the business does not receive visits.</summary>
     /// <param name="slug">The business of the menu.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
@@ -318,6 +360,13 @@ public class RequestPublicHomeVisitRequest
     public HomeVisitChargePolicy ExpectedChargePolicy { get; init; }
     /// <summary>What the page said the visit costs at the postal code (the coverage's price).</summary>
     public decimal ExpectedPrice { get; init; }
+}
+
+/// <summary>What a customer asks for when they pay the deposit to book (Fase 31O): a request, and the deposit the page showed.</summary>
+public class StartAppointmentDepositRequest : RequestPublicAppointmentRequest
+{
+    /// <summary>The deposit the booking page showed for the service: when it changed meanwhile, nothing is charged.</summary>
+    public decimal? ExpectedDeposit { get; init; }
 }
 
 public class RequestPublicAppointmentRequest

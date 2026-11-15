@@ -271,6 +271,7 @@ function visitOfTheLink(sent: number) {
     staffName: null,
     problemPhotos: sent,
     canAddPhotos: sent < 5,
+    cancelReturnsDeposit: false,
   };
 }
 

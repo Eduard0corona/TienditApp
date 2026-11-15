@@ -9,6 +9,7 @@ import PageTitle from '../../components/common/PageTitle';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useProblemPhotoUploads } from '../../hooks/useProblemPhotoUploads';
 import { useToast } from '../../hooks/useToast';
+import { expectedDepositBack } from '../../utils/bookingDeposits';
 import { cancelAppointmentMessage } from '../../utils/onlineBooking';
 
 /**
@@ -53,7 +54,7 @@ export default function AppointmentTrackingPage() {
     if (!accepted) return;
     setCancelling(true);
     try {
-      queryClient.setQueryData(queryKey, await publicMenuApi.cancelAppointmentByLink(token));
+      queryClient.setQueryData(queryKey, await publicMenuApi.cancelAppointmentByLink(token, expectedDepositBack(appointment)));
       toast.success('Cancelaste tu cita.');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo cancelar tu cita.'));

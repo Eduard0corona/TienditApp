@@ -27,4 +27,19 @@ describe('ChargeModal', () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: 'Cobrar' })).toHaveTextContent('Por cobrar 50');
   });
+
+  it('charges the rest of a deposit paid online, with the tip (Fase 31O)', () => {
+    render(<ChargeModal show amountDue={280} paidOnline={120} total={400} submitting={false} error="" allowTip onSubmit={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByRole('note')).toHaveTextContent('El cliente ya pagó en línea un anticipo de $120.00: entra a la venta como pago «En línea» y aquí cobras el resto.');
+    expect(screen.getByRole('dialog', { name: 'Cobrar' })).toHaveTextContent('Por cobrar 280 con propina');
+  });
+
+  it('offers no tip when the deposit covers the whole sale: there is no payment for it to go with', () => {
+    render(<ChargeModal show amountDue={0} paidOnline={400} total={400} submitting={false} error="" allowTip onSubmit={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByRole('note')).toHaveTextContent('anticipo de $400.00, que cubre toda la venta: entra como pago «En línea», no queda nada por cobrar y en este cobro no hay propina.');
+    expect(screen.getByRole('dialog', { name: 'Cobrar' })).toHaveTextContent('Por cobrar 0');
+    expect(screen.getByRole('dialog', { name: 'Cobrar' })).not.toHaveTextContent('con propina');
+  });
 });

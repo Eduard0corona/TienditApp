@@ -59,6 +59,12 @@ public class AppointmentDto
     /// in Explorar, and its phone may not request again in the business for 90 days.
     /// </summary>
     public bool MarkedFake { get; set; }
+    /// <summary>
+    /// What its customer paid online to book it (Fase 31O, ADR 0095), with where it stands
+    /// (<see cref="DepositStatus"/>); null when it was booked without one.
+    /// </summary>
+    public decimal? DepositAmount { get; set; }
+    public AppointmentDepositStatus? DepositStatus { get; set; }
 
     public static AppointmentDto From(Appointment appointment) => new()
     {
@@ -91,7 +97,9 @@ public class AppointmentDto
             ? ResponseTimes.AnswerBy(appointment.CreatedAt, appointment.RequestedStartAt ?? appointment.StartAt)
             : null,
         FromTeam = appointment.FromTeam,
-        MarkedFake = appointment.IsMarkedFake
+        MarkedFake = appointment.IsMarkedFake,
+        DepositAmount = appointment.DepositAmount,
+        DepositStatus = appointment.DepositStatus
     };
 
     /// <summary><see cref="From"/> written for SQL, for the lists.</summary>
@@ -130,7 +138,9 @@ public class AppointmentDto
             : null,
         FromTeam = x.FromTeam,
         // Appointment.IsMarkedFake, written for SQL.
-        MarkedFake = x.MarkedFakeAt != null && x.UnmarkedFakeAt == null
+        MarkedFake = x.MarkedFakeAt != null && x.UnmarkedFakeAt == null,
+        DepositAmount = x.DepositAmount,
+        DepositStatus = x.DepositStatus
     };
 
     /// <summary>A day: the longest a request waits and is still answered in time (<see cref="ResponseTimes.AnswerBy"/>).</summary>
