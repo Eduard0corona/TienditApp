@@ -161,9 +161,11 @@ public sealed class AgentPagesTests : IClassFixture<PublicPagesTests.PagesApi>
     {
         _api.Sender.Menu = Menu(menu =>
         {
-            // As the API answers a store that takes online orders but not now: it does not take them, paused.
+            // As the API answers a store that takes online orders but not now: it does not take them, paused, and it says
+            // nothing of paying online then (PaysOnline goes with AcceptsOrders).
             menu.AcceptsOrders = false;
             menu.OrdersPaused = true;
+            menu.PaysOnline = false;
             menu.DeliveryOnly = true;
             menu.Address = null;
             menu.OpeningHours!.ClosedNotice = "Fuera de horario no recibimos pedidos en línea: vuelve mañana a las 9:00.";
@@ -173,10 +175,27 @@ public sealed class AgentPagesTests : IClassFixture<PublicPagesTests.PagesApi>
 
         Assert.Contains("- Dirección: solo entrega a domicilio\n", text);
         Assert.Contains("- Pedidos en línea: a domicilio, pero ahora no recibe pedidos (Fuera de horario no recibimos pedidos en línea: vuelve mañana a las 9:00.)\n", text);
-        Assert.Contains("- Pago: en línea con Mercado Pago, o al recibir el pedido\n", text);
+        // Not «al recibir» only: how it is paid is chosen on the page once it takes orders again.
+        Assert.Contains("- Pago: se elige en la página del negocio al enviar el pedido.\n", text);
+        Assert.DoesNotContain("al recibir el pedido", text);
         Assert.Contains("## Cómo pedir\n", text);
         Assert.Contains($"- Ejemplo: https://app.tienditapp.mx/m/cafe-luna?agregar={Latte}:1:{Chico}\n", text);
         Assert.Contains("- Ahora no recibe pedidos: el enlace guarda el pedido en la página, y el cliente lo envía cuando vuelva a recibirlos.\n", text);
+    }
+
+    [Fact]
+    public async Task AStoreThatOnlyDelivers_ShouldSayItIsPaidOnDelivery()
+    {
+        _api.Sender.Menu = Menu(menu =>
+        {
+            menu.DeliveryOnly = true;
+            menu.Address = null;
+        });
+
+        var text = await _api.Http.GetStringAsync("/m/cafe-luna/menu.md");
+
+        Assert.Contains("- Pedidos en línea: sí, a domicilio\n", text);
+        Assert.Contains("- Pago: en línea con Mercado Pago, o al recibir el pedido\n", text);
     }
 
     [Fact]

@@ -181,10 +181,15 @@ public static class AgentPages
             text.Append("- WhatsApp del negocio: ").Append(Inline(menu.ContactPhone)).Append('\n');
         AppendHours(text, menu.OpeningHours);
         text.Append("- Pedidos en línea: ").Append(OrdersLine(menu)).Append('\n');
-        if (takesOrders)
+        if (menu.AcceptsOrders)
         {
             var onDelivery = menu.DeliveryOnly ? "al recibir el pedido" : "al recoger o recibir el pedido";
             text.Append("- Pago: ").Append(menu.PaysOnline ? $"en línea con Mercado Pago, o {onDelivery}" : onDelivery).Append('\n');
+        }
+        else if (menu.OrdersPaused)
+        {
+            // Paused, the API does not say whether it pays online (PaysOnline goes with AcceptsOrders): the page says it then.
+            text.Append("- Pago: se elige en la página del negocio al enviar el pedido.\n");
         }
         if (menu.DeliveryAvailable)
             text.Append("- Envío a un código postal: `GET ").Append(baseUrl).Append("/api/v1/public/menu/").Append(Uri.EscapeDataString(menu.Slug))
