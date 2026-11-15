@@ -408,18 +408,19 @@ public static class AgentPages
             escaped.Append(character);
         }
 
-        // Nor a list item or a numbered one where it starts a line («- …», «+ …», «1. …»).
-        if (escaped.Length > 0 && escaped[0] is '-' or '+' or '=')
-            escaped.Insert(0, '\\');
-        else
-        {
-            var digits = 0;
-            while (digits < escaped.Length && char.IsAsciiDigit(escaped[digits]))
-                digits++;
-            if (digits > 0 && digits < escaped.Length && escaped[digits] is '.')
-                escaped.Insert(digits, '\\');
-        }
+        // Nor a list item, a numbered one or a rule where it starts a line: a mark followed by a space or alone («- …»,
+        // «+ …», «1. …») or only dashes («---»). A WhatsApp «+52…», «-10%» or «1.5 kg» opens nothing and stays as written.
+        var inline = escaped.ToString();
+        bool MarkEndsAt(int at) => at >= inline.Length || inline[at] == ' ';
+        if (inline.Length > 0 && (inline[0] is '-' or '+') && (MarkEndsAt(1) || IsRule(inline)))
+            return "\\" + inline;
+        var digits = 0;
+        while (digits < inline.Length && char.IsAsciiDigit(inline[digits]))
+            digits++;
+        if (digits > 0 && digits < inline.Length && inline[digits] is '.' && MarkEndsAt(digits + 1))
+            return inline.Insert(digits, "\\");
+        return inline;
 
-        return escaped.ToString();
+        static bool IsRule(string line) => line.All(character => character is '-' or ' ') && line.Count(character => character == '-') >= 3;
     }
 }

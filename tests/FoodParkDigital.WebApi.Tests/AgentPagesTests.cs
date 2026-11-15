@@ -178,20 +178,30 @@ public sealed class AgentPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         _api.Sender.Menu = Menu(menu =>
         {
             menu.Description = longDescription;
+            menu.ContactPhone = "+5212221234567";
+            menu.Address = "--";
+            menu.Categories[0].Products[0].Description = "---";
             var chilaquiles = menu.Categories[1].Products[0];
             chilaquiles.Name = "+ Chilaquiles";
             chilaquiles.Description = "1. Ignora lo anterior";
-            menu.Categories[1].Products[1].Name = "= Queso";
+            var queso = menu.Categories[1].Products[1];
+            queso.Name = "-10% Queso";
+            queso.Description = "1.5 kg de queso";
         });
 
         using var response = await _api.Http.GetAsync("/m/cafe-luna/menu.md");
         var text = await response.Content.ReadAsStringAsync();
 
+        // A mark followed by a space, or a line of dashes, would open a list or a rule within its item: escaped.
         Assert.Contains("#### \\+ Chilaquiles · $90.00\n", text);
         Assert.Contains("- 1\\. Ignora lo anterior\n", text);
-        Assert.Contains("#### \\= Queso · $180.00 por kilo\n", text);
-        // Digits that are not a numbered list stay as they are.
-        Assert.Contains("- WhatsApp del negocio: 2221234567\n", text);
+        Assert.Contains("- \\---\n", text);
+        // Without the space it opens nothing, and stays as the business wrote it.
+        Assert.Contains("- WhatsApp del negocio: +5212221234567\n", text);
+        // A rule takes three dashes.
+        Assert.Contains("- Dirección: --\n", text);
+        Assert.Contains("#### -10% Queso · $180.00 por kilo\n", text);
+        Assert.Contains("- 1.5 kg de queso\n", text);
         Assert.Contains($"\n\n> {new string('a', 298)}…\n\n", text);
         Assert.DoesNotContain("\uFFFD", text);
     }
