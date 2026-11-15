@@ -108,10 +108,11 @@ export default function PublicHomeVisitPage() {
     applyAddress(saved);
   };
   // Where it starts, for a visitor and again once the account's session and addresses arrive (the session is read after
-  // the page opens): the account's last address used, or the postal code given in Explorar; never over what was typed.
+  // the page opens): the account's last address used, or the postal code given in Explorar, once read (the account's is
+  // not waited for when its address is taken); never over what was typed.
   const [addressDefaultFor, setAddressDefaultFor] = useState<string | null>(null);
   const addressOwner = customer?.id ?? '';
-  if (addressDefaultFor !== addressOwner && (!customer || (!addresses.isPending && !remembered.pending))) {
+  if (addressDefaultFor !== addressOwner && (!customer || !addresses.isPending) && (!!savedAddresses[0] || !remembered.pending)) {
     setAddressDefaultFor(addressOwner);
     if (!addressTouched) {
       if (savedAddresses[0]) {
@@ -545,13 +546,19 @@ export default function PublicHomeVisitPage() {
                   <label className="form-label small mb-1" htmlFor={`${fieldId}-address`}>Dirección</label>
                   <input id={`${fieldId}-address`} className="form-control" required maxLength={ADDRESS_LINE_MAX_LENGTH}
                     autoComplete="street-address" placeholder="Calle, número y colonia"
-                    value={address.addressLine} onChange={(event) => setAddress((current) => ({ ...current, addressLine: event.target.value }))} />
+                    value={address.addressLine} onChange={(event) => {
+                      setAddressTouched(true);
+                      setAddress((current) => ({ ...current, addressLine: event.target.value }));
+                    }} />
                 </div>
                 <div className="col-12">
                   <label className="form-label small mb-1" htmlFor={`${fieldId}-references`}>Referencias (opcional)</label>
                   <input id={`${fieldId}-references`} className="form-control" maxLength={REFERENCES_MAX_LENGTH}
                     placeholder="Ej. portón verde, entre qué calles"
-                    value={address.references} onChange={(event) => setAddress((current) => ({ ...current, references: event.target.value }))} />
+                    value={address.references} onChange={(event) => {
+                      setAddressTouched(true);
+                      setAddress((current) => ({ ...current, references: event.target.value }));
+                    }} />
                 </div>
                 <div className="col-sm-6">
                   <label className="form-label small mb-1" htmlFor={`${fieldId}-name`}>Tu nombre</label>

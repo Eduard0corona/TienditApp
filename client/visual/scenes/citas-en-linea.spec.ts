@@ -449,6 +449,10 @@ test.describe('Anticipos en la agenda', () => {
   test('agenda devolver anticipo', async ({ page }) => {
     await page.setViewportSize(SIZES.desktop);
     await open(page, '/appointments');
+    // Only her appointments, at the top of the table: clicking one at its bottom scrolled the table, and its sticky header
+    // came out at another fraction of a pixel in some runs.
+    await page.getByRole('searchbox', { name: /^Cliente, teléfono, servicio/ }).fill('Valeria Ruiz');
+    await expect(page.getByText('Juan Carlos Hernández')).toHaveCount(0);
     await page.getByRole('button', { name: 'Devolver anticipo de Valeria Ruiz' }).click();
     await dialog(page, 'Devolver el anticipo');
     await snap(page, 'agenda-devolver-anticipo-escritorio', { fullPage: false });

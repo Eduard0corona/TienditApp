@@ -137,4 +137,43 @@ describe('accountCartSync', () => {
     expect(api.saveCart).toHaveBeenCalledTimes(1);
     expect(api.saveCart).toHaveBeenCalledWith('cafe-luna', { lines: [line(2)], reorderOf: null, skipped: null });
   });
+
+  it('tells when the account could not keep the cart, and not a save that a newer one replaced (Fase 31P)', async () => {
+    api.saveCart.mockRejectedValueOnce(new Error('offline'));
+    const failed = vi.fn();
+    const replaced = vi.fn();
+
+    scheduleAccountCartSave('demo', { lines: [line(1)] }, null, 0, failed);
+    await vi.advanceTimersByTimeAsync(0);
+    await settle();
+    expect(failed).toHaveBeenCalledTimes(1);
+
+    // A newer save of the store before this one goes takes its place: only the newer one is told.
+    api.saveCart.mockRejectedValueOnce(new Error('offline'));
+    const newer = vi.fn();
+    scheduleAccountCartSave('demo', { lines: [line(2)] }, null, ACCOUNT_CART_DELAY_MS, replaced);
+    scheduleAccountCartSave('demo', { lines: [line(3)] }, null, 0, newer);
+    await vi.advanceTimersByTimeAsync(ACCOUNT_CART_DELAY_MS);
+    await settle();
+    expect(replaced).not.toHaveBeenCalled();
+    expect(newer).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send a cart of the device that changed while the account\'s were read (Fase 31P)', async () => {
+    saveCart('cafe-luna', { businessName: 'Café Luna', lines: [line(2)] }, new Date(Date.now() - 5 * 60_000));
+    let answer: (value: never) => void = () => undefined;
+    api.getCarts.mockReturnValue(new Promise((resolve) => { answer = resolve; }) as never);
+    api.saveCart.mockResolvedValue({} as never);
+
+    const sending = sendDeviceCarts();
+    // «Pedir otra vez» fills the cart and sends it while the account's carts are read.
+    saveCart('cafe-luna', { businessName: 'Café Luna', lines: [line(5)], reorderOf: 1, skipped: 0 });
+    scheduleAccountCartSave('cafe-luna', { lines: [line(5)], reorderOf: 1, skipped: 0 }, null, 0);
+    answer([] as never);
+    await sending;
+    await settle();
+
+    expect(api.saveCart).toHaveBeenCalledTimes(1);
+    expect(api.saveCart).toHaveBeenCalledWith('cafe-luna', { lines: [line(5)], reorderOf: 1, skipped: 0 });
+  });
 });

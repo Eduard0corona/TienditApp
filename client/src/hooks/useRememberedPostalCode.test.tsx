@@ -30,14 +30,16 @@ describe('useRememberedPostalCode (Fase 31P)', () => {
     window.localStorage.clear();
   });
 
-  const renderRemembered = (auth: AuthContextType) => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const renderRemembered = (
+    auth: AuthContextType,
+    { queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }), enabled = true } = {},
+  ) => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>
         <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>
       </QueryClientProvider>
     );
-    return renderHook(() => useRememberedPostalCode(), { wrapper });
+    return renderHook(() => useRememberedPostalCode(enabled), { wrapper });
   };
 
   it('starts the address with the code the account keeps, once it is read, over the one of this device', async () => {
@@ -73,5 +75,27 @@ describe('useRememberedPostalCode (Fase 31P)', () => {
     account.getPostalCode.mockRejectedValue(new Error('offline'));
     const failed = renderRemembered(customer);
     await waitFor(() => expect(failed.result.current).toEqual({ postalCode: '01000', pending: false }));
+  });
+
+  it('reads the account\'s again when the page opens, not the one Explorar read a moment ago', async () => {
+    savePostalCode('11111');
+    // Explorar read 11111 a moment ago; since then another device (or tab) changed it to 22222.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    queryClient.setQueryData(['me', 'postal-code'], { postalCode: '11111' });
+    let answer: (value: { postalCode: string | null }) => void = () => undefined;
+    account.getPostalCode.mockReturnValue(new Promise((resolve) => { answer = resolve; }) as never);
+
+    const { result } = renderRemembered(customer, { queryClient });
+
+    expect(result.current).toEqual({ postalCode: '11111', pending: true });
+    answer({ postalCode: '22222' });
+    await waitFor(() => expect(result.current).toEqual({ postalCode: '22222', pending: false }));
+  });
+
+  it('does not ask the account where it is not used, and takes this device\'s', () => {
+    savePostalCode('01000');
+
+    expect(renderRemembered(customer, { enabled: false }).result.current).toEqual({ postalCode: '01000', pending: false });
+    expect(account.getPostalCode).not.toHaveBeenCalled();
   });
 });

@@ -298,17 +298,18 @@ export default function PublicMenuPage() {
   }
 
   // The first time the order goes to an address: the account's last one used, or the postal code given in Explorar (with a
-  // customer account, the one the account keeps, Fase 31P).
-  const remembered = useRememberedPostalCode();
+  // customer account, the one the account keeps, Fase 31P; only waited for when no saved address will be taken).
+  const remembered = useRememberedPostalCode(deliveryOffered);
   const chooseAddress = (saved: AccountAddress | null) => {
     setAddressChoice(saved?.id ?? null);
     setAddress((current) => (saved
       ? { ...current, postalCode: saved.postalCode, addressLine: saved.addressLine, references: saved.references ?? '' }
       : { ...current, postalCode: remembered.postalCode, addressLine: '', references: '' }));
   };
-  if (delivering && addressChoice === undefined && (!customer || !addresses.isPending) && !remembered.pending) {
-    // Not over an address the customer started writing while the account's ones loaded.
-    if (savedAddresses[0] && address.addressLine.trim() === '') {
+  // Not over an address the customer started writing while the account's ones loaded.
+  const takeSavedAddress = !!savedAddresses[0] && address.addressLine.trim() === '';
+  if (delivering && addressChoice === undefined && (!customer || !addresses.isPending) && (takeSavedAddress || !remembered.pending)) {
+    if (takeSavedAddress) {
       chooseAddress(savedAddresses[0]);
     } else {
       setAddressChoice(null);

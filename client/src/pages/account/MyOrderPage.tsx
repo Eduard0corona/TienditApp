@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountApi } from '../../api/accountApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { OrderAgainButton } from '../../components/account/OrderAgainButton';
 import PageTitle from '../../components/common/PageTitle';
 import CancelOrderButton from '../../components/tracking/CancelOrderButton';
 import OrderItemsSummary from '../../components/tracking/OrderItemsSummary';
@@ -20,7 +21,7 @@ import { businessWhatsAppUrl } from '../../utils/whatsApp';
  */
 export default function MyOrderPage() {
   const { id = '' } = useParams();
-  const orderAgain = useOrderAgain();
+  const { orderAgain, opening } = useOrderAgain();
   const queryClient = useQueryClient();
   const queryKey = ['me', 'orders', 'detail', id];
   // A change of the order arrives at once (Fase 31A); the polling below stays behind it.
@@ -117,14 +118,7 @@ export default function MyOrderPage() {
                 )}
                 <div className="d-flex flex-wrap gap-2 mt-3">
                   {order.canOrderAgain && (
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={() => void orderAgain(order)}
-                      aria-label={`Pedir otra vez ${order.orderNumber} de ${order.businessName}`}
-                    >
-                      <i className="ri-restart-line me-1" aria-hidden="true"></i>Pedir otra vez
-                    </button>
+                    <OrderAgainButton order={order} opening={opening} onClick={() => void orderAgain(order)} className="btn btn-primary" />
                   )}
                   {contact && (
                     <a className="btn btn-light" href={contact} target="_blank" rel="noopener noreferrer">

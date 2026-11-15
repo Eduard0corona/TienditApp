@@ -1,6 +1,6 @@
 import { accountApi, type MyCart } from '../api/accountApi';
 import { CUSTOMER_LEFT_EVENT } from './customerDevice';
-import { adoptAccountSavedAt, deviceCarts, fromAccountCart, newerCart, type SavedCartLine } from './savedCart';
+import { adoptAccountSavedAt, deviceCarts, fromAccountCart, newerCart, readCart, type SavedCartLine } from './savedCart';
 
 /** What the account keeps of a cart (Fase 31J): its lines and «Pedir otra vez». */
 export interface AccountCartPayload {
@@ -18,6 +18,7 @@ export type AccountCartSaved = (saved: MyCart | null) => void;
 interface Pending {
   payload: AccountCartPayload | null;
   onSaved: AccountCartSaved | null;
+  onFailed: (() => void) | null;
   timer: number | null;
   running: Promise<void> | null;
 }
@@ -37,18 +38,21 @@ export function cartSignature(payload: AccountCartPayload): string {
  * Keeps the cart of a store in the customer account, a moment after its last change, one save at a time and the last one
  * last: a save sent while another goes waits for it, so the account never ends with an older cart. A save that fails
  * (offline, the session ended) is dropped: the device keeps the cart and the next change sends it again. One kept gives
- * the device the account's time for it, and `onSaved` what the account kept.
+ * the device the account's time for it, and `onSaved` what the account kept; one that fails calls `onFailed`. A newer
+ * save of the same store before this one goes takes its place, and neither is called.
  */
 export function scheduleAccountCartSave(
   slug: string,
   payload: AccountCartPayload,
   onSaved: AccountCartSaved | null = null,
   delay = ACCOUNT_CART_DELAY_MS,
+  onFailed: (() => void) | null = null,
 ): void {
-  const entry = pending.get(slug) ?? { payload: null, onSaved: null, timer: null, running: null };
+  const entry = pending.get(slug) ?? { payload: null, onSaved: null, onFailed: null, timer: null, running: null };
   pending.set(slug, entry);
   entry.payload = payload;
   entry.onSaved = onSaved;
+  entry.onFailed = onFailed;
   if (entry.timer !== null) window.clearTimeout(entry.timer);
   entry.timer = window.setTimeout(() => {
     entry.timer = null;
@@ -63,6 +67,7 @@ export function cancelAccountCartSaves(): void {
     entry.timer = null;
     entry.payload = null;
     entry.onSaved = null;
+    entry.onFailed = null;
   }
   pending.clear();
 }
@@ -76,9 +81,11 @@ async function send(slug: string, entry: Pending): Promise<void> {
   }
   const payload = entry.payload;
   const onSaved = entry.onSaved;
+  const onFailed = entry.onFailed;
   if (!payload) return;
   entry.payload = null;
   entry.onSaved = null;
+  entry.onFailed = null;
   entry.running = Promise.resolve()
     .then(() => accountApi.saveCart(slug, { lines: payload.lines, reorderOf: payload.reorderOf ?? null, skipped: payload.skipped ?? null }))
     .then((saved) => {
@@ -86,7 +93,7 @@ async function send(slug: string, entry: Pending): Promise<void> {
       const kept = saved && typeof saved.savedAt === 'string' ? saved : null;
       if (kept) adoptAccountSavedAt(slug, payload.lines, kept.savedAt);
       onSaved?.(kept);
-    }, () => undefined);
+    }, () => onFailed?.());
   await entry.running;
   entry.running = null;
   // Changed while it went, and its moment already passed: the last one goes now.
@@ -104,6 +111,8 @@ export async function sendDeviceCarts(): Promise<void> {
   if (carts.length === 0) return;
   const kept = await accountApi.getCarts();
   for (const { slug, cart } of carts) {
+    // Changed while the account's were read («Pedir otra vez», the store): that change is on its way, newer than this.
+    if (readCart(slug)?.savedAt !== cart.savedAt) continue;
     const account = kept.find((item) => item.slug === slug);
     const theirs = account ? fromAccountCart(account) : null;
     if (newerCart(cart, theirs) !== cart || (theirs && cartSignature(theirs) === cartSignature(cart))) continue;
