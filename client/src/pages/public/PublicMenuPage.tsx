@@ -371,6 +371,7 @@ export default function PublicMenuPage() {
             invalid: fromLink.invalid,
             replaced: !!previous && previous.lines.length > 0 && cartSignature(previous) !== cartSignature({ lines: savedLinesOf(restored.lines) }),
             paused: !data.acceptsOrders,
+            fromAssistant: !!assistantLink,
           })
         : restoredMessage(restored.lines.length, restored.dropped, saved.skipped ?? 0, saved.reorderOf !== undefined);
       setRestoredNotice(notice);
@@ -406,7 +407,9 @@ export default function PublicMenuPage() {
     if (link && !fromLink && !atTable) {
       setRestoredNotice(!takesOrders
         ? 'Este negocio no recibe pedidos en línea: el enlace no puede llenar tu pedido. Mira su menú.'
-        : orderLinkMessage({ kept: 0, notOnMenu: linkRestored?.dropped ?? 0, invalid: link.invalid, replaced: false, paused: false }));
+        : orderLinkMessage({
+          kept: 0, notOnMenu: linkRestored?.dropped ?? 0, invalid: link.invalid, replaced: false, paused: false, fromAssistant: !!assistantLink,
+        }));
     }
     // What the account has: the same cart is not sent again. When it could not be read, what this device restores: only
     // a change made here goes then, never this device's cart over a newer one of the account.

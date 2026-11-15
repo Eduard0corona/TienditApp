@@ -51,29 +51,46 @@ describe('orderLinkOf (Fase 32A)', () => {
   });
 });
 
-describe('orderLinkMessage (Fase 32A)', () => {
-  it('says nothing when everything went in an empty cart', () => {
-    expect(orderLinkMessage(outcome())).toBe('');
+describe('orderLinkMessage (Fase 32A, 32C)', () => {
+  const send = 'Revísalo, escribe tus datos y envíalo: todavía no le llega al negocio.';
+
+  it('says whose order it is and that it has not reached the business, when everything went in an empty cart', () => {
+    expect(orderLinkMessage(outcome())).toBe(`Este es el pedido del enlace. ${send}`);
+    expect(orderLinkMessage(outcome({ fromAssistant: true }))).toBe(`Tu asistente preparó este pedido. ${send}`);
   });
 
   it('says what the menu could not take, apart from what the link did not say right, in singular and plural', () => {
-    expect(orderLinkMessage(outcome({ notOnMenu: 1 }))).toBe('Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.');
-    expect(orderLinkMessage(outcome({ notOnMenu: 2, invalid: 1 }))).toBe(
-      'Agregamos lo que sigue disponible; 2 productos ya no están en el menú o les falta elegir una opción; 1 parte del enlace no se entiende (un id o una cantidad que no es válida).',
+    expect(orderLinkMessage(outcome({ notOnMenu: 1 }))).toBe(
+      `Este es el pedido del enlace. Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción. ${send}`,
     );
-    expect(orderLinkMessage(outcome({ invalid: 3 }))).toBe('Agregamos lo que sigue disponible; 3 partes del enlace no se entienden (un id o una cantidad que no es válida).');
+    expect(orderLinkMessage(outcome({ notOnMenu: 2, invalid: 1 }))).toBe(
+      'Este es el pedido del enlace. Agregamos lo que sigue disponible; 2 productos ya no están en el menú o les falta elegir una opción; 1 parte del enlace no se entiende (un id o una cantidad que no es válida). ' + send,
+    );
+    expect(orderLinkMessage(outcome({ invalid: 3 }))).toBe(
+      `Este es el pedido del enlace. Agregamos lo que sigue disponible; 3 partes del enlace no se entienden (un id o una cantidad que no es válida). ${send}`,
+    );
   });
 
-  it('says when nothing went in', () => {
+  it('says when nothing went in, and whose order it was', () => {
     expect(orderLinkMessage(outcome({ kept: 0, notOnMenu: 2 }))).toBe(
       'No pudimos agregar los productos del enlace: 2 productos ya no están en el menú o les falta elegir una opción. Mira el menú.',
+    );
+    expect(orderLinkMessage(outcome({ kept: 0, notOnMenu: 1, fromAssistant: true }))).toBe(
+      'No pudimos agregar los productos que preparó tu asistente: 1 producto ya no está en el menú o le falta elegir una opción. Mira el menú.',
     );
   });
 
   it('says the cart that was there gave way to the link, and that the order waits while the store takes none', () => {
-    expect(orderLinkMessage(outcome({ replaced: true }))).toBe('Cambiamos el pedido que tenías por el del enlace.');
+    expect(orderLinkMessage(outcome({ replaced: true }))).toBe(`Cambiamos el pedido que tenías por el del enlace. ${send}`);
+    expect(orderLinkMessage(outcome({ replaced: true, fromAssistant: true }))).toBe(
+      `Tu asistente preparó este pedido. Cambiamos el pedido que tenías por este. ${send}`,
+    );
+    // Waiting, it is not to send now.
     expect(orderLinkMessage(outcome({ paused: true, notOnMenu: 1 }))).toBe(
       'Guardamos el pedido del enlace: envíalo cuando este negocio vuelva a recibir pedidos. No agregamos todo; 1 producto ya no está en el menú o le falta elegir una opción.',
+    );
+    expect(orderLinkMessage(outcome({ paused: true, fromAssistant: true }))).toBe(
+      'Tu asistente preparó este pedido. Guardamos el pedido: envíalo cuando este negocio vuelva a recibir pedidos.',
     );
   });
 });

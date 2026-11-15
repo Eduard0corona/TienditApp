@@ -1692,6 +1692,10 @@ describe('PublicMenuPage', () => {
 
       const cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
       expect(api.getAssistantOrder).toHaveBeenCalledWith('cafe-luna', TOKEN, expect.anything());
+      // Whose order it is, and that it has not reached the business: the chat may have sounded as if it was ordered.
+      expect(within(cart).getByRole('status')).toHaveTextContent(
+        'Tu asistente preparó este pedido. Revísalo, escribe tus datos y envíalo: todavía no le llega al negocio.',
+      );
       expect(within(cart).getByText('Latte')).toBeInTheDocument();
       expect(within(cart).getByText('«sin azúcar»')).toBeInTheDocument();
       // The secret leaves the address once read.
@@ -1936,7 +1940,8 @@ describe('PublicMenuPage', () => {
       // Said in the order that opened, which covers the page, and tied to it.
       const notice = within(cart).getByRole('status');
       expect(notice).toHaveTextContent('Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.');
-      expect(cart).toHaveAccessibleDescription('Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.');
+      expect(cart).toHaveAccessibleDescription('Este es el pedido del enlace. Agregamos lo que sigue disponible; 1 producto ya no está en el menú o '
+        + 'le falta elegir una opción. Revísalo, escribe tus datos y envíalo: todavía no le llega al negocio.');
       // Kept on this device, and gone from the address: reloading does not fill the cart again.
       await waitFor(() => expect(readCart('cafe-luna')?.lines).toEqual([
         { productId: 'p1', optionIds: ['o2'], quantity: 2 },

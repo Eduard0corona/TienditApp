@@ -67,6 +67,8 @@ public class AssistantOrdersTests
         Assert.Null(prepared.NotNowReason);
         Assert.Null(prepared.Delivery);
         Assert.Equal(SalesTestFixture.Now.AddHours(24), prepared.ExpiresAt);
+        // Said at the business's offset (Centro), so the assistant tells the customer the business's clock, never UTC.
+        Assert.Equal(TimeSpan.FromHours(-6), prepared.ExpiresAt.Offset);
 
         // Kept as the lines of a cart, never a price, with who prepared it; nothing reaches the business.
         var kept = await fixture.Context.AssistantOrders.SingleAsync();
@@ -219,11 +221,14 @@ public class AssistantOrdersTests
     public async Task Get_ShouldGiveTheCart_WhileItIsOpen_AndSayWhenItExpired_OrIsNotALink()
     {
         await using var fixture = SalesTestFixture.Create();
-        var (_, latte, grande, _) = await StoreAsync(fixture);
+        var (tenant, latte, grande, _) = await StoreAsync(fixture);
         var token = await PrepareAsync(fixture, latte, grande, "72000");
+        await SettingsAsync(fixture, tenant, settings => settings.SetTimeZone("America/Mazatlan"));
 
         var open = await GetHandler(fixture).Handle(new GetAssistantOrderQuery(token), CancellationToken.None);
         Assert.Equal(AssistantOrderState.Open, open!.State);
+        // The same instant, at the offset of the business's zone (Pacífico).
+        Assert.Equal((SalesTestFixture.Now.AddHours(24), TimeSpan.FromHours(-7)), (open.ExpiresAt, open.ExpiresAt.Offset));
         Assert.Equal("cafe-luna", open.Slug);
         Assert.Equal([new AssistantOrderLineDto(latte.Id, [grande], 2, null)], open.Lines, new CartLineComparer());
         Assert.Equal("72000", open.PostalCode);

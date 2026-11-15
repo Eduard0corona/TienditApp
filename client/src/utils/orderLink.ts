@@ -53,21 +53,31 @@ export interface OrderLinkOutcome {
   replaced: boolean;
   /** The store takes orders, but not now: the order waits on this device until it opens. */
   paused: boolean;
+  /** The order an AI assistant prepared through the MCP server (Fase 32B), not a link with the products in it. */
+  fromAssistant?: boolean;
 }
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many.replace('{n}', String(count)));
 
-/** What the store says of a link: nothing when everything went in the cart and nothing was there before. */
-export function orderLinkMessage({ kept, notOnMenu, invalid, replaced, paused }: OrderLinkOutcome): string {
+/**
+ * What the store says of a link (Fase 32A) or of the order an assistant prepared (Fase 32C): whose order it is, what the
+ * menu could not take, and, when it opens to send, that it has not reached the business yet: the customer came from a chat
+ * that may have sounded as if it was ordered.
+ */
+export function orderLinkMessage({ kept, notOnMenu, invalid, replaced, paused, fromAssistant = false }: OrderLinkOutcome): string {
   const missing = [
     notOnMenu > 0 ? plural(notOnMenu, '1 producto ya no está en el menú o le falta elegir una opción', '{n} productos ya no están en el menú o les falta elegir una opción') : '',
     invalid > 0 ? plural(invalid, '1 parte del enlace no se entiende (un id o una cantidad que no es válida)', '{n} partes del enlace no se entienden (un id o una cantidad que no es válida)') : '',
   ].filter(Boolean).join('; ');
-  if (kept === 0) return `No pudimos agregar los productos del enlace: ${missing}. Mira el menú.`;
+  if (kept === 0) {
+    return `No pudimos agregar ${fromAssistant ? 'los productos que preparó tu asistente' : 'los productos del enlace'}: ${missing}. Mira el menú.`;
+  }
   const said = [
-    replaced ? 'Cambiamos el pedido que tenías por el del enlace.' : '',
-    paused ? 'Guardamos el pedido del enlace: envíalo cuando este negocio vuelva a recibir pedidos.' : '',
+    fromAssistant ? 'Tu asistente preparó este pedido.' : replaced || paused ? '' : 'Este es el pedido del enlace.',
+    replaced ? `Cambiamos el pedido que tenías por ${fromAssistant ? 'este' : 'el del enlace'}.` : '',
+    paused ? `Guardamos ${fromAssistant ? 'el pedido' : 'el pedido del enlace'}: envíalo cuando este negocio vuelva a recibir pedidos.` : '',
     missing ? `${paused ? 'No agregamos todo' : 'Agregamos lo que sigue disponible'}; ${missing}.` : '',
+    paused ? '' : 'Revísalo, escribe tus datos y envíalo: todavía no le llega al negocio.',
   ].filter(Boolean);
   return said.join(' ');
 }
