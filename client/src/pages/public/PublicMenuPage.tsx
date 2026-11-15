@@ -219,21 +219,23 @@ export default function PublicMenuPage() {
     if (linkedNotOnMenu) leaveLinkedProduct();
   }, [linkedNotOnMenu, leaveLinkedProduct]);
   // Once read, the link's cart is gone from the address: reloading or going back does not fill the cart again.
+  const linkInAddress = searchParams.has(ORDER_LINK_PARAMETER);
   useEffect(() => {
-    if (!orderLinkRead) return;
+    if (!orderLinkRead || !linkInAddress) return;
     setSearchParams((current) => {
-      if (!current.has(ORDER_LINK_PARAMETER)) return current;
       const next = new URLSearchParams(current);
       next.delete(ORDER_LINK_PARAMETER);
       return next;
     }, { replace: true });
-  }, [orderLinkRead, setSearchParams]);
+  }, [orderLinkRead, linkInAddress, setSearchParams]);
   // The saved address chosen; null while another one is written; undefined until the cart first goes to an address.
   const [addressChoice, setAddressChoice] = useState<string | null | undefined>(undefined);
   const [keepAddress, setKeepAddress] = useState(true);
   const [addressLabel, setAddressLabel] = useState('');
   const [restoredFor, setRestoredFor] = useState<string | null>(null);
   const [restoredNotice, setRestoredNotice] = useState('');
+  // What the store says of a link's order, in the order it opened (Fase 32A): the sheet covers the notice of the page.
+  const [cartNotice, setCartNotice] = useState('');
   const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
   // The customer account whose cart this page holds, while its session lasts.
   const [cartOwner, setCartOwner] = useState<string | null>(null);
@@ -293,16 +295,18 @@ export default function PublicMenuPage() {
     const kept = accountRead ? accountCarts.data?.find((cart) => cart.slug === slug) ?? null : null;
     const fromAccount = kept ? fromAccountCart(kept) : null;
     // The cart of a link (Fase 32A) takes the place of this device's and the account's: it is the order the customer just
-    // put together. Only where the store takes orders, never at a table; one with no product leaves the cart as it was.
+    // put together. Only where the store takes online orders, now or once it opens again (paused), never at a table.
     const products = data.categories.flatMap((item) => item.products);
     const link = orderLink?.slug === slug && !orderLinkRead ? orderLink.link : null;
     if (link) setOrderLinkRead(true);
+    const takesOrders = data.acceptsOrders || data.ordersPaused;
     // A link none of whose products the menu can take now leaves the cart the customer had.
-    const linkRestored = link && data.acceptsOrders && !atTable && link.lines.length > 0 ? restoreLines(link.lines, products) : null;
+    const linkRestored = link && takesOrders && !atTable && link.lines.length > 0 ? restoreLines(link.lines, products) : null;
     const fromLink = link && linkRestored && linkRestored.lines.length > 0 ? link : null;
+    const previous = newerCart(readCart(slug), fromAccount);
     const saved = fromLink
       ? { businessName: data.businessName, savedAt: new Date().toISOString(), lines: fromLink.lines }
-      : newerCart(readCart(slug), fromAccount);
+      : previous;
     const restored = fromLink ? linkRestored : saved && saved.lines.length > 0 ? restoreLines(saved.lines, products) : null;
     restoredCart.current = saved && restored
       ? {
@@ -317,21 +321,33 @@ export default function PublicMenuPage() {
     if (saved && restored) {
       // The menu shows while the session and the account's carts are read: what was added meanwhile stays, with it.
       setLines((added) => joinLines(restored.lines, added));
-      setRestoredNotice(fromLink
-        ? orderLinkMessage(restored.lines.length, restored.dropped + fromLink.invalid)
-        : restoredMessage(restored.lines.length, restored.dropped, saved.skipped ?? 0, saved.reorderOf !== undefined));
-      // The order of the link, open to review and send.
-      if (fromLink && restored.lines.length > 0) setCartOpen(true);
+      const notice = fromLink
+        ? orderLinkMessage({
+            kept: restored.lines.length,
+            notOnMenu: restored.dropped,
+            invalid: fromLink.invalid,
+            replaced: !!previous && previous.lines.length > 0 && cartSignature(previous) !== cartSignature({ lines: savedLinesOf(restored.lines) }),
+            paused: !data.acceptsOrders,
+          })
+        : restoredMessage(restored.lines.length, restored.dropped, saved.skipped ?? 0, saved.reorderOf !== undefined);
+      setRestoredNotice(notice);
+      // The order of the link, open to review and send, with what it says (the sheet covers the page). While the store
+      // takes no orders it waits on this device, closed, as any cart does then.
+      if (fromLink && data.acceptsOrders) {
+        setCartNotice(notice);
+        setCartOpen(true);
+      }
     }
-    if (link && !fromLink) {
-      setRestoredNotice(!data.acceptsOrders
+    if (link && !fromLink && !atTable) {
+      setRestoredNotice(!takesOrders
         ? 'Este negocio no recibe pedidos en línea: el enlace no puede llenar tu pedido. Mira su menú.'
-        : atTable ? '' : orderLinkMessage(0, link.invalid + (linkRestored?.dropped ?? 0)));
+        : orderLinkMessage({ kept: 0, notOnMenu: linkRestored?.dropped ?? 0, invalid: link.invalid, replaced: false, paused: false }));
     }
     // What the account has: the same cart is not sent again. When it could not be read, what this device restores: only
     // a change made here goes then, never this device's cart over a newer one of the account.
-    accountCartSent.current = accountRead
-      ? cartSignature(fromAccount ?? { lines: [] })
+    // The cart of a link is a change made here: it goes to the account, also when its carts could not be read.
+    accountCartSent.current = fromLink ? null
+      : accountRead ? cartSignature(fromAccount ?? { lines: [] })
       : cartSignature(restoredCart.current?.kept ?? { lines: [] });
   }
 
@@ -828,7 +844,18 @@ export default function PublicMenuPage() {
       />
 
       {/* It stays open while the order is on its way: its answer is shown here. */}
-      <Offcanvas show={cartOpen} onHide={() => !sending && setCartOpen(false)} placement="end" className="pm-checkout" aria-labelledby={cartTitleId}>
+      <Offcanvas
+        show={cartOpen}
+        onHide={() => {
+          if (sending) return;
+          setCartOpen(false);
+          setCartNotice('');
+        }}
+        placement="end"
+        className="pm-checkout"
+        aria-labelledby={cartTitleId}
+        aria-describedby={cartNotice ? `${cartTitleId}-notice` : undefined}
+      >
         <Offcanvas.Header closeButton={!sending}>
           <div className="min-w-0">
             <Offcanvas.Title id={cartTitleId} as="h2" className="h5 mb-0">Tu pedido</Offcanvas.Title>
@@ -836,6 +863,12 @@ export default function PublicMenuPage() {
           </div>
         </Offcanvas.Header>
         <Offcanvas.Body>
+          {cartNotice && (
+            <div id={`${cartTitleId}-notice`} className="alert alert-info pm-notice d-flex align-items-start gap-2" role="status">
+              <span className="flex-grow-1">{cartNotice}</span>
+              <button type="button" className="btn-close" aria-label="Cerrar aviso del pedido" onClick={() => setCartNotice('')}></button>
+            </div>
+          )}
           <form id="pm-checkout-form" onSubmit={(event) => void send(event)}>
             <section className="pm-checkout-section" aria-labelledby={`${cartTitleId}-items`}>
               <h3 id={`${cartTitleId}-items`} className="pm-checkout-title">Tus productos</h3>

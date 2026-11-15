@@ -391,8 +391,9 @@ public static class PublicPages
                 return string.Empty;
             var menu = baseUrl + AgentPages.MenuPath(Store.Slug);
             var line = string.IsNullOrWhiteSpace(Store.Description) ? string.Empty : " " + Html(Sentence(Store.Description));
-            return $"<noscript><p>{Html(Store.BusinessName)}.{line} Esta página se ve con JavaScript. Su menú en texto, con sus productos, "
-                + $"precios y cómo pedir: <a href=\"{Html(menu)}\">{Html(menu)}</a></p></noscript>";
+            var what = Store.TakesOrders ? "con sus productos, precios y cómo pedir" : "con sus productos y precios";
+            return $"<noscript><p>{Html(Store.BusinessName)}.{line} Esta página se ve con JavaScript. Su menú en texto, {what}: "
+                + $"<a href=\"{Html(menu)}\">{Html(menu)}</a></p></noscript>";
         }
 
         private static string Meta(string attribute, string name, string content)

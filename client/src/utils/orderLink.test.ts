@@ -6,6 +6,9 @@ const GRANDE = '9b2d7f1e-1c3a-4f5b-8d6e-7a8b9c0d1e2f';
 const AVENA = '0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
 const CONCHA = '7d8e9f0a-1b2c-4d3e-9f4a-5b6c7d8e9f0a';
 
+const outcome = (changes: Partial<Parameters<typeof orderLinkMessage>[0]> = {}) =>
+  ({ kept: 2, notOnMenu: 0, invalid: 0, replaced: false, paused: false, ...changes });
+
 describe('orderLinkOf (Fase 32A)', () => {
   it('has no cart without the parameter', () => {
     expect(orderLinkOf([])).toBeNull();
@@ -20,6 +23,12 @@ describe('orderLinkOf (Fase 32A)', () => {
       ],
       invalid: 0,
     });
+  });
+
+  it('takes an option once, as the API does, and ids in capitals as the menu writes them', () => {
+    expect(orderLinkOf([`${LATTE.toUpperCase()}:1:${GRANDE}:${GRANDE.toUpperCase()}`])?.lines).toEqual([
+      { productId: LATTE, optionIds: [GRANDE], quantity: 1 },
+    ]);
   });
 
   it('counts what is not a product: a bad id, a quantity that is not a whole number from 1, a bad option', () => {
@@ -43,13 +52,28 @@ describe('orderLinkOf (Fase 32A)', () => {
 });
 
 describe('orderLinkMessage (Fase 32A)', () => {
-  it('says nothing when everything went in the cart', () => {
-    expect(orderLinkMessage(3, 0)).toBe('');
+  it('says nothing when everything went in an empty cart', () => {
+    expect(orderLinkMessage(outcome())).toBe('');
   });
 
-  it('says what could not go in, in singular and plural, and when nothing did', () => {
-    expect(orderLinkMessage(2, 1)).toBe('Agregamos lo que sigue disponible; 1 producto del enlace no se pudo agregar: ya no está en el menú o le falta elegir una opción.');
-    expect(orderLinkMessage(1, 3)).toBe('Agregamos lo que sigue disponible; 3 productos del enlace no se pudieron agregar: ya no están en el menú o les falta elegir una opción.');
-    expect(orderLinkMessage(0, 2)).toBe('Los productos del enlace no están en el menú de ahora o les falta elegir una opción. Mira el menú.');
+  it('says what the menu could not take, apart from what the link did not say right, in singular and plural', () => {
+    expect(orderLinkMessage(outcome({ notOnMenu: 1 }))).toBe('Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.');
+    expect(orderLinkMessage(outcome({ notOnMenu: 2, invalid: 1 }))).toBe(
+      'Agregamos lo que sigue disponible; 2 productos ya no están en el menú o les falta elegir una opción; 1 parte del enlace no se entiende (un id o una cantidad que no es válida).',
+    );
+    expect(orderLinkMessage(outcome({ invalid: 3 }))).toBe('Agregamos lo que sigue disponible; 3 partes del enlace no se entienden (un id o una cantidad que no es válida).');
+  });
+
+  it('says when nothing went in', () => {
+    expect(orderLinkMessage(outcome({ kept: 0, notOnMenu: 2 }))).toBe(
+      'No pudimos agregar los productos del enlace: 2 productos ya no están en el menú o les falta elegir una opción. Mira el menú.',
+    );
+  });
+
+  it('says the cart that was there gave way to the link, and that the order waits while the store takes none', () => {
+    expect(orderLinkMessage(outcome({ replaced: true }))).toBe('Cambiamos el pedido que tenías por el del enlace.');
+    expect(orderLinkMessage(outcome({ paused: true, notOnMenu: 1 }))).toBe(
+      'Guardamos el pedido del enlace: envíalo cuando este negocio vuelva a recibir pedidos. No agregamos todo; 1 producto ya no está en el menú o le falta elegir una opción.',
+    );
   });
 });
