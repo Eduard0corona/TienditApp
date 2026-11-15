@@ -170,8 +170,9 @@ public class PrepareAssistantOrderCommandHandler : IRequestHandler<PrepareAssist
         var placement = new PublicOrderPlacement(_context);
         var asked = new PublicOrderRequest { CustomerName = string.Empty, CustomerPhone = string.Empty, Items = items };
         var (branchId, notNow) = await placement.TakesOrderAsync(tenant, asked, now, cancellationToken);
-        var deliveryOnly = notNow == PlacePublicOrderCommandHandler.DeliveryRequiredMessage;
-        if (deliveryOnly)
+        // Whether it only delivers, also while closed or paused: the store asks the address when the customer sends it.
+        var deliveryOnly = await placement.DeliversOnlyAsync(tenant.Id, branchId, cancellationToken);
+        if (notNow == PlacePublicOrderCommandHandler.DeliveryRequiredMessage)
             notNow = null;
 
         var settings = await TenantSalesSettings.ReadAsync(_context, tenant.Id, cancellationToken);

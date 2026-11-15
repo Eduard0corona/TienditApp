@@ -4,8 +4,11 @@ using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -152,12 +155,17 @@ public class AssistantOrdersTests
         var asked = new PrepareAssistantOrderCommand { Slug = "cafe-luna", Items = [new AssistantOrderItemInput { ProductId = concha.Id }] };
 
         Assert.True((await handler.Handle(asked, CancellationToken.None)).IsSuccess);
-        // In line before it counts: nothing of this request was saved yet.
+        // In line before it saves: nothing of this request was saved yet.
         Assert.Equal([(tenant.Id, 0)], spy.Acquired);
+
+        // And before it counts: another assistant fills the last places while this one waits in line, and this one sees them.
+        spy.FillWhileWaiting = true;
+        Assert.Equal(PrepareAssistantOrderCommandHandler.BusyMessage, (await handler.Handle(asked, CancellationToken.None)).Error);
+        Assert.Equal(2, spy.Acquired.Count);
 
         await SettingsAsync(fixture, tenant, settings => settings.SetAssistantOrders(false));
         Assert.False((await handler.Handle(asked, CancellationToken.None)).IsSuccess);
-        Assert.Single(spy.Acquired);
+        Assert.Equal(2, spy.Acquired.Count);
     }
 
     [Fact]
@@ -181,6 +189,30 @@ public class AssistantOrdersTests
         Assert.Equal("72000", result.Value.Delivery!.PostalCode);
         Assert.False(result.Value.Delivery.Covered);
         Assert.Equal("72000", (await fixture.Context.AssistantOrders.SingleAsync()).PostalCode);
+    }
+
+    [Fact]
+    public async Task Prepare_ShouldSayItOnlyDelivers_AlsoWhileItTakesNoOrders()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, _, _, concha) = await StoreAsync(fixture, openDrawer: false);
+        // A kitchen without premises that delivers to 72000, paused (no drawer open).
+        var kitchen = await fixture.Context.Branches.IgnoreQueryFilters().SingleAsync(b => b.TenantId == tenant.Id && b.IsDefault);
+        kitchen.Update(kitchen.Name, kitchen.Code, new BranchContact(AddressLine1: "Privada Los Pinos 8"), BranchServiceMode.DeliveryOnly);
+        fixture.Context.DeliveryZones.Add(new DeliveryZone(tenant.Id, new DeliveryZoneFields("Centro", 35m, 0m, null, ["72000"])));
+        await fixture.Context.SaveChangesAsync();
+        var asked = new PrepareAssistantOrderCommand { Slug = "cafe-luna", Items = [new AssistantOrderItemInput { ProductId = concha.Id }] };
+
+        var paused = await PrepareHandler(fixture).Handle(asked, CancellationToken.None);
+
+        Assert.True(paused.IsSuccess, paused.Error);
+        Assert.Equal((false, PlacePublicOrderCommandHandler.OrdersPausedMessage, true),
+            (paused.Value!.TakesOrdersNow, paused.Value.NotNowReason, paused.Value.DeliveryOnly));
+
+        // Open, it takes it now, and still only to an address.
+        await fixture.OpenCashSessionAsync(tenant);
+        var open = await PrepareHandler(fixture).Handle(asked, CancellationToken.None);
+        Assert.Equal((true, (string?)null, true), (open.Value!.TakesOrdersNow, open.Value.NotNowReason, open.Value.DeliveryOnly));
     }
 
     [Fact]
@@ -507,13 +539,26 @@ public class AssistantOrdersTests
             new FolioGenerator(fixture.Context), fixture.CurrentUser);
     }
 
-    /// <summary>Records each business put in line and how many orders it had prepared then.</summary>
+    /// <summary>
+    /// Records each business put in line and how many orders it had prepared then; with <see cref="FillWhileWaiting"/>,
+    /// another assistant takes the places left while this one waits.
+    /// </summary>
     private sealed class SpyLock(SalesTestFixture fixture) : IAssistantOrdersLock
     {
         public List<(Guid TenantId, int Prepared)> Acquired { get; } = [];
+        public bool FillWhileWaiting { get; set; }
 
         public async Task AcquireAsync(Guid tenantId, CancellationToken cancellationToken)
-            => Acquired.Add((tenantId, await fixture.Context.AssistantOrders.IgnoreQueryFilters().CountAsync(cancellationToken)));
+        {
+            var prepared = await fixture.Context.AssistantOrders.IgnoreQueryFilters().CountAsync(cancellationToken);
+            Acquired.Add((tenantId, prepared));
+            if (!FillWhileWaiting)
+                return;
+            for (var i = prepared; i < AssistantOrder.MaxPendingPerBusiness; i++)
+                fixture.Context.AssistantOrders.Add(AssistantOrder.Prepare(tenantId, OrderTracking.NewToken(),
+                    [new AccountCartLine(Guid.NewGuid(), [], 1, null)], null, 18m, null, fixture.Clock.UtcNow));
+            await fixture.Context.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private sealed class LineComparer : IEqualityComparer<PreparedAssistantOrderLineDto>

@@ -87,13 +87,20 @@ internal sealed class PublicOrderPlacement
         }
 
         if (request.Delivery is null
-            && await _context.Branches.AnyAsync(b => b.Id == branchId && b.ServiceMode == BranchServiceMode.DeliveryOnly, cancellationToken)
-            && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken)
+            && await DeliversOnlyAsync(tenant.Id, branchId, cancellationToken)
             && !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken))
             return (branchId, PlacePublicOrderCommandHandler.DeliveryRequiredMessage);
 
         return (branchId, null);
     }
+
+    /// <summary>
+    /// Whether the business only delivers: the branch that takes its online orders is a kitchen without premises and it has
+    /// an active delivery zone. Open or closed: it says how the order will arrive.
+    /// </summary>
+    public async Task<bool> DeliversOnlyAsync(Guid tenantId, Guid? branchId, CancellationToken cancellationToken)
+        => await _context.Branches.AnyAsync(b => b.Id == branchId && b.ServiceMode == BranchServiceMode.DeliveryOnly, cancellationToken)
+            && await DeliveryZoneLookup.AnyActiveAsync(_context, tenantId, cancellationToken);
 
     /// <summary>
     /// Who orders a draft that is only priced and never stored (<see cref="BuildAsync"/>): the customer account, or a
