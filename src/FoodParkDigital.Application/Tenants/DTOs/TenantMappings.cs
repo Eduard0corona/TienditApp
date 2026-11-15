@@ -30,6 +30,7 @@ public static class TenantMappings
         OrderNotificationPolicy = tenant.Settings?.OrderNotificationPolicy ?? OrderNotificationPolicy.RemoteAndServices,
         InsufficientStockPolicy = tenant.Settings?.InsufficientStockPolicy ?? InsufficientStockPolicy.Block,
         OnlineMenuMode = tenant.Settings?.OnlineMenuMode ?? OnlineMenuMode.Off,
+        AssistantOrders = tenant.Settings?.AssistantOrders ?? true,
         Theme = tenant.Settings?.Theme ?? BusinessTheme.Nopal,
         OnboardingCompletedAt = tenant.Settings?.OnboardingCompletedAt,
         TimeZone = tenant.Settings?.TimeZone ?? BusinessTimeZones.Default,

@@ -580,6 +580,11 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         /// <summary>The menu of the store in Markdown reads it (Fase 32A, AgentPagesTests).</summary>
         public PublicMenuDto? Menu { get; set; }
         public PublicSitemapDto Sitemap { get; set; } = new();
+        /// <summary>What the MCP server's tools read (Fase 32B, McpServerTests).</summary>
+        public PublicDirectoryDto Directory { get; set; } = EmptyDirectory();
+        public PublicDeliveryQuoteDto? DeliveryQuote { get; set; }
+        public Result<PreparedAssistantOrderDto> Prepared { get; set; } = Result.Failure<PreparedAssistantOrderDto>("Sin preparar.");
+        public AssistantOrderDto? AssistantOrder { get; set; }
         public Exception? Failure { get; set; }
         public List<object> Requests { get; } = [];
 
@@ -588,6 +593,10 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
             Store = null;
             Menu = null;
             Sitemap = new PublicSitemapDto();
+            Directory = EmptyDirectory();
+            DeliveryQuote = null;
+            Prepared = Result.Failure<PreparedAssistantOrderDto>("Sin preparar.");
+            AssistantOrder = null;
             Failure = null;
             Requests.Clear();
         }
@@ -602,10 +611,17 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
                 GetStorePreviewQuery => Store,
                 GetPublicMenuQuery => Menu,
                 GetPublicSitemapQuery => Sitemap,
+                GetPublicDirectoryQuery => Directory,
+                GetPublicDeliveryQuoteQuery => DeliveryQuote,
+                PrepareAssistantOrderCommand => Prepared,
+                GetAssistantOrderQuery => AssistantOrder,
                 _ => throw new NotSupportedException($"Unexpected request {request.GetType().Name}.")
             };
             return Task.FromResult((TResponse)response!);
         }
+
+        public static PublicDirectoryDto EmptyDirectory()
+            => new() { Businesses = new PaginatedList<PublicDirectoryBusinessDto>([], 0, 1, 10) };
 
         public Task Send<TRequest>(TRequest request, CancellationToken cancellationToken = default) where TRequest : IRequest
             => throw new NotSupportedException();

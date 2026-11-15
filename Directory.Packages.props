@@ -9,6 +9,8 @@
     <PackageVersion Include="Microsoft.Azure.SignalR" Version="1.33.1" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <!-- Fase 32B (ADR 0096): the MCP server AI assistants call, the official C# SDK. -->
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
   </ItemGroup>
   <ItemGroup Label="Application">
     <PackageVersion Include="FluentValidation" Version="11.11.0" />

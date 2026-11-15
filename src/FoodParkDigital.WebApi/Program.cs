@@ -6,6 +6,7 @@ using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Seeds;
 using FoodParkDigital.WebApi.Http;
+using FoodParkDigital.WebApi.Mcp;
 using FoodParkDigital.WebApi.Hubs;
 using FoodParkDigital.WebApi.Middleware;
 using FoodParkDigital.WebApi.Observability;
@@ -183,6 +184,18 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 
+    // The MCP server AI assistants call (Fase 32B, ADR 0096): each tool reads the database like a public page. An assistant
+    // calls from the few addresses of its platform, for all its users at once: more generous, in a bucket of its own.
+    options.AddPolicy(McpServer.RateLimitPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 600 : 300,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
     // Sliding window for general API endpoints - 200 requests per minute per user
     options.AddPolicy("api", httpContext =>
         RateLimitPartition.GetSlidingWindowLimiter(
@@ -253,6 +266,9 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+
+// The MCP server AI assistants call (Fase 32B, ADR 0096): stateless, so any instance answers any request.
+builder.Services.AddStoreMcpServer();
 
 // SignalR
 // Live updates run in this process; with Azure:SignalR:ConnectionString they go through Azure SignalR Service,
@@ -333,6 +349,7 @@ app.MapHub<MyOrdersHub>("/hubs/my-orders", options => options.CloseOnAuthenticat
 app.MapPublicPages();
 // What an AI assistant reads to help a customer order: /llms.txt and each store's menu in Markdown (Fase 32A, ADR 0096).
 app.MapAgentPages();
+app.MapStoreMcpServer();
 app.MapClientFallback();
 
 if (usesEphemeralJwtSecret)

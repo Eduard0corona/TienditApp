@@ -251,7 +251,8 @@ public class PublicMenuController : ControllerBase
             Delivery = request.Delivery,
             IdempotencyKey = request.IdempotencyKey,
             SaveAddress = request.SaveAddress,
-            AddressLabel = request.AddressLabel
+            AddressLabel = request.AddressLabel,
+            AssistantOrderToken = request.AssistantOrderToken
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -277,11 +278,28 @@ public class PublicMenuController : ControllerBase
             ExpectedTotal = request.ExpectedTotal,
             Delivery = request.Delivery,
             SaveAddress = request.SaveAddress,
-            AddressLabel = request.AddressLabel
+            AddressLabel = request.AddressLabel,
+            AssistantOrderToken = request.AssistantOrderToken
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// The order an AI assistant prepared for this store (Fase 32B, ADR 0096), by its link: the cart the store fills while
+    /// it is open, and whether it was sent. The link travels in the body, never in the address. 404 for a link that is not
+    /// of this store.
+    /// </summary>
+    [HttpPost("assistant-order")]
+    [EnableRateLimiting("public-menu")]
+    public async Task<ActionResult<AssistantOrderDto>> GetAssistantOrder(
+        string slug, [FromBody] AssistantOrderLinkRequest request, CancellationToken cancellationToken)
+    {
+        var prepared = await _mediator.Send(new GetAssistantOrderQuery(request.Token), cancellationToken);
+        return prepared is null || !string.Equals(prepared.Slug, slug.Trim(), StringComparison.OrdinalIgnoreCase)
+            ? this.ApiError(StatusCodes.Status404NotFound, "No encontramos ese pedido.")
+            : Ok(prepared);
     }
 
     /// <summary>
@@ -309,6 +327,14 @@ public class CreateOnlineCheckoutRequest
     public FoodParkDigital.Application.Orders.OrderDeliveryInput? Delivery { get; init; }
     public bool SaveAddress { get; init; }
     public string? AddressLabel { get; init; }
+    /// <summary>The link of the order an AI assistant prepared, when the cart came from it (Fase 32B).</summary>
+    public string? AssistantOrderToken { get; init; }
+}
+
+/// <summary>The link of an order an AI assistant prepared (the fragment of /m/{slug}#pedido=…).</summary>
+public class AssistantOrderLinkRequest
+{
+    public string Token { get; init; } = null!;
 }
 
 public class ConfirmOnlineCheckoutRequest
@@ -334,6 +360,8 @@ public class PlacePublicOrderRequest
     /// <summary>Keep the delivery address in the signed-in customer account, named <see cref="AddressLabel"/> (Fase 24B).</summary>
     public bool SaveAddress { get; init; }
     public string? AddressLabel { get; init; }
+    /// <summary>The link of the order an AI assistant prepared, when the cart came from it (Fase 32B).</summary>
+    public string? AssistantOrderToken { get; init; }
 }
 
 public class RequestPublicHomeVisitRequest

@@ -76,7 +76,7 @@ public class TenantSetupController : ControllerBase
     [HttpPut("online-menu")]
     public async Task<ActionResult<OnlineMenuSettingsDto>> UpdateOnlineMenu([FromBody] UpdateOnlineMenuRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new UpdateOnlineMenuCommand(request.Mode), cancellationToken);
+        var result = await _mediator.Send(new UpdateOnlineMenuCommand(request.Mode, request.AssistantOrders), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -186,7 +186,8 @@ public class TenantSetupController : ControllerBase
             : this.ApiError(StatusCodes.Status400BadRequest, error);
 }
 
-public record UpdateOnlineMenuRequest(OnlineMenuMode Mode);
+/// <param name="AssistantOrders">Fase 32B: whether AI assistants prepare its orders; absent leaves it as it is.</param>
+public record UpdateOnlineMenuRequest(OnlineMenuMode Mode, bool? AssistantOrders = null);
 
 /// <param name="Category">Where Explorar lists the business.</param>
 /// <param name="Description">One line under its name; empty removes it.</param>

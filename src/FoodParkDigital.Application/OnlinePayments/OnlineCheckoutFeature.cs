@@ -80,6 +80,11 @@ public record CreateOnlineCheckoutCommand : IRequest<Result<OnlineCheckoutStarte
     public OrderDeliveryInput? Delivery { get; init; }
     public bool SaveAddress { get; init; }
     public string? AddressLabel { get; init; }
+    /// <summary>
+    /// The link of the order an AI assistant prepared, when the cart came from it (Fase 32B): once the payment places the
+    /// order, that one is confirmed with it.
+    /// </summary>
+    public string? AssistantOrderToken { get; init; }
 }
 
 public class CreateOnlineCheckoutCommandValidator : AbstractValidator<CreateOnlineCheckoutCommand>
@@ -172,7 +177,8 @@ public class CreateOnlineCheckoutCommandHandler : IRequestHandler<CreateOnlineCh
             Items = request.Items,
             Delivery = request.Delivery,
             SaveAddress = request.SaveAddress,
-            AddressLabel = request.AddressLabel
+            AddressLabel = request.AddressLabel,
+            AssistantOrderToken = request.AssistantOrderToken
         };
         var placement = new PublicOrderPlacement(_context);
         var (branchId, closed) = await placement.TakesOrderAsync(tenant, asked, now, cancellationToken);

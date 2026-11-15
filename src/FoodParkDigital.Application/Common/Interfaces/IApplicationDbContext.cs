@@ -51,6 +51,7 @@ public interface IApplicationDbContext
     DbSet<OnlinePaymentAccount> OnlinePaymentAccounts { get; }
     DbSet<OnlinePaymentAuthorization> OnlinePaymentAuthorizations { get; }
     DbSet<OnlineCheckout> OnlineCheckouts { get; }
+    DbSet<AssistantOrder> AssistantOrders { get; }
     DbSet<OnlinePaymentRefund> OnlinePaymentRefunds { get; }
     DbSet<OrderInvoice> OrderInvoices { get; }
     DbSet<InvoicingProfile> InvoicingProfiles { get; }
