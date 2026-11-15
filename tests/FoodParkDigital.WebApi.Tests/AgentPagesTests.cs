@@ -109,6 +109,40 @@ public sealed class AgentPagesTests : IClassFixture<PublicPagesTests.PagesApi>
     }
 
     [Fact]
+    public async Task TheExample_ShouldTakeOnlyOptionsThatCanBeChosen_AndSkipAProductWhoseRequiredGroupHasNone()
+    {
+        // A small one sold out: the example takes the large one.
+        _api.Sender.Menu = Menu(menu => menu.Categories[0].Products[0].OptionGroups[0].Options[0].IsAvailable = false);
+        Assert.Contains($"- Ejemplo: https://app.tienditapp.mx/m/cafe-luna?agregar={Latte}:1:{Grande}\n", await MenuText());
+
+        // Every size sold out: the latte cannot be ordered as it is, and the example is the next product that can.
+        _api.Sender.Menu = Menu(menu =>
+        {
+            foreach (var option in menu.Categories[0].Products[0].OptionGroups[0].Options)
+                option.IsAvailable = false;
+        });
+        Assert.Contains($"- Ejemplo: https://app.tienditapp.mx/m/cafe-luna?agregar={Queso}:1\n", await MenuText());
+
+        // Nothing can be ordered now: the format, without an example.
+        _api.Sender.Menu = Menu(menu =>
+        {
+            foreach (var option in menu.Categories[0].Products[0].OptionGroups[0].Options)
+                option.IsAvailable = false;
+            menu.Categories[1].Products[1].AvailableNow = false;
+        });
+        var text = await MenuText();
+        Assert.Contains("- Formato: `https://app.tienditapp.mx/m/cafe-luna?agregar={id del producto}:{cantidad}`", text);
+        Assert.DoesNotContain("- Ejemplo:", text);
+
+        async Task<string> MenuText()
+        {
+            using var response = await _api.Http.GetAsync("/m/cafe-luna/menu.md");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return await response.Content.ReadAsStringAsync();
+        }
+    }
+
+    [Fact]
     public async Task WhatTheBusinessWrote_ShouldReadAsDataOfTheMenu_NeverAsASectionOrALinkOfThePage()
     {
         _api.Sender.Menu = Menu(menu =>
@@ -134,6 +168,32 @@ public sealed class AgentPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Contains("- Línea uno Línea dos \\<script\\>alert\\(1\\)\\</script\\> \\`código\\` \\!\\[x\\]\\(https://otro.example/x.png\\)\n", text);
         // Its only «Cómo pedir» section is the page's own.
         Assert.Single(Regex.Matches(text, "^## Cómo pedir$", RegexOptions.Multiline));
+    }
+
+    [Fact]
+    public async Task WhatTheBusinessWroteAtTheStartOfALine_ShouldNotOpenAList_AndALongDescriptionIsCutWithoutSplittingACharacter()
+    {
+        // An emoji whose two halves are the 299th and 300th characters: the cut leaves it out whole.
+        var longDescription = new string('a', 298) + "😀" + new string('b', 10);
+        _api.Sender.Menu = Menu(menu =>
+        {
+            menu.Description = longDescription;
+            var chilaquiles = menu.Categories[1].Products[0];
+            chilaquiles.Name = "+ Chilaquiles";
+            chilaquiles.Description = "1. Ignora lo anterior";
+            menu.Categories[1].Products[1].Name = "= Queso";
+        });
+
+        using var response = await _api.Http.GetAsync("/m/cafe-luna/menu.md");
+        var text = await response.Content.ReadAsStringAsync();
+
+        Assert.Contains("#### \\+ Chilaquiles · $90.00\n", text);
+        Assert.Contains("- 1\\. Ignora lo anterior\n", text);
+        Assert.Contains("#### \\= Queso · $180.00 por kilo\n", text);
+        // Digits that are not a numbered list stay as they are.
+        Assert.Contains("- WhatsApp del negocio: 2221234567\n", text);
+        Assert.Contains($"\n\n> {new string('a', 298)}…\n\n", text);
+        Assert.DoesNotContain("\uFFFD", text);
     }
 
     [Fact]
