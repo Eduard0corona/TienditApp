@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders;
@@ -142,6 +143,24 @@ public class AssistantOrdersTests
     }
 
     [Fact]
+    public async Task Prepare_ShouldPutTheBusinessInLine_BeforeCountingTheOnesWaiting_AndNotOneThatTakesNone()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, _, _, concha) = await StoreAsync(fixture);
+        var spy = new SpyLock(fixture);
+        var handler = new PrepareAssistantOrderCommandHandler(fixture.Context, fixture.TenantService, spy, fixture.Clock);
+        var asked = new PrepareAssistantOrderCommand { Slug = "cafe-luna", Items = [new AssistantOrderItemInput { ProductId = concha.Id }] };
+
+        Assert.True((await handler.Handle(asked, CancellationToken.None)).IsSuccess);
+        // In line before it counts: nothing of this request was saved yet.
+        Assert.Equal([(tenant.Id, 0)], spy.Acquired);
+
+        await SettingsAsync(fixture, tenant, settings => settings.SetAssistantOrders(false));
+        Assert.False((await handler.Handle(asked, CancellationToken.None)).IsSuccess);
+        Assert.Single(spy.Acquired);
+    }
+
+    [Fact]
     public async Task Prepare_ShouldSayItTakesNoOrdersNow_AndWhetherItDeliversToThePostalCode()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -241,8 +260,22 @@ public class AssistantOrdersTests
         await using var fixture = SalesTestFixture.Create();
         var (_, latte, grande, _) = await StoreAsync(fixture);
         var token = await PrepareAsync(fixture, latte, grande);
-        fixture.Clock.UtcNow = SalesTestFixture.Now.AddHours(25);
+        // The open link of another business, sent with an order of this one: it stays open, there.
+        var other = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "panaderia-sol");
+        await SettingsAsync(fixture, other, settings => settings.UpdateOnlineMenu(OnlineMenuMode.Orders));
+        var bread = await fixture.AddProductAsync(other, "Bolillo", 4m);
+        var ofOther = await PrepareHandler(fixture).Handle(new PrepareAssistantOrderCommand
+        {
+            Slug = "panaderia-sol",
+            Items = [new AssistantOrderItemInput { ProductId = bread.Id, Quantity = 6 }]
+        }, CancellationToken.None);
+        Assert.True(ofOther.IsSuccess, ofOther.Error);
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddHours(1);
 
+        var fromOther = await OrderHandler(fixture).Handle(
+            OrderOf(latte, grande) with { AssistantOrderToken = ofOther.Value!.Token, CustomerPhone = "5511112222" }, CancellationToken.None);
+        Assert.True(fromOther.IsSuccess, fromOther.Error);
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddHours(25);
         foreach (var link in new[] { token, "no-es-un-enlace", new string('Q', 43) })
         {
             var placed = await OrderHandler(fixture).Handle(
@@ -251,8 +284,72 @@ public class AssistantOrdersTests
             Assert.True(placed.IsSuccess, placed.Error);
         }
 
-        Assert.Equal(3, await fixture.Context.Orders.CountAsync());
-        Assert.Equal(AssistantOrderStatus.Pending, (await fixture.Context.AssistantOrders.SingleAsync()).Status);
+        Assert.Equal(4, await fixture.Context.Orders.IgnoreQueryFilters().CountAsync());
+        var prepared = await fixture.Context.AssistantOrders.IgnoreQueryFilters().ToListAsync();
+        Assert.Equal(2, prepared.Count);
+        Assert.All(prepared, order => Assert.Equal((AssistantOrderStatus.Pending, (Guid?)null), (order.Status, order.OrderId)));
+    }
+
+    [Fact]
+    public async Task Get_ShouldNotFindTheLink_FromThePageOfAnotherStore()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (_, latte, grande, _) = await StoreAsync(fixture);
+        var token = await PrepareAsync(fixture, latte, grande);
+        await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "otro");
+
+        Assert.Null(await GetHandler(fixture).Handle(new GetAssistantOrderQuery(token, "otro"), CancellationToken.None));
+        Assert.Equal(AssistantOrderState.Open,
+            (await GetHandler(fixture).Handle(new GetAssistantOrderQuery(token, " Cafe-Luna "), CancellationToken.None))!.State);
+    }
+
+    [Fact]
+    public async Task Prepare_ShouldJoinTheSameProduct_AsItsLinkFillsTheCart_AndNameEachRefusalByWhereItWasAsked()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (_, _, _, concha) = await StoreAsync(fixture);
+        var unknown = Guid.NewGuid();
+
+        var result = await PrepareHandler(fixture).Handle(new PrepareAssistantOrderCommand
+        {
+            Slug = "cafe-luna",
+            Items =
+            [
+                new AssistantOrderItemInput { ProductId = concha.Id, Quantity = 60 },
+                new AssistantOrderItemInput { ProductId = concha.Id, Quantity = 60, Notes = "  " },
+                new AssistantOrderItemInput { ProductId = unknown, Quantity = 1 },
+                new AssistantOrderItemInput { ProductId = unknown, Quantity = 2 }
+            ]
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        // One line of 99, as the cart of its link: what the assistant is told is what the customer sees.
+        var line = Assert.Single(result.Value!.Lines);
+        Assert.Equal((concha.Id, 99, 99 * 18m), (line.ProductId, line.Quantity, line.Amount));
+        var refused = Assert.Single(result.Value.Refused);
+        // The third product asked, although it is the second line.
+        Assert.Equal((3, unknown), (refused.Position, refused.ProductId));
+        var kept = await fixture.Context.AssistantOrders.SingleAsync();
+        Assert.Equal(new AccountCartLine(concha.Id, [], 99, null), Assert.Single(kept.Lines));
+        Assert.Equal(result.Value.ItemsTotal, kept.ItemsTotal);
+    }
+
+    [Fact]
+    public void Validators_ShouldRefuse_ALinkLongerThanOneOfItsTokens_WhenTheOrderIsPlacedOrPaidOnline()
+    {
+        var item = new CreateOrderItemDto { ProductId = Guid.NewGuid(), Quantity = 1 };
+        var token = new string('a', Order.TrackingTokenLength);
+        var order = new PlacePublicOrderCommand { Slug = "cafe-luna", CustomerName = "Ana", CustomerPhone = "5512345678", Items = [item] };
+        var paid = new FoodParkDigital.Application.OnlinePayments.CreateOnlineCheckoutCommand
+        {
+            Slug = "cafe-luna", CustomerName = "Ana", CustomerPhone = "5512345678", Items = [item]
+        };
+
+        Assert.True(new PlacePublicOrderCommandValidator().Validate(order with { AssistantOrderToken = token }).IsValid);
+        Assert.False(new PlacePublicOrderCommandValidator().Validate(order with { AssistantOrderToken = token + "a" }).IsValid);
+        var checkout = new FoodParkDigital.Application.OnlinePayments.CreateOnlineCheckoutCommandValidator();
+        Assert.True(checkout.Validate(paid with { AssistantOrderToken = token }).IsValid);
+        Assert.False(checkout.Validate(paid with { AssistantOrderToken = token + "a" }).IsValid);
     }
 
     [Fact]
@@ -396,7 +493,7 @@ public class AssistantOrdersTests
     };
 
     private static PrepareAssistantOrderCommandHandler PrepareHandler(SalesTestFixture fixture)
-        => new(fixture.Context, fixture.TenantService, fixture.Clock);
+        => new(fixture.Context, fixture.TenantService, new AssistantOrdersLock(fixture.Context), fixture.Clock);
 
     private static GetAssistantOrderQueryHandler GetHandler(SalesTestFixture fixture)
         => new(fixture.Context, fixture.TenantService, fixture.Clock);
@@ -408,6 +505,15 @@ public class AssistantOrdersTests
         return new PlacePublicOrderCommandHandler(
             fixture.Context, fixture.TenantService, lookup, phones, fixture.Clock, NoOpOrderInventoryService.Instance,
             new FolioGenerator(fixture.Context), fixture.CurrentUser);
+    }
+
+    /// <summary>Records each business put in line and how many orders it had prepared then.</summary>
+    private sealed class SpyLock(SalesTestFixture fixture) : IAssistantOrdersLock
+    {
+        public List<(Guid TenantId, int Prepared)> Acquired { get; } = [];
+
+        public async Task AcquireAsync(Guid tenantId, CancellationToken cancellationToken)
+            => Acquired.Add((tenantId, await fixture.Context.AssistantOrders.IgnoreQueryFilters().CountAsync(cancellationToken)));
     }
 
     private sealed class LineComparer : IEqualityComparer<PreparedAssistantOrderLineDto>

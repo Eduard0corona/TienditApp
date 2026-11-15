@@ -54,7 +54,7 @@ public class AssistantOrder : AuditableEntity, IAggregateRoot, ITenantScoped
 
     /// <summary>
     /// The online order the customer sent from its link. Two sends from the same link at once both reach the business (the
-    /// customer sent them); this one keeps the last.
+    /// customer sent them); this one keeps the first saved (the second finds it sent).
     /// </summary>
     public Guid? OrderId { get; private set; }
 

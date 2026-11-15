@@ -108,6 +108,8 @@ public class CreateOnlineCheckoutCommandValidator : AbstractValidator<CreateOnli
         });
         RuleFor(x => x.AddressLabel).MaximumLength(AccountAddressRules.MaxLabelInputLength)
             .WithMessage(AccountAddressRules.LabelTooLongMessage);
+        // The link of an order an assistant prepared (Fase 32B): one of its tokens, or nothing. It is kept with what was asked.
+        RuleFor(x => x.AssistantOrderToken).MaximumLength(Domain.Orders.Entities.Order.TrackingTokenLength);
     }
 }
 

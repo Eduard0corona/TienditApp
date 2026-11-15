@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Delivery;
+using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -93,7 +94,7 @@ public class PrepareAssistantOrderCommandValidator : AbstractValidator<PrepareAs
             .When(x => !string.IsNullOrWhiteSpace(x.PostalCode))
             // Without what was written: a validation message reaches the log (ADR 0017 keeps postal codes out of it).
             .WithMessage(GetPublicDeliveryQuoteQueryValidator.PostalCodeMessage);
-        RuleFor(x => x.Source).MaximumLength(200);
+        RuleFor(x => x.Source).MaximumLength(AssistantOrder.MaxSourceLength);
     }
 }
 
@@ -102,17 +103,20 @@ public class PrepareAssistantOrderCommandHandler : IRequestHandler<PrepareAssist
     public const string NoOnlineOrdersMessage = "Este negocio no recibe pedidos en línea: el cliente puede ver su menú y pedirle directo.";
     public const string TurnedOffMessage =
         "Este negocio no recibe pedidos desde asistentes de IA: el cliente puede pedir en su página.";
-    public const string BusyMessage = "Este negocio tiene muchos pedidos preparados sin enviar. Intenta en unos minutos.";
+    public const string BusyMessage =
+        "Este negocio tiene demasiados pedidos preparados sin enviar: por ahora el cliente puede pedir en su página.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IAssistantOrdersLock _lock;
     private readonly IDateTimeProvider _clock;
 
     public PrepareAssistantOrderCommandHandler(
-        IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider clock)
+        IApplicationDbContext context, ICurrentTenantService tenantService, IAssistantOrdersLock ordersLock, IDateTimeProvider clock)
     {
         _context = context;
         _tenantService = tenantService;
+        _lock = ordersLock;
         _clock = clock;
     }
 
@@ -128,6 +132,25 @@ public class PrepareAssistantOrderCommandHandler : IRequestHandler<PrepareAssist
 
         // A public request has no tenant: everything below is scoped to the business of the slug.
         _tenantService.SetTenant(tenant.Id);
+        // What it chose, as its link fills the cart: the same product with the same options and note is one line (up to 99).
+        // Each refusal names the first product of the request the line came from.
+        List<AccountCartLine> chosen;
+        try
+        {
+            chosen = AccountCart.NormalizeLines(request.Items.Select(item => new AccountCartLine(
+                item.ProductId, item.OptionIds, item.Quantity, item.Notes)));
+        }
+        catch (DomainException refused)
+        {
+            return Result.Failure<PreparedAssistantOrderDto>(refused.Message);
+        }
+        var positions = chosen.Select(line => 1 + request.Items.FindIndex(item => item.ProductId == line.ProductId
+                && (string.IsNullOrWhiteSpace(item.Notes) ? null : item.Notes.Trim()) == line.Notes
+                && item.OptionIds.Distinct().Order().SequenceEqual(line.OptionIds)))
+            .ToList();
+
+        // Two at once wait for each other: both do not take the last place.
+        await _lock.AcquireAsync(tenant.Id, cancellationToken);
         var now = _clock.UtcNow;
         var waiting = await _context.AssistantOrders.CountAsync(
             o => o.Status == AssistantOrderStatus.Pending && o.ExpiresAt > now, cancellationToken);
@@ -135,13 +158,13 @@ public class PrepareAssistantOrderCommandHandler : IRequestHandler<PrepareAssist
             return Result.Failure<PreparedAssistantOrderDto>(BusyMessage);
 
         // Whether the customer can send it now: the rule of the store. Closed or paused, the link keeps it for later.
-        var items = request.Items
-            .Select(item => new CreateOrderItemDto
+        var items = chosen
+            .Select(line => new CreateOrderItemDto
             {
-                ProductId = item.ProductId,
-                Quantity = item.Quantity,
-                OptionIds = item.OptionIds.Distinct().ToList(),
-                Notes = string.IsNullOrWhiteSpace(item.Notes) ? null : item.Notes.Trim()
+                ProductId = line.ProductId,
+                Quantity = line.Quantity,
+                OptionIds = line.OptionIds.ToList(),
+                Notes = line.Notes
             })
             .ToList();
         var placement = new PublicOrderPlacement(_context);
@@ -202,7 +225,7 @@ public class PrepareAssistantOrderCommandHandler : IRequestHandler<PrepareAssist
             Refused = priced
                 .Select((line, index) => (line, index))
                 .Where(pair => pair.line.Line is null)
-                .Select(pair => new RefusedAssistantOrderLineDto(pair.index + 1, pair.line.Item.ProductId, pair.line.Refusal!))
+                .Select(pair => new RefusedAssistantOrderLineDto(positions[pair.index], pair.line.Item.ProductId, pair.line.Refusal!))
                 .ToList(),
             ItemsTotal = draft.Total,
             PricesIncludeTax = settings.PricesIncludeTax,
@@ -250,14 +273,16 @@ public sealed class AssistantOrderDto
 /// An order an assistant prepared, by its link (Fase 32B): the store fills its cart with it, and the assistant sees whether
 /// the customer sent it. Null for a link that is not one, or of a business no longer active.
 /// </summary>
+/// <param name="Slug">The store whose page opened the link: one of another business is not found. Null for the assistant's tool.</param>
 [AllowAnonymousRequest("Pedido que preparó un asistente de IA, por su enlace: su carrito para la tienda y si se envió; nada del cliente.")]
-public record GetAssistantOrderQuery(string Token) : IRequest<AssistantOrderDto?>;
+public record GetAssistantOrderQuery(string Token, string? Slug = null) : IRequest<AssistantOrderDto?>;
 
 public class GetAssistantOrderQueryValidator : AbstractValidator<GetAssistantOrderQuery>
 {
     public GetAssistantOrderQueryValidator()
     {
         RuleFor(x => x.Token).NotEmpty().MaximumLength(Order.TrackingTokenLength);
+        RuleFor(x => x.Slug).MaximumLength(100);
     }
 }
 
@@ -277,7 +302,9 @@ public class GetAssistantOrderQueryHandler : IRequestHandler<GetAssistantOrderQu
     public async Task<AssistantOrderDto?> Handle(GetAssistantOrderQuery request, CancellationToken cancellationToken)
     {
         var found = await AssistantOrders.FindAsync(_context, request.Token, cancellationToken);
-        if (found is null)
+        // The page of another store never reads it.
+        if (found is null
+            || (request.Slug is { } slug && !string.Equals(found.Value.Slug, slug.Trim(), StringComparison.OrdinalIgnoreCase)))
             return null;
 
         // Read inside its business, as any of its records.
@@ -326,7 +353,7 @@ internal static class AssistantOrders
     /// The prepared order a link names, of an active business. The link names one of the whole platform before any business
     /// is in context: only which one and its business are read here; the order itself is read inside that business.
     /// </summary>
-    public static async Task<(Guid Id, Guid TenantId)?> FindAsync(
+    public static async Task<(Guid Id, Guid TenantId, string Slug)?> FindAsync(
         IApplicationDbContext context, string token, CancellationToken cancellationToken)
     {
         if (!Order.IsTrackingToken(token))
@@ -336,12 +363,12 @@ internal static class AssistantOrders
                 from prepared in context.AssistantOrders.IgnoreQueryFilters().AsNoTracking()
                 join tenant in context.Tenants.AsNoTracking() on prepared.TenantId equals tenant.Id
                 where prepared.Token == token && tenant.Status == TenantStatus.Active
-                select new { prepared.Id, prepared.TenantId, prepared.Token })
+                select new { prepared.Id, prepared.TenantId, prepared.Token, tenant.Slug })
             .FirstOrDefaultAsync(cancellationToken);
         // The column compares without case, as the database does; the link is the exact one.
         return found is null || !string.Equals(found.Token, token, StringComparison.Ordinal)
             ? null
-            : (found.Id, found.TenantId);
+            : (found.Id, found.TenantId, found.Slug);
     }
 
     /// <summary>

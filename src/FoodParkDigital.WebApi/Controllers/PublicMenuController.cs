@@ -296,10 +296,8 @@ public class PublicMenuController : ControllerBase
     public async Task<ActionResult<AssistantOrderDto>> GetAssistantOrder(
         string slug, [FromBody] AssistantOrderLinkRequest request, CancellationToken cancellationToken)
     {
-        var prepared = await _mediator.Send(new GetAssistantOrderQuery(request.Token), cancellationToken);
-        return prepared is null || !string.Equals(prepared.Slug, slug.Trim(), StringComparison.OrdinalIgnoreCase)
-            ? this.ApiError(StatusCodes.Status404NotFound, "No encontramos ese pedido.")
-            : Ok(prepared);
+        var prepared = await _mediator.Send(new GetAssistantOrderQuery(request.Token, slug), cancellationToken);
+        return prepared is null ? this.ApiError(StatusCodes.Status404NotFound, "No encontramos ese pedido.") : Ok(prepared);
     }
 
     /// <summary>

@@ -1,0 +1,39 @@
+using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace FoodParkDigital.Infrastructure.Services;
+
+/// <summary>
+/// The lock of the orders AI assistants prepare for a business (Fase 32B) as an application lock of SQL Server owned by the
+/// request's transaction, like the lock of quote sends: it is released when that transaction commits or rolls back. Waits up
+/// to 10 seconds; past them the request fails and the assistant tries again. Other providers (tests) have one request at a
+/// time and take no lock.
+/// </summary>
+public sealed class AssistantOrdersLock : IAssistantOrdersLock
+{
+    private const int TimeoutMilliseconds = 10_000;
+
+    private readonly ApplicationDbContext _context;
+
+    public AssistantOrdersLock(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task AcquireAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (!_context.Database.IsSqlServer())
+            return;
+        if (_context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("The lock of prepared orders lasts as long as the request's transaction: take it inside one.");
+
+        var resource = $"assistant-orders:{tenantId:N}";
+        await _context.Database.ExecuteSqlAsync($"""
+            DECLARE @result int;
+            EXEC @result = sp_getapplock @Resource = {resource}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = {TimeoutMilliseconds};
+            IF @result < 0
+                THROW 51000, N'The lock of the business''s prepared orders was not granted.', 1;
+            """, cancellationToken);
+    }
+}

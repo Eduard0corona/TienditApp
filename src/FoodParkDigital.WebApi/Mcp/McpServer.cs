@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http.Features;
+
 namespace FoodParkDigital.WebApi.Mcp;
 
 /// <summary>
@@ -10,6 +12,12 @@ public static class McpServer
     public const string Path = "/mcp";
     public const string RateLimitPolicy = "assistant";
     public const string Name = "tienditapp";
+
+    /// <summary>
+    /// The largest request it reads: a tool call, even preparing an order of 50 products with their options and notes, fits
+    /// in it several times.
+    /// </summary>
+    public const long MaxRequestBytes = 128 * 1024;
 
     public static IServiceCollection AddStoreMcpServer(this IServiceCollection services)
     {
@@ -30,5 +38,19 @@ public static class McpServer
     }
 
     public static void MapStoreMcpServer(this WebApplication app)
-        => app.MapMcp(Path).RequireRateLimiting(RateLimitPolicy).ExcludeFromDescription();
+    {
+        // A request larger than any tool call is refused before it is read.
+        app.UseWhen(context => context.Request.Path.StartsWithSegments(Path), branch => branch.Use(async (context, next) =>
+        {
+            if (context.Request.ContentLength > MaxRequestBytes)
+            {
+                context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+                return;
+            }
+            if (context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } body)
+                body.MaxRequestBodySize = MaxRequestBytes;
+            await next(context);
+        }));
+        app.MapMcp(Path).RequireRateLimiting(RateLimitPolicy).ExcludeFromDescription();
+    }
 }

@@ -4,6 +4,8 @@ using System.Text;
 using FluentValidation;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.PublicDirectory;
+using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.WebApi.Http;
 using MediatR;
@@ -139,6 +141,9 @@ public sealed class StoreTools
     {
         if (productos is not { Count: > 0 })
             throw new McpException("Agrega al menos un producto, con su id de ver_menu.");
+        // Before reading each one: a request with thousands is refused as it comes.
+        if (productos.Count > AccountCart.MaxLines)
+            throw new McpException($"Un pedido lleva hasta {AccountCart.MaxLines} productos distintos.");
         var items = new List<AssistantOrderItemInput>();
         foreach (var (producto, index) in productos.Select((producto, index) => (producto, index + 1)))
         {
@@ -163,10 +168,11 @@ public sealed class StoreTools
             Slug = RequiredSlug(slug),
             Items = items,
             PostalCode = codigo_postal,
-            Source = _http.HttpContext?.Request.Headers.UserAgent.ToString()
+            Source = Source()
         }, cancellationToken);
+        // Why the store refused it can carry what the business wrote (a product's name): as text, never as a mark.
         if (result.IsFailure)
-            throw new McpException(result.Error!);
+            throw new McpException(AgentPages.Inline(result.Error!));
         return Prepared(result.Value!);
     }
 
@@ -216,6 +222,8 @@ public sealed class StoreTools
             if (line.Options.Count > 0)
                 text.Append(" (").Append(string.Join(", ", line.Options.Select(AgentPages.Inline))).Append(')');
             text.Append(" · ").Append(AgentPages.Money(line.Amount));
+            if (!order.PricesIncludeTax)
+                text.Append(" más IVA");
             if (!string.IsNullOrWhiteSpace(line.Notes))
                 text.Append(" · nota: ").Append(AgentPages.Inline(line.Notes));
             text.Append('\n');
@@ -226,14 +234,14 @@ public sealed class StoreTools
         {
             text.Append("\n## No se agregó\n\n");
             foreach (var refused in order.Refused)
-                text.Append("- El producto ").Append(refused.Position).Append(": ").Append(refused.Reason).Append('\n');
+                text.Append("- El producto ").Append(refused.Position).Append(": ").Append(AgentPages.Inline(refused.Reason)).Append('\n');
         }
         if (order.Delivery is not null)
             text.Append('\n').Append(Delivery(order.Delivery));
         else if (order.DeliveryOnly)
             text.Append("\nEste negocio solo entrega a domicilio: el cliente escribe su dirección en la página.\n");
         if (!order.TakesOrdersNow)
-            text.Append("\nAhora no recibe pedidos (").Append(order.NotNowReason?.TrimEnd('.') ?? "cerrado")
+            text.Append("\nAhora no recibe pedidos (").Append(order.NotNowReason is { } reason ? AgentPages.Inline(reason.TrimEnd('.')) : "cerrado")
                 .Append("): el enlace guarda el pedido y el cliente lo envía cuando vuelva a recibirlos.\n");
         return text.ToString();
 
@@ -259,17 +267,34 @@ public sealed class StoreTools
     private static string RequiredSlug(string? slug)
         => string.IsNullOrWhiteSpace(slug) ? throw new McpException("Falta el slug del negocio: búscalo con buscar_negocios.") : slug.Trim();
 
-    /// <summary>The secret of a link of preparar_pedido: the whole link, or what goes after #pedido=.</summary>
+    /// <summary>
+    /// The secret of a link of preparar_pedido: the whole link, or what goes after pedido= (#pedido=, or ?pedido= as an
+    /// assistant may rewrite it), also with a mark of the chat around it («…)», «….»). Null when what is left is not one of its
+    /// tokens.
+    /// </summary>
     internal static string? TokenOf(string? link)
     {
         if (string.IsNullOrWhiteSpace(link))
             return null;
         var value = link.Trim();
-        var marker = "#" + AssistantOrderLink.Parameter + "=";
-        var at = value.IndexOf(marker, StringComparison.Ordinal);
+        var marker = AssistantOrderLink.Parameter + "=";
+        var at = value.LastIndexOf(marker, StringComparison.Ordinal);
         if (at >= 0)
             value = value[(at + marker.Length)..];
-        return value.Length == 0 ? null : value;
+        value = value.Trim().TrimStart('<', '(', '[', '"', '\'', '«').TrimEnd('>', ')', ']', '"', '\'', '»', '.', ',', ';', ':', '!', '?');
+        return Order.IsTrackingToken(value) ? value : null;
+    }
+
+    /// <summary>
+    /// Who prepares an order, as its client introduces itself (its User-Agent), up to what the order keeps: a long one never
+    /// keeps an assistant from preparing it.
+    /// </summary>
+    private string? Source()
+    {
+        var agent = _http.HttpContext?.Request.Headers.UserAgent.ToString().Trim();
+        if (string.IsNullOrEmpty(agent))
+            return null;
+        return agent.Length > AssistantOrder.MaxSourceLength ? agent[..AssistantOrder.MaxSourceLength] : agent;
     }
 
     /// <summary>

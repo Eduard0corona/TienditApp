@@ -647,6 +647,8 @@ public class PlacePublicOrderCommandValidator : AbstractValidator<PlacePublicOrd
             .WithMessage("La clave del pedido no es válida.");
         RuleFor(x => x.AddressLabel).MaximumLength(AccountAddressRules.MaxLabelInputLength)
             .WithMessage(AccountAddressRules.LabelTooLongMessage);
+        // The link of an order an assistant prepared (Fase 32B): one of its tokens, or nothing.
+        RuleFor(x => x.AssistantOrderToken).MaximumLength(Order.TrackingTokenLength);
     }
 }
 
