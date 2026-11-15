@@ -397,6 +397,38 @@ public sealed class McpServerTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Equal(".", error);
     }
 
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("DELETE")]
+    [InlineData("PUT")]
+    public async Task TheServer_ShouldAnswerOnlyPost_AndAnythingElseThere_NotWithAPageOfTheApp(string method)
+    {
+        // Stateless: it opens no stream for a GET and has no session to close with a DELETE (the spec asks for 405).
+        using var request = new HttpRequestMessage(new HttpMethod(method), McpServer.Path);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+
+        using var response = await _api.Http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
+        Assert.Equal(["POST"], response.Content.Headers.Allow);
+        Assert.NotEqual("text/html", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Theory]
+    [InlineData("/.well-known/oauth-protected-resource")]
+    [InlineData("/.well-known/oauth-protected-resource/mcp")]
+    [InlineData("/.well-known/oauth-authorization-server")]
+    [InlineData("/.well-known/openid-configuration")]
+    [InlineData("/mcp/otra")]
+    public async Task AClientLookingForHowToSignIn_ShouldFindThereIsNone_NotAPageOfTheApp(string path)
+    {
+        // Claude and other MCP clients look for how a server signs in: without an account, there is nothing to find.
+        using var response = await _api.Http.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.NotEqual("text/html", response.Content.Headers.ContentType?.MediaType);
+    }
+
     [Fact]
     public async Task TheServer_ShouldNotBeInTheApiContract()
     {

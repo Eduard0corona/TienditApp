@@ -1,3 +1,4 @@
+using FoodParkDigital.WebApi.Mcp;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Net.Http.Headers;
 
@@ -87,6 +88,28 @@ public static class ClientDelivery
         {
             var path = context.Request.Path;
             if (path.StartsWithSegments("/api") || path.StartsWithSegments("/hubs"))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return Task.CompletedTask;
+            }
+
+            // The MCP server answers POST only: stateless, it opens no stream for a GET and has no session to close with a
+            // DELETE, and the spec asks for 405 then. Nothing under its address is a screen of the app.
+            if (path.StartsWithSegments(McpServer.Path, out var rest))
+            {
+                if (rest.HasValue && rest != "/")
+                {
+                    context.Response.StatusCode = StatusCodes.Status404NotFound;
+                    return Task.CompletedTask;
+                }
+                context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+                context.Response.Headers.Allow = HttpMethods.Post;
+                return Task.CompletedTask;
+            }
+
+            // The app publishes no discovery document: an MCP client looking for how to sign in (OAuth metadata), or any
+            // other service looking for one, must find there is none, not a page it cannot read.
+            if (path.StartsWithSegments("/.well-known"))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 return Task.CompletedTask;
