@@ -1702,6 +1702,38 @@ describe('PublicMenuPage', () => {
       await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent(/^\/m\/cafe-luna$/));
     });
 
+    it('says it only in the order that opened: closed and opened again, the notice is gone', async () => {
+      api.getMenu.mockResolvedValue(cafe());
+      const said = 'Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.';
+
+      renderPage('/m/cafe-luna?agregar=p2:1&agregar=p9:1');
+
+      let cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(within(cart).getByRole('status')).toHaveTextContent(said);
+      // To add more products: opened again, the order says nothing of the link.
+      await userEvent.click(within(cart).getByRole('button', { name: 'Agregar más productos' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tu pedido' })).not.toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido · 1 · / }));
+      cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(within(cart).queryByText(said)).not.toBeInTheDocument();
+      expect(cart).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('forgets the notice of the link with the cart when the customer signs out', async () => {
+      account.getCarts.mockResolvedValue([]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(cafe());
+      const said = 'Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.';
+      const page = renderPage('/m/cafe-luna?agregar=p2:1&agregar=p9:1', signedInAs('Customer'));
+      expect(within(await screen.findByRole('dialog', { name: 'Tu pedido' })).getByRole('status')).toHaveTextContent(said);
+
+      window.localStorage.removeItem('tienditapp.carts');
+      page.withSession({ isAuthenticated: false, isLoading: false, user: null });
+
+      await waitFor(() => expect(screen.queryByText(said)).not.toBeInTheDocument());
+    });
+
     it('takes the place of the cart this device and the account had, and the account keeps the order of the link', async () => {
       saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p2', optionIds: [], quantity: 4 }] });
       account.getCarts.mockResolvedValue([{

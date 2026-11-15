@@ -239,7 +239,11 @@ public sealed class AgentPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal(TimeSpan.FromSeconds(120), response.Headers.RetryAfter?.Delta);
         Assert.Equal("text/markdown", response.Content.Headers.ContentType?.MediaType);
-        Assert.StartsWith("# Menú no disponible", await response.Content.ReadAsStringAsync());
+        // No proxy keeps it once the menu can be read again, and what failed stays in the log.
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.StartsWith("# Menú no disponible", body);
+        Assert.DoesNotContain("Sin base", body);
     }
 
     [Fact]

@@ -236,6 +236,9 @@ export default function PublicMenuPage() {
   const [restoredNotice, setRestoredNotice] = useState('');
   // What the store says of a link's order, in the order it opened (Fase 32A): the sheet covers the notice of the page.
   const [cartNotice, setCartNotice] = useState('');
+  // It is of the order as it opened: once the sheet closes (to add more, sent or paid), it goes, and opening it again
+  // does not say it again.
+  if (!cartOpen && cartNotice) setCartNotice('');
   const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
   // The customer account whose cart this page holds, while its session lasts.
   const [cartOwner, setCartOwner] = useState<string | null>(null);
@@ -269,6 +272,7 @@ export default function PublicMenuPage() {
     setCartOwner(null);
     setLines([]);
     setRestoredNotice('');
+    setCartNotice('');
   }
 
   // The carts the customer account left (Fase 31J): its cart here may come from another device.
@@ -849,7 +853,6 @@ export default function PublicMenuPage() {
         onHide={() => {
           if (sending) return;
           setCartOpen(false);
-          setCartNotice('');
         }}
         placement="end"
         className="pm-checkout"
