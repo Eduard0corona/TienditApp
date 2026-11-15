@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
@@ -45,6 +46,7 @@ public sealed class PreparedAssistantOrderDto
     /// <summary>Whether the customer can send it now; if not, why (closed, paused), and the link keeps it for later.</summary>
     public bool TakesOrdersNow { get; init; }
     public string? NotNowReason { get; init; }
+    /// <summary>When its link stops working, at the business's offset: its clock time is the business's.</summary>
     public DateTimeOffset ExpiresAt { get; init; }
 }
 
@@ -234,7 +236,7 @@ public class PrepareAssistantOrderCommandHandler : IRequestHandler<PrepareAssist
             DeliveryOnly = deliveryOnly,
             TakesOrdersNow = notNow is null,
             NotNowReason = notNow,
-            ExpiresAt = prepared.ExpiresAt
+            ExpiresAt = TimeZoneInfo.ConvertTime(prepared.ExpiresAt, TenantDateTimeResolver.Resolve(settings.TimeZone))
         });
     }
 }
@@ -264,6 +266,7 @@ public sealed class AssistantOrderDto
     /// <summary>The cart, while it is open; empty once sent or expired.</summary>
     public List<AssistantOrderLineDto> Lines { get; init; } = new();
     public string? PostalCode { get; init; }
+    /// <summary>When its link stops working, at the business's offset (the same instant): its clock time is the business's.</summary>
     public DateTimeOffset ExpiresAt { get; init; }
     /// <summary>Sent: the folio of its order and where it is (as its tracking link words it).</summary>
     public string? OrderNumber { get; init; }
@@ -314,7 +317,7 @@ public class GetAssistantOrderQueryHandler : IRequestHandler<GetAssistantOrderQu
             .FirstOrDefaultAsync(o => o.Id == found.Value.Id, cancellationToken);
         var business = await _context.Tenants.AsNoTracking()
             .Where(t => t.Id == found.Value.TenantId)
-            .Select(t => new { t.Name, t.Slug })
+            .Select(t => new { t.Name, t.Slug, TimeZone = t.Settings != null ? t.Settings.TimeZone : null })
             .FirstOrDefaultAsync(cancellationToken);
         if (prepared is null || business is null)
             return null;
@@ -338,7 +341,7 @@ public class GetAssistantOrderQueryHandler : IRequestHandler<GetAssistantOrderQu
                 ? prepared.Lines.Select(line => new AssistantOrderLineDto(line.ProductId, line.OptionIds, line.Quantity, line.Notes)).ToList()
                 : new List<AssistantOrderLineDto>(),
             PostalCode = state == AssistantOrderState.Open ? prepared.PostalCode : null,
-            ExpiresAt = prepared.ExpiresAt,
+            ExpiresAt = TimeZoneInfo.ConvertTime(prepared.ExpiresAt, TenantDateTimeResolver.Resolve(business.TimeZone)),
             OrderNumber = order?.OrderNumber,
             OrderStatus = order is null ? null : OrderStatusLabels.ToSpanish(order.Status)
         };

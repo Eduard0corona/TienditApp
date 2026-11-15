@@ -45,7 +45,14 @@ public sealed class McpServerTests : IClassFixture<PublicPagesTests.PagesApi>
             ["clientInfo"] = new JsonObject { ["name"] = "prueba", ["version"] = "1.0" }
         });
         Assert.Equal(McpServer.Name, (string?)initialized["serverInfo"]?["name"]);
-        Assert.Contains("nunca pidas datos de tarjeta", (string?)initialized["instructions"]);
+        // The steps of the conversation: ask where and which option, give the link to send, never take the customer's data.
+        var instructions = (string?)initialized["instructions"];
+        Assert.Equal(McpServer.Instructions, instructions);
+        Assert.Contains("pregúntale su código postal", instructions);
+        Assert.Contains("pregúntale al cliente cuál quiere; no elijas por él", instructions);
+        Assert.Contains("dile que lo abra, lo revise, escriba sus datos y lo envíe", instructions);
+        Assert.Contains("usa ver_pedido", instructions);
+        Assert.Contains("nunca pidas datos de tarjeta ni los datos personales del cliente", instructions);
 
         var tools = (await CallAsync("tools/list", new JsonObject()))["tools"]!.AsArray();
         Assert.Equal(
@@ -90,7 +97,9 @@ public sealed class McpServerTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Equal("café", query.Search);
         Assert.Equal("72000", query.PostalCode);
         Assert.Equal(StoreTools.PageSize, query.PageSize);
-        Assert.Contains("## Café \\# Luna\n", text);
+        Assert.Contains("### Café \\# Luna\n", text);
+        Assert.Contains("## Negocios\n\nPágina 1 de 1 (2 negocios).\n", text);
+        Assert.DoesNotContain("## Productos", text);
         Assert.Contains("- slug: `cafe-luna`\n", text);
         Assert.Contains("- Página: https://app.tienditapp.mx/m/cafe-luna\n", text);
         Assert.Contains("- Ahora: Abierto, cierra a las 20:00\n", text);
@@ -106,8 +115,82 @@ public sealed class McpServerTests : IClassFixture<PublicPagesTests.PagesApi>
     {
         var error = await ToolErrorAsync("buscar_negocios", new JsonObject { ["categoria"] = "Pizza" });
 
-        Assert.StartsWith("Esa categoría no existe. Usa una de: Food,", error);
+        Assert.StartsWith("Esa categoría no existe. Usa una de: comida, abarrotes, salud,", error);
         Assert.Empty(_api.Sender.Requests);
+    }
+
+    [Theory]
+    [InlineData("comida", BusinessCategory.Food)]
+    [InlineData("Food", BusinessCategory.Food)]
+    [InlineData("Farmacia y salud", BusinessCategory.Health)]
+    [InlineData("ELECTRÓNICA", BusinessCategory.Electronics)]
+    [InlineData("hogar-y-reparaciones", BusinessCategory.HomeRepairs)]
+    [InlineData("hogar y reparaciones", BusinessCategory.HomeRepairs)]
+    public void ACategory_ShouldBeTakenAsExplorarWritesIt_OrAsTheApiDoes(string named, BusinessCategory category)
+        => Assert.Equal(category, StoreTools.CategoryOf(named));
+
+    [Fact]
+    public async Task SearchBusinesses_ShouldFindTheDishes_AndTheServices_WhereNoBusinessIsCalledSo()
+    {
+        var sushi = Guid.Parse("f9ff433b-52d0-4fd6-8556-3d313971c1a2");
+        var haircut = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        _api.Sender.Directory = new PublicDirectoryDto
+        {
+            Businesses = new PaginatedList<PublicDirectoryBusinessDto>([], 0, 1, StoreTools.PageSize),
+            Products =
+            [
+                new PublicDirectoryProductDto
+                {
+                    Id = sushi, Name = "Sushi *3 quesos*", Price = 180m, CompareAtPrice = 200m, BusinessName = "Sushi Go",
+                    BusinessSlug = "sushi-go", AcceptsOrders = true
+                },
+                new PublicDirectoryProductDto
+                {
+                    Id = Latte, Name = "Sushi de mango", Price = 150m, AddsTax = true, BusinessName = "Tienda Sol",
+                    BusinessSlug = "tienda-sol", AcceptsOrders = false
+                }
+            ],
+            Services =
+            [
+                new PublicDirectoryServiceDto
+                {
+                    Id = haircut, Name = "Corte", Price = 150m, DurationMinutes = 30, Kind = PublicDirectoryServiceKind.BooksOnline,
+                    BusinessName = "Barbería", BusinessSlug = "barberia"
+                },
+                new PublicDirectoryServiceDto
+                {
+                    Id = Grande, Name = "Fuga", Price = 500m, Kind = PublicDirectoryServiceKind.HomeVisit, VisitsPostalCode = false,
+                    BusinessName = "Plomería", BusinessSlug = "plomeria"
+                }
+            ]
+        };
+
+        var text = await ToolAsync("buscar_negocios", new JsonObject { ["texto"] = "sushi", ["categoria"] = "comida" });
+
+        Assert.Equal(BusinessCategory.Food, Assert.IsType<GetPublicDirectoryQuery>(Assert.Single(_api.Sender.Requests)).Category);
+        Assert.DoesNotContain("No encontramos", text);
+        Assert.Contains("## Productos que coinciden\n\n"
+            + $"- Sushi \\*3 quesos\\* · $180.00 (antes $200.00) · en Sushi Go (slug `sushi-go`) · id `{sushi}`\n"
+            + $"- Sushi de mango · $150.00 más IVA · en Tienda Sol (slug `tienda-sol`) · id `{Latte}` · su negocio ahora no recibe pedidos en línea\n", text);
+        Assert.Contains("antes de preparar el pedido, ábrelo en su menú con `ver_menu`", text);
+        Assert.Contains("## Servicios que coinciden\n\n"
+            + $"- Corte · $150.00 · 30 min · en Barbería (slug `barberia`) · se agenda en https://app.tienditapp.mx/m/barberia/agendar?servicio={haircut}\n"
+            + "- Fuga · desde $500.00 · en Plomería (slug `plomeria`) · a domicilio, el negocio va a cotizarlo: se pide en "
+            + "https://app.tienditapp.mx/m/plomeria (no va al código postal)\n", text);
+        Assert.DoesNotContain("## Negocios", text);
+    }
+
+    [Fact]
+    public async Task SearchBusinesses_ShouldSayNothingWasFound_OnlyWhenNoBusinessProductOrServiceWas()
+    {
+        _api.Sender.Directory = new PublicDirectoryDto
+        {
+            Businesses = new PaginatedList<PublicDirectoryBusinessDto>([], 0, 1, StoreTools.PageSize)
+        };
+
+        var text = await ToolAsync("buscar_negocios", new JsonObject { ["texto"] = "pozole" });
+
+        Assert.StartsWith("No encontramos negocios, productos ni servicios con esa búsqueda.", text);
     }
 
     [Fact]
@@ -166,7 +249,7 @@ public sealed class McpServerTests : IClassFixture<PublicPagesTests.PagesApi>
             PricesIncludeTax = true,
             Delivery = new PublicDeliveryQuoteDto { PostalCode = "72000", Covered = true, Fee = 0m },
             TakesOrdersNow = true,
-            ExpiresAt = new DateTimeOffset(2026, 11, 16, 18, 30, 0, TimeSpan.Zero)
+            ExpiresAt = new DateTimeOffset(2026, 11, 16, 12, 30, 0, TimeSpan.FromHours(-6))
         });
 
         var text = await ToolAsync("preparar_pedido", new JsonObject
@@ -191,7 +274,8 @@ public sealed class McpServerTests : IClassFixture<PublicPagesTests.PagesApi>
 
         Assert.StartsWith("# Pedido preparado en Café Luna\n\nTodavía no se envía.", text);
         Assert.Contains($"Enlace: https://app.tienditapp.mx/m/cafe-luna#pedido={Token}\n", text);
-        Assert.Contains("Vence el 16 de noviembre, 18:30 (UTC).", text);
+        // The business's clock, as the Application gives it at its offset: never UTC.
+        Assert.Contains("Vence el 16 de noviembre a las 12:30 (hora del negocio).", text);
         Assert.Contains("- 2 × Latte (Grande) · $134.00 · nota: sin azúcar\n", text);
         Assert.Contains("Productos: $134.00 con IVA incluido.\n", text);
         Assert.Contains("## No se agregó\n\n- El producto 2: Ese producto no está en el menú.\n", text);
@@ -363,9 +447,9 @@ public sealed class McpServerTests : IClassFixture<PublicPagesTests.PagesApi>
         _api.Sender.AssistantOrder = new AssistantOrderDto
         {
             Slug = "cafe-luna", BusinessName = "Café Luna", State = AssistantOrderState.Open,
-            ExpiresAt = new DateTimeOffset(2026, 11, 16, 9, 5, 0, TimeSpan.Zero)
+            ExpiresAt = new DateTimeOffset(2026, 11, 16, 9, 5, 0, TimeSpan.FromHours(-7))
         };
-        Assert.Contains("Todavía no lo envía. El enlace funciona hasta el 16 de noviembre, 09:05 (UTC).",
+        Assert.Contains("Todavía no lo envía. El enlace funciona hasta el 16 de noviembre a las 09:05 (hora del negocio).",
             await ToolAsync("ver_pedido", new JsonObject { ["enlace"] = Token }));
 
         _api.Sender.AssistantOrder = new AssistantOrderDto

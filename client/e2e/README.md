@@ -7,6 +7,7 @@ Son pocas y largas a propósito: cada una cruza el registro, la API, la base y v
 ## Qué recorren
 
 - `specs/primera-venta.spec.ts`: una dueña registra su taquería, activa su cuenta con el enlace del correo, entra, pasa por Primeros pasos con la plantilla «Taquería», abre su caja desde Vender, cobra dos tacos al pastor en efectivo y da cambio. Pedidos tiene la venta pagada y Mi caja cuenta el efectivo.
+- `specs/pedido-con-asistente.spec.ts` (Fase 32C): un asistente de IA, por el servidor MCP (`/mcp`), busca «taco de pastor» y lo encuentra en el índice de Explorar; busca el negocio por su nombre, lee su menú y prepara dos tacos con una nota. El cliente abre el enlace en otro navegador: el carrito dice que lo preparó su asistente y que todavía no le llega al negocio, y lo envía. El asistente ve el folio con `ver_pedido`, el enlace abierto otra vez dice que ya se envió y el negocio tiene el pedido en Pedidos. Espera hasta 75 segundos a que el índice de Explorar (30 segundos) tenga el negocio nuevo.
 - `specs/pedido-en-linea.spec.ts`: el negocio abre su caja y prende el menú con pedidos. Un cliente, en otro navegador y sin cuenta, pide desde `/m/<negocio>` y abre el seguimiento. El negocio ve el pedido en Pedidos, por confirmar y por cobrar, y lo confirma; el seguimiento del cliente lo dice.
 
 ## Cómo se corren
