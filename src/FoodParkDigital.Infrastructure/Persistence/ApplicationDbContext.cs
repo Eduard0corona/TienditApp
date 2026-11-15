@@ -172,6 +172,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OnlinePaymentAccount> OnlinePaymentAccounts => Set<OnlinePaymentAccount>();
     public DbSet<OnlinePaymentAuthorization> OnlinePaymentAuthorizations => Set<OnlinePaymentAuthorization>();
     public DbSet<OnlineCheckout> OnlineCheckouts => Set<OnlineCheckout>();
+    public DbSet<AssistantOrder> AssistantOrders => Set<AssistantOrder>();
     public DbSet<OnlinePaymentRefund> OnlinePaymentRefunds => Set<OnlinePaymentRefund>();
     public DbSet<OrderInvoice> OrderInvoices => Set<OrderInvoice>();
     public DbSet<InvoicingProfile> InvoicingProfiles => Set<InvoicingProfile>();

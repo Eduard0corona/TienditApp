@@ -15951,6 +15951,64 @@
         }
       }
     },
+    "/api/v1/public/menu/{slug}/assistant-order": {
+      "post": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantOrderLinkRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantOrderLinkRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantOrderLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantOrderDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantOrderDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantOrderDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/menu/{slug}/checkouts/{checkoutId}/confirm": {
       "post": {
         "tags": [
@@ -20695,6 +20753,106 @@
         },
         "additionalProperties": false
       },
+      "AssistantOrderDto": {
+        "required": [
+          "businessName",
+          "expiresAt",
+          "lines",
+          "slug",
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "businessName": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AssistantOrderState"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantOrderLineDto"
+            }
+          },
+          "postalCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "orderNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "orderStatus": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssistantOrderLineDto": {
+        "required": [
+          "optionIds",
+          "productId",
+          "quantity"
+        ],
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "optionIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssistantOrderLinkRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssistantOrderState": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Open",
+          "Sent",
+          "Expired"
+        ]
+      },
       "AttentionDto": {
         "required": [
           "items"
@@ -24039,6 +24197,10 @@
             "type": "boolean"
           },
           "addressLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "assistantOrderToken": {
             "type": "string",
             "nullable": true
           }
@@ -31514,6 +31676,7 @@
       },
       "OnlineMenuSettingsDto": {
         "required": [
+          "assistantOrders",
           "mode",
           "slug"
         ],
@@ -31524,6 +31687,9 @@
           },
           "slug": {
             "type": "string"
+          },
+          "assistantOrders": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -33850,6 +34016,10 @@
             "type": "boolean"
           },
           "addressLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "assistantOrderToken": {
             "type": "string",
             "nullable": true
           }
@@ -36823,6 +36993,7 @@
       "PublicMenuDto": {
         "required": [
           "acceptsOrders",
+          "assistantOrders",
           "booksOnline",
           "businessName",
           "categories",
@@ -36885,6 +37056,9 @@
             "type": "boolean"
           },
           "paysOnline": {
+            "type": "boolean"
+          },
+          "assistantOrders": {
             "type": "boolean"
           },
           "theme": {
@@ -41676,6 +41850,7 @@
       },
       "TenantProfileDto": {
         "required": [
+          "assistantOrders",
           "autoCloseCounterSales",
           "businessType",
           "capabilities",
@@ -41753,6 +41928,9 @@
           },
           "onlineMenuMode": {
             "$ref": "#/components/schemas/OnlineMenuMode"
+          },
+          "assistantOrders": {
+            "type": "boolean"
           },
           "theme": {
             "$ref": "#/components/schemas/BusinessTheme"
@@ -42884,6 +43062,10 @@
         "properties": {
           "mode": {
             "$ref": "#/components/schemas/OnlineMenuMode"
+          },
+          "assistantOrders": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false

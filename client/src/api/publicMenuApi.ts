@@ -19,6 +19,7 @@ export type PublicHomeVisit = Schemas['PublicHomeVisitDto'];
 export type PublicHomeVisitCoverage = Schemas['PublicHomeVisitCoverageDto'];
 export type RequestPublicHomeVisit = Schemas['RequestPublicHomeVisitRequest'];
 export type CreateOnlineCheckout = Schemas['CreateOnlineCheckoutRequest'];
+export type AssistantOrder = Schemas['AssistantOrderDto'];
 export type OnlineCheckoutStarted = Schemas['OnlineCheckoutStartedDto'];
 export type OnlineCheckoutStatus = Schemas['OnlineCheckoutStatusDto'];
 export type StartAppointmentDeposit = Schemas['StartAppointmentDepositRequest'];
@@ -33,6 +34,13 @@ export const publicMenuApi = {
   /** Whether the business delivers to a postal code and what it charges (Fase 22C); never the zone's name. */
   getDeliveryQuote: (slug: string, postalCode: string) =>
     apiRequest('get', '/api/v1/public/menu/{slug}/delivery-quote', { path: { slug }, query: { postalCode } }),
+
+  /**
+   * The order an AI assistant prepared for this store (Fase 32B, ADR 0096), by its link: the cart while it is open, and
+   * whether it was sent or expired. The link goes in the body, never in the URL. Not of this store, it is not found (404).
+   */
+  getAssistantOrder: (slug: string, token: string, signal?: AbortSignal) =>
+    apiRequest('post', '/api/v1/public/menu/{slug}/assistant-order', { path: { slug }, body: { token }, signal }),
 
   placeOrder: (slug: string, body: PlacePublicOrder) =>
     apiRequest('post', '/api/v1/public/menu/{slug}/orders', { path: { slug }, body }),

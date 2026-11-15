@@ -44,11 +44,14 @@ public class OnlineMenuSettingsDto
     public OnlineMenuMode Mode { get; set; }
     /// <summary>The public path of the menu: /m/{slug}.</summary>
     public string Slug { get; set; } = null!;
+    /// <summary>Whether AI assistants prepare its orders (Fase 32B, ADR 0096): on until the business turns it off.</summary>
+    public bool AssistantOrders { get; set; }
 }
 
 /// <summary>Turns the public menu off, on, or on with orders (owners and admins).</summary>
 [RequiresTenantManager]
-public record UpdateOnlineMenuCommand(OnlineMenuMode Mode) : IRequest<Result<OnlineMenuSettingsDto>>;
+/// <param name="AssistantOrders">Fase 32B: whether AI assistants prepare its orders; null leaves it as it is.</param>
+public record UpdateOnlineMenuCommand(OnlineMenuMode Mode, bool? AssistantOrders = null) : IRequest<Result<OnlineMenuSettingsDto>>;
 
 public class UpdateOnlineMenuCommandValidator : AbstractValidator<UpdateOnlineMenuCommand>
 {
@@ -91,6 +94,18 @@ public class UpdateOnlineMenuCommandHandler : IRequestHandler<UpdateOnlineMenuCo
 
         var previous = settings.OnlineMenuMode;
         settings.UpdateOnlineMenu(request.Mode);
+        if (request.AssistantOrders is { } assistantOrders && assistantOrders != settings.AssistantOrders)
+        {
+            // Who receives orders an AI assistant prepared, and when that changed (Fase 32B).
+            settings.SetAssistantOrders(assistantOrders);
+            _context.AuditLogs.Add(new AuditLog(
+                tenantId: tenant.Id,
+                entityName: nameof(TenantSettings),
+                entityId: tenant.Id.ToString(),
+                action: "AssistantOrdersUpdated",
+                performedBy: _currentUserService.UserName ?? "system",
+                metadata: JsonSerializer.Serialize(new { Enabled = assistantOrders })));
+        }
         if (previous != request.Mode)
         {
             // Publishing the catalog and taking orders from strangers is a decision worth recording.
@@ -104,7 +119,12 @@ public class UpdateOnlineMenuCommandHandler : IRequestHandler<UpdateOnlineMenuCo
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(new OnlineMenuSettingsDto { Mode = settings.OnlineMenuMode, Slug = tenant.Slug });
+        return Result.Success(new OnlineMenuSettingsDto
+        {
+            Mode = settings.OnlineMenuMode,
+            Slug = tenant.Slug,
+            AssistantOrders = settings.AssistantOrders
+        });
     }
 }
 
@@ -142,6 +162,11 @@ public class PublicMenuDto
     /// on. Only to pick it up or to have it delivered, never at a table.
     /// </summary>
     public bool PaysOnline { get; set; }
+    /// <summary>
+    /// Whether AI assistants prepare its orders through the MCP server (Fase 32B, ADR 0096): on until the business turns it
+    /// off. Only what an assistant offers changes; the store and its link work the same.
+    /// </summary>
+    public bool AssistantOrders { get; set; }
     /// <summary>The colors the business picked: its customers see the menu with them.</summary>
     public BusinessTheme Theme { get; set; }
     /// <summary>
@@ -480,6 +505,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             OrdersPaused = ordersOn && !acceptsOrders,
             PaysOnline = acceptsOrders && _gateway.IsConfigured && OnlineCheckoutRules.Offers(
                 await _context.OnlinePaymentAccounts.AsNoTracking().FirstOrDefaultAsync(cancellationToken), _gateway, utcNow),
+            AssistantOrders = ordersOn && settings.AssistantOrders,
             Theme = settings.Theme,
             Address = AddressText.ForCustomers(mainBranch),
             MapPoint = MapPointDto.From(mainBranch?.PublicLocation),
@@ -587,6 +613,11 @@ public record PlacePublicOrderCommand : IRequest<Result<PublicOrderReceiptDto>>,
     /// </summary>
     public bool SaveAddress { get; init; }
     public string? AddressLabel { get; init; }
+    /// <summary>
+    /// The link of the order an AI assistant prepared, when the cart came from it (Fase 32B): that order is confirmed with
+    /// this one. A link that is not one, or no longer open, changes nothing.
+    /// </summary>
+    public string? AssistantOrderToken { get; init; }
 }
 
 public class PlacePublicOrderCommandValidator : AbstractValidator<PlacePublicOrderCommand>
@@ -616,6 +647,8 @@ public class PlacePublicOrderCommandValidator : AbstractValidator<PlacePublicOrd
             .WithMessage("La clave del pedido no es válida.");
         RuleFor(x => x.AddressLabel).MaximumLength(AccountAddressRules.MaxLabelInputLength)
             .WithMessage(AccountAddressRules.LabelTooLongMessage);
+        // The link of an order an assistant prepared (Fase 32B): one of its tokens, or nothing.
+        RuleFor(x => x.AssistantOrderToken).MaximumLength(Order.TrackingTokenLength);
     }
 }
 
@@ -779,7 +812,8 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         Items = request.Items,
         Delivery = request.Delivery,
         SaveAddress = request.SaveAddress,
-        AddressLabel = request.AddressLabel
+        AddressLabel = request.AddressLabel,
+        AssistantOrderToken = request.AssistantOrderToken
     };
 
     internal static string TotalChangedMessage(decimal total) =>

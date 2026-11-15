@@ -8,6 +8,7 @@ using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Infrastructure.BackgroundJobs.AssistantOrders;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Billing;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
@@ -191,6 +192,7 @@ public static class DependencyInjection
             services.AddHostedService<SalesSnapshotWorkerService>();
             services.AddHostedService<SubscriptionStatusWorkerService>();
             services.AddHostedService<OnlinePaymentsWorkerService>();
+            services.AddHostedService<AssistantOrdersCleanupService>();
             services.AddHostedService<InvoicingWorkerService>();
             services.AddHostedService<PrivateFilesMigrationService>();
         }
@@ -204,6 +206,7 @@ public static class DependencyInjection
         services.AddScoped<ICustomerCreditLock, CustomerCreditLock>();
         services.AddScoped<IInvoicingLock, InvoicingLock>();
         services.AddScoped<IQuoteSendingLock, QuoteSendingLock>();
+        services.AddScoped<IAssistantOrdersLock, AssistantOrdersLock>();
         services.AddScoped<IInventoryLocationLock, InventoryLocationLock>();
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();

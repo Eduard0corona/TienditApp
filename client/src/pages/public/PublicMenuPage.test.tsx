@@ -11,6 +11,7 @@ import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDef
 import { BusinessTheme, DayOfWeek, SpecialDayKind } from '../../types';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import { goToExternalPage } from '../../utils/externalNavigation';
+import { rememberAssistantOrder, rememberedAssistantOrder } from '../../utils/orderLink';
 import { onlineCheckoutReturnKey } from '../../utils/onlineCheckouts';
 import { savePostalCode } from '../../utils/postalCodePreference';
 import { readCart, saveCart } from '../../utils/savedCart';
@@ -24,6 +25,7 @@ vi.mock('../../api/publicMenuApi', () => ({
     getDeliveryQuote: vi.fn(),
     placeOrder: vi.fn(),
     startOnlineCheckout: vi.fn(),
+    getAssistantOrder: vi.fn(),
   },
 }));
 
@@ -110,7 +112,7 @@ const christmasDay = {
 /** The address the page is at, for what it keeps in it or takes out. */
 function Address() {
   const location = useLocation();
-  return <div hidden data-testid="address">{`${location.pathname}${location.search}`}</div>;
+  return <div hidden data-testid="address">{`${location.pathname}${location.search}${location.hash}`}</div>;
 }
 
 /** Where signing in goes back to (Login reads it from the state of the link). */
@@ -154,8 +156,9 @@ const signedInAs = (role: 'Customer' | 'TenantAdmin'): Partial<AuthContextType> 
 describe('PublicMenuPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    // The cart stays on the device (Fase 24B): each test starts without one.
+    // The cart stays on the device (Fase 24B): each test starts without one, nor the link of an assistant's order of a tab.
     window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -1658,6 +1661,246 @@ describe('PublicMenuPage', () => {
     renderPage();
     expect(await screen.findByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Reseñas' })).not.toBeInTheDocument();
+  });
+
+  describe('el pedido que preparó un asistente de IA (Fase 32B)', () => {
+    const TOKEN = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE';
+    const cafe = () => menu({
+      categories: [{
+        id: 'c1',
+        name: 'Bebidas',
+        products: [
+          { id: 'p1', name: 'Latte', price: 55, isTaxExempt: false, isFeatured: false, availableNow: true, optionGroups: [] },
+          { id: 'p2', name: 'Concha', price: 18, isTaxExempt: false, isFeatured: false, availableNow: true, optionGroups: [] },
+        ],
+      }],
+    });
+    const prepared = (state: number, lines = [{ productId: 'p1', optionIds: [], quantity: 2, notes: 'sin azúcar' }]) => ({
+      slug: 'cafe-luna', businessName: 'Café Luna', state, lines, postalCode: null, expiresAt: '2026-11-16T18:00:00Z',
+      orderNumber: null, orderStatus: null,
+    });
+
+    it('fills the cart with its order, notes included, opens it, and sends the order with its link', async () => {
+      api.getMenu.mockResolvedValue(cafe());
+      api.getAssistantOrder.mockResolvedValue(prepared(0) as never);
+      api.placeOrder.mockResolvedValue({
+        orderNumber: 'ORD-9', total: 110, deliveryFee: null, confirmed: false, businessName: 'Café Luna', contactPhone: null,
+        linkedToAccount: false, trackingToken: null,
+      } as never);
+
+      renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+
+      const cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(api.getAssistantOrder).toHaveBeenCalledWith('cafe-luna', TOKEN, expect.anything());
+      expect(within(cart).getByText('Latte')).toBeInTheDocument();
+      expect(within(cart).getByText('«sin azúcar»')).toBeInTheDocument();
+      // The secret leaves the address once read.
+      await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent(/^\/m\/cafe-luna$/));
+
+      await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
+      await userEvent.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      await userEvent.click(within(cart).getByRole('button', { name: /^Hacer pedido/ }));
+
+      await waitFor(() => expect(api.placeOrder).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({
+        assistantOrderToken: TOKEN,
+        items: [{ productId: 'p1', quantity: 2, optionIds: [], notes: 'sin azúcar' }],
+      })));
+    });
+
+    it('sends its link with the order paid online too', async () => {
+      api.getMenu.mockResolvedValue({ ...cafe(), paysOnline: true });
+      api.getAssistantOrder.mockResolvedValue(prepared(0) as never);
+      api.startOnlineCheckout.mockResolvedValue({
+        checkoutId: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+        checkoutUrl: 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=123',
+        amount: 110,
+        expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+        returnKey: 'llave-de-regreso',
+      } as never);
+
+      renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+      const cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
+      await userEvent.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      await userEvent.click(within(cart).getByRole('button', { name: /^Pagar · / }));
+
+      await waitFor(() => expect(api.startOnlineCheckout).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({
+        assistantOrderToken: TOKEN,
+        items: [{ productId: 'p1', quantity: 2, optionIds: [], notes: 'sin azúcar' }],
+      })));
+      expect(api.placeOrder).not.toHaveBeenCalled();
+    });
+
+    it('says an order already sent, expired, or not found, leaving the cart the customer had', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p2', optionIds: [], quantity: 3 }] });
+      // This tab had opened it before: sent, it no longer goes with the cart.
+      rememberAssistantOrder('cafe-luna', TOKEN);
+      api.getMenu.mockResolvedValue(cafe());
+      api.getAssistantOrder.mockResolvedValue(prepared(1, []) as never);
+
+      const first = renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Este pedido ya se envió. Síguelo con el enlace que te dio la página al enviarlo.',
+      );
+      expect(screen.getByRole('button', { name: /^Ver pedido · 3 · / })).toBeInTheDocument();
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p2', optionIds: [], quantity: 3 }]);
+      expect(rememberedAssistantOrder('cafe-luna')).toBeNull();
+      first.unmount();
+
+      api.getAssistantOrder.mockResolvedValue(prepared(2, []) as never);
+      const second = renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+      expect(await screen.findByRole('status')).toHaveTextContent('Este pedido venció. Pídele al asistente que lo prepare otra vez');
+      second.unmount();
+
+      api.getAssistantOrder.mockRejectedValue({ isAxiosError: true, response: { status: 404, data: {} } });
+      renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+      expect(await screen.findByRole('status')).toHaveTextContent('No encontramos ese pedido.');
+      await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent(/^\/m\/cafe-luna$/));
+      expect(api.placeOrder).not.toHaveBeenCalled();
+    });
+
+    it('keeps the link in the address when it could not be read now, for a reload to try again', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p2', optionIds: [], quantity: 3 }] });
+      api.getMenu.mockResolvedValue(cafe());
+      api.getAssistantOrder.mockRejectedValue({ isAxiosError: true, response: { status: 503, data: {} } });
+
+      renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'No pudimos abrir el pedido que preparó tu asistente. Recarga la página para intentarlo de nuevo.',
+      );
+      // The cart the customer had stays, and so does the link, once the page has settled.
+      expect(screen.getByRole('button', { name: /^Ver pedido · 3 · / })).toBeInTheDocument();
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+      expect(screen.getByTestId('address')).toHaveTextContent(`/m/cafe-luna#pedido=${TOKEN}`);
+    });
+
+    it('sends its link with the cart that comes back without it, in the same tab, until the cart is emptied', async () => {
+      api.getMenu.mockResolvedValue(cafe());
+      api.getAssistantOrder.mockResolvedValue(prepared(0) as never);
+      api.placeOrder.mockResolvedValue({
+        orderNumber: 'ORD-9', total: 110, deliveryFee: null, confirmed: false, businessName: 'Café Luna', contactPhone: null,
+        linkedToAccount: false, trackingToken: null,
+      } as never);
+      const first = renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+      expect(await screen.findByRole('dialog', { name: 'Tu pedido' })).toBeInTheDocument();
+      first.unmount();
+
+      // A reload, or back from signing in: the address has no fragment, the cart comes back from the device.
+      const second = renderPage('/m/cafe-luna');
+      await userEvent.click(await screen.findByRole('button', { name: /^Ver pedido · 2 · / }));
+      const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
+      await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
+      await userEvent.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      await userEvent.click(within(cart).getByRole('button', { name: /^Hacer pedido/ }));
+      await waitFor(() => expect(api.placeOrder).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({ assistantOrderToken: TOKEN })));
+      second.unmount();
+
+      // Sent, the next order of this tab is another one.
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p2', optionIds: [], quantity: 1 }] });
+      api.placeOrder.mockClear();
+      renderPage('/m/cafe-luna');
+      await userEvent.click(await screen.findByRole('button', { name: /^Ver pedido · 1 · / }));
+      const next = screen.getByRole('dialog', { name: 'Tu pedido' });
+      await userEvent.type(within(next).getByLabelText('Tu nombre'), 'Ana');
+      await userEvent.type(within(next).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      await userEvent.click(within(next).getByRole('button', { name: /^Hacer pedido/ }));
+      await waitFor(() => expect(api.placeOrder).toHaveBeenCalled());
+      expect(api.placeOrder.mock.calls[0][1]).not.toHaveProperty('assistantOrderToken');
+      expect(api.getAssistantOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens the order to the postal code the customer gave the assistant, where the store delivers', async () => {
+      savePostalCode('72009');
+      api.getMenu.mockResolvedValue({ ...cafe(), deliveryAvailable: true });
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => ({
+        postalCode, covered: true, fee: 35, minimumOrder: 0, freeDeliveryFrom: null,
+      }));
+      api.getAssistantOrder.mockResolvedValue({ ...prepared(0), postalCode: '72000' } as never);
+
+      const first = renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+
+      const cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(within(cart).getByRole('radio', { name: 'A domicilio' })).toBeChecked();
+      await waitFor(() => expect(within(cart).getByLabelText('Código postal')).toHaveValue('72000'));
+      expect(api.getDeliveryQuote).toHaveBeenCalledWith('cafe-luna', '72000');
+      expect(api.getDeliveryQuote).not.toHaveBeenCalledWith('cafe-luna', '72009');
+      first.unmount();
+
+      // A store that does not deliver takes the order to pick up.
+      api.getDeliveryQuote.mockClear();
+      api.getMenu.mockResolvedValue(cafe());
+      renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+      const pickUp = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(within(pickUp).queryByRole('radio', { name: 'A domicilio' })).not.toBeInTheDocument();
+      expect(api.getDeliveryQuote).not.toHaveBeenCalled();
+    });
+
+    it('takes the account\'s saved address in that postal code, or that postal code alone', async () => {
+      account.getCarts.mockResolvedValue([]);
+      account.getPostalCode.mockResolvedValue({ postalCode: '72009' } as never);
+      account.getAddresses.mockResolvedValue([
+        { id: 'a1', label: 'Casa', postalCode: '72000', addressLine: 'Av. Juárez 120', references: null, lastUsedAt: '2026-10-12T19:00:00Z' },
+        { id: 'a2', label: 'Oficina', postalCode: '72160', addressLine: 'Calle 5 de Mayo 8', references: null, lastUsedAt: null },
+      ]);
+      api.getMenu.mockResolvedValue({ ...cafe(), deliveryAvailable: true });
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => ({
+        postalCode, covered: true, fee: 0, minimumOrder: 0, freeDeliveryFrom: null,
+      }));
+      api.getAssistantOrder.mockResolvedValue({ ...prepared(0), postalCode: '72160' } as never);
+
+      const first = renderPage(`/m/cafe-luna#pedido=${TOKEN}`, signedInAs('Customer'));
+      const cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(await within(cart).findByRole('radio', { name: /^Oficina/ })).toHaveAttribute('aria-checked', 'true');
+      expect(within(cart).getByRole('radio', { name: /^Casa/ })).toHaveAttribute('aria-checked', 'false');
+      first.unmount();
+
+      api.getAssistantOrder.mockResolvedValue({ ...prepared(0), postalCode: '80000' } as never);
+      renderPage(`/m/cafe-luna#pedido=${TOKEN}`, signedInAs('Customer'));
+      const other = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(await within(other).findByRole('radio', { name: 'Otra dirección' })).toHaveAttribute('aria-checked', 'true');
+      expect(within(other).getByLabelText('Código postal')).toHaveValue('80000');
+      expect(within(other).getByLabelText('Dirección')).toHaveValue('');
+    });
+
+    it('waits for its order before the cart the customer had, also when it arrives after the menu', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p2', optionIds: [], quantity: 3 }] });
+      api.getMenu.mockResolvedValue(cafe());
+      let answer: (value: unknown) => void = () => undefined;
+      api.getAssistantOrder.mockReturnValue(new Promise((resolve) => { answer = resolve; }) as never);
+
+      renderPage(`/m/cafe-luna#pedido=${TOKEN}`);
+      expect(await screen.findByRole('button', { name: /^Agregar Latte/ })).toBeInTheDocument();
+      // The menu shows meanwhile, without the cart of this device.
+      expect(screen.queryByRole('button', { name: /^Ver pedido/ })).not.toBeInTheDocument();
+      await act(async () => answer(prepared(0)));
+
+      const cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(within(cart).getByText('Latte')).toBeInTheDocument();
+      expect(within(cart).queryByText('Concha')).not.toBeInTheDocument();
+    });
+
+    it('fills nothing and says nothing at a table', async () => {
+      api.getMenu.mockResolvedValue(cafe());
+      api.getAssistantOrder.mockResolvedValue(prepared(1, []) as never);
+
+      renderPage(`/m/cafe-luna?mesa=Mesa%204#pedido=${TOKEN}`);
+
+      expect(await screen.findByRole('button', { name: /^Agregar Latte/ })).toBeInTheDocument();
+      await waitFor(() => expect(api.getAssistantOrder).toHaveBeenCalled());
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Tu pedido' })).not.toBeInTheDocument();
+    });
+
+    it('does not ask for a fragment that is not one of its links', async () => {
+      api.getMenu.mockResolvedValue(cafe());
+
+      renderPage('/m/cafe-luna#pedido=corto');
+
+      expect(await screen.findByRole('button', { name: /^Agregar Latte/ })).toBeInTheDocument();
+      expect(api.getAssistantOrder).not.toHaveBeenCalled();
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
   });
 
   describe('el enlace de un asistente de IA (Fase 32A)', () => {

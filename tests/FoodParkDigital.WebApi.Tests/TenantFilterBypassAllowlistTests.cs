@@ -65,6 +65,8 @@ public class TenantFilterBypassAllowlistTests
         // unanswered; each one is then applied in its business's scope.
         ["src/FoodParkDigital.Infrastructure/OnlinePayments/MercadoPagoWebhookProcessor.cs"] = 1,
         ["src/FoodParkDigital.Infrastructure/BackgroundJobs/OnlinePayments/OnlinePaymentsWorkerService.cs"] = 4,
+        // The orders AI assistants prepared whose link expired a week ago, of every business, deleted in batches (Fase 32B).
+        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/AssistantOrders/AssistantOrdersCleanupService.cs"] = 1,
         // Invoicing (Fases 28A to 28D): the worker finds the businesses with invoices (of orders or global), payment
         // complements and credit notes still stamping, cancellations waiting for the SAT, payments of invoices in installments
         // that never had a complement, or refunds (of orders not cancelled) and write-offs of invoiced orders that never had
@@ -82,6 +84,9 @@ public class TenantFilterBypassAllowlistTests
         // enters that business. The favorites of a customer account read only whether each kept business still has its
         // menu published (Fase 24F).
         ["src/FoodParkDigital.Application/OnlineMenu/OnlineMenuFeature.cs"] = 2,
+        // The link of an order an AI assistant prepared names one of the whole platform before any business is in context:
+        // only which one and its business are read; the order itself is read inside that business (Fase 32B).
+        ["src/FoodParkDigital.Application/OnlineMenu/AssistantOrdersFeature.cs"] = 1,
         // Explorar lists the businesses that published their menu and show in it, before any business is in context:
         // each read filtered by its own business, only for what its menu already shows (ADR 0021); with the customer's
         // postal code, the active zones of every business that reach it, never their names (Fase 24B); how customers

@@ -237,6 +237,15 @@ public class TenantSettings : BaseEntity, ITenantScoped
     }
 
     /// <summary>
+    /// Whether an AI assistant prepares orders of the business through TienditApp's MCP server (Fase 32B, ADR 0096): on by
+    /// default, so a business that sells online receives them. The customer still sends each one from the store; off, the
+    /// assistant reads the menu but prepares nothing.
+    /// </summary>
+    public bool AssistantOrders { get; private set; } = true;
+
+    public void SetAssistantOrders(bool enabled) => AssistantOrders = enabled;
+
+    /// <summary>
     /// Whether customers book appointments from the online menu (Fase 24D, ADR 0025): off until the owner turns it on. It
     /// works while the menu is published, the agenda module is on, the business has weekly hours and its main branch has
     /// premises; this only says the owner wants it.

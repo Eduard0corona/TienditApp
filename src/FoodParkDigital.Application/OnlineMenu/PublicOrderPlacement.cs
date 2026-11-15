@@ -8,10 +8,13 @@ using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Delivery;
+using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
@@ -36,6 +39,12 @@ public sealed record PublicOrderRequest
     public OrderDeliveryInput? Delivery { get; init; }
     public bool SaveAddress { get; init; }
     public string? AddressLabel { get; init; }
+
+    /// <summary>
+    /// The link of the order an AI assistant prepared (Fase 32B, ADR 0096), when the cart came from it: placed, that order
+    /// is confirmed with this one. Absent in the requests stored before it.
+    /// </summary>
+    public string? AssistantOrderToken { get; init; }
 }
 
 /// <summary>
@@ -78,13 +87,20 @@ internal sealed class PublicOrderPlacement
         }
 
         if (request.Delivery is null
-            && await _context.Branches.AnyAsync(b => b.Id == branchId && b.ServiceMode == BranchServiceMode.DeliveryOnly, cancellationToken)
-            && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken)
+            && await DeliversOnlyAsync(tenant.Id, branchId, cancellationToken)
             && !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken))
             return (branchId, PlacePublicOrderCommandHandler.DeliveryRequiredMessage);
 
         return (branchId, null);
     }
+
+    /// <summary>
+    /// Whether the business only delivers: the branch that takes its online orders is a kitchen without premises and it has
+    /// an active delivery zone. Open or closed: it says how the order will arrive.
+    /// </summary>
+    public async Task<bool> DeliversOnlyAsync(Guid tenantId, Guid? branchId, CancellationToken cancellationToken)
+        => await _context.Branches.AnyAsync(b => b.Id == branchId && b.ServiceMode == BranchServiceMode.DeliveryOnly, cancellationToken)
+            && await DeliveryZoneLookup.AnyActiveAsync(_context, tenantId, cancellationToken);
 
     /// <summary>
     /// Who orders a draft that is only priced and never stored (<see cref="BuildAsync"/>): the customer account, or a
@@ -150,6 +166,82 @@ internal sealed class PublicOrderPlacement
     }
 
     /// <summary>
+    /// The lines an AI assistant asked for (Fase 32B, ADR 0096), priced as the store would now: only products its menu shows,
+    /// each checked as an order checks it (available at this hour, its options within their groups, the limits of a line),
+    /// with why each other one is not taken. The draft order holds the ones taken, with its total. Nothing is stored.
+    /// </summary>
+    public async Task<(Order Draft, IReadOnlyList<PricedLine> Lines)> PriceLinesAsync(
+        Tenant tenant,
+        IReadOnlyList<CreateOrderItemDto> items,
+        Guid? branchId,
+        TenantSalesSettings settings,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var draft = new Order(
+            tenantId: tenant.Id,
+            customerUserId: null,
+            temporaryCustomerId: Guid.NewGuid(),
+            createdByBusiness: false,
+            orderNumber: Order.NumberNotAssigned,
+            businessType: tenant.BusinessType,
+            orderType: OrderType.Retail,
+            customerName: "Asistente",
+            customerPhone: null,
+            customerNotes: null,
+            tableNumber: null,
+            pricesIncludeTax: settings.PricesIncludeTax,
+            channel: OrderChannel.Online,
+            branchId: branchId);
+
+        var ids = items.Select(item => item.ProductId).Distinct().ToList();
+        var products = await PublicDirectorySnapshot.MenuProducts(_context)
+            .Include(product => product.OptionGroups).ThenInclude(group => group.Options)
+            .Where(product => ids.Contains(product.Id))
+            .ToDictionaryAsync(product => product.Id, cancellationToken);
+        var localTimeOfDay = TenantDateTimeResolver.LocalNow(now, settings.TimeZone).TimeOfDay;
+        var lineBuilder = new OrderLineBuilder(localTimeOfDay, settings.DefaultTaxRate);
+        var lines = new List<PricedLine>();
+        foreach (var item in items)
+        {
+            if (!products.TryGetValue(item.ProductId, out var product))
+            {
+                lines.Add(new PricedLine(item, null, NotOnMenuMessage));
+                continue;
+            }
+            if (!OrderProductClassifier.MatchesOrderType(OrderType.Retail, product.Unit))
+            {
+                lines.Add(new PricedLine(item, null, $"'{product.Name}' no se puede pedir en línea."));
+                continue;
+            }
+
+            try
+            {
+                var built = lineBuilder.Build(product, item);
+                if (built.IsFailure)
+                {
+                    lines.Add(new PricedLine(item, null, built.Error!));
+                    continue;
+                }
+                draft.AddItem(built.Value.Line);
+                lines.Add(new PricedLine(item, built.Value.Line, null));
+            }
+            catch (DomainException refused)
+            {
+                // A product not available at this hour, or options its groups do not take: that line, not the others.
+                lines.Add(new PricedLine(item, null, refused.Message));
+            }
+        }
+
+        return (draft, lines);
+    }
+
+    public const string NotOnMenuMessage = "Ese producto no está en el menú.";
+
+    /// <summary>A line an assistant asked for: priced when the menu takes it, or why not.</summary>
+    public sealed record PricedLine(CreateOrderItemDto Item, OrderLineRequest? Line, string? Refusal);
+
+    /// <summary>
     /// Places a built order (the caller adds it and saves, in the transaction of its request): to preparation when the
     /// business accepts orders without confirming them, its folio, the supplies it uses, the address the customer account
     /// keeps and its tracking link.
@@ -183,6 +275,7 @@ internal sealed class PublicOrderPlacement
         if (accountId is { } account && request.Delivery is not null)
             await RememberAddressAsync(account, request, now, cancellationToken);
         order.IssueTrackingToken(OrderTracking.NewToken());
+        await AssistantOrders.ConfirmAsync(_context, request.AssistantOrderToken, order.Id, now, cancellationToken);
         return accepted;
     }
 

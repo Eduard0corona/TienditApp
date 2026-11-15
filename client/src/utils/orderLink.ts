@@ -71,3 +71,67 @@ export function orderLinkMessage({ kept, notOnMenu, invalid, replaced, paused }:
   ].filter(Boolean);
   return said.join(' ');
 }
+
+/**
+ * The fragment of the link of an order an AI assistant prepared through the MCP server (Fase 32B, ADR 0096):
+ * `/m/{slug}#pedido={token}`. In the fragment, the secret never reaches a server's log; the store reads its cart with it.
+ */
+export const ASSISTANT_ORDER_FRAGMENT = 'pedido';
+
+/** A token of that link: 43 URL-safe Base64 characters, as the server issues them. */
+const ASSISTANT_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
+/** The token in a page's fragment (`#pedido=…`), or null when it has none or it is not one. */
+export function assistantOrderTokenOf(hash: string): string | null {
+  const value = new URLSearchParams(hash.replace(/^#/, '')).get(ASSISTANT_ORDER_FRAGMENT)?.trim() ?? '';
+  return ASSISTANT_TOKEN.test(value) ? value : null;
+}
+
+/**
+ * What the store says when the link of an assistant's order fills nothing: sent already, expired, not found, or not read
+ * now (offline, the server busy: the link stays in the address for a reload to try again).
+ */
+export function assistantOrderMessage(state: 'sent' | 'expired' | 'missing' | 'failed'): string {
+  switch (state) {
+    case 'sent':
+      return 'Este pedido ya se envió. Síguelo con el enlace que te dio la página al enviarlo.';
+    case 'expired':
+      return 'Este pedido venció. Pídele al asistente que lo prepare otra vez, o arma tu pedido aquí.';
+    case 'failed':
+      return 'No pudimos abrir el pedido que preparó tu asistente. Recarga la página para intentarlo de nuevo.';
+    default:
+      return 'No encontramos ese pedido. Revisa el enlace, o arma tu pedido aquí.';
+  }
+}
+
+const assistantOrderKey = (slug: string) => `tienditapp.assistantOrder.${slug}`;
+
+/**
+ * The link of the assistant's order whose cart a store holds, for this tab: a reload or a sign-in comes back without the
+ * fragment, and the order sent still confirms it. Not a credential: it opens that cart and says whether it was sent.
+ */
+export function rememberAssistantOrder(slug: string, token: string): void {
+  try {
+    sessionStorage.setItem(assistantOrderKey(slug), token);
+  } catch {
+    // Storage blocked: the order is still sent, without confirming the assistant's.
+  }
+}
+
+/** The one this tab remembers for a store, if it is one of its tokens. */
+export function rememberedAssistantOrder(slug: string): string | null {
+  try {
+    const token = sessionStorage.getItem(assistantOrderKey(slug));
+    return token && ASSISTANT_TOKEN.test(token) ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+export function forgetAssistantOrder(slug: string): void {
+  try {
+    sessionStorage.removeItem(assistantOrderKey(slug));
+  } catch {
+    // Nothing kept.
+  }
+}

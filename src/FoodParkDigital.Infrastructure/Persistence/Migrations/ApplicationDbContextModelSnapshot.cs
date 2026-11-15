@@ -4583,6 +4583,93 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.AssistantOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<decimal>("ItemsTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PostalCode")
+                        .HasMaxLength(5)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(5)");
+
+                    b.Property<DateTimeOffset>("PreparedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(43)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(43)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("_lines")
+                        .IsRequired()
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("Lines");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasFilter("[OrderId] IS NOT NULL");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Status", "ExpiresAt");
+
+                    b.ToTable("AssistantOrders", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AssistantOrders_ItemsTotal", "[ItemsTotal] >= 0");
+
+                            t.HasCheckConstraint("CK_AssistantOrders_Outcome", "([Status] = 0 AND [OrderId] IS NULL AND [ConfirmedAt] IS NULL) OR ([Status] = 1 AND [OrderId] IS NOT NULL AND [ConfirmedAt] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_AssistantOrders_PostalCode", "[PostalCode] IS NULL OR LEN([PostalCode]) = 5");
+
+                            t.HasCheckConstraint("CK_AssistantOrders_Status", "[Status] IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_AssistantOrders_Token", "LEN([Token]) = 43");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.KitchenTicket", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7027,6 +7114,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("AppointmentRemindersEnabled")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("AssistantOrders")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("AutoAcceptOrders")
                         .HasColumnType("bit");
 
@@ -8441,6 +8532,20 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.OrderRefund", null)
                         .WithMany()
                         .HasForeignKey("OrderRefundId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.AssistantOrder", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)

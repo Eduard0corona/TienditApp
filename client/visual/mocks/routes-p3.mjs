@@ -114,7 +114,7 @@ export function phase3Routes(data, { ok, notFound }) {
         businessName: data.tenant.name, slug: data.tenant.slug, logoUrl: null, contactPhone: '5512345678', currency: 'MXN',
         pricesIncludeTax: true, defaultTaxRate: 16, acceptsOrders: true, theme: data.tenant.theme,
         // A café with premises that takes orders now: not paused, no online payment, delivery or appointments.
-        category: 0, ordersPaused: false, paysOnline: false, deliveryOnly: false, deliveryAvailable: false, booksOnline: false,
+        category: 0, ordersPaused: false, paysOnline: false, assistantOrders: true, deliveryOnly: false, deliveryAvailable: false, booksOnline: false,
         categories: cats.map((c) => ({
           id: c.id, name: c.name,
           products: data.products.filter((p) => p.categoryId === c.id && p.isAvailable && p._itemType === 'Product').map((p) => ({

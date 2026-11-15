@@ -118,6 +118,12 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             .HasDefaultValue(true)
             .ValueGeneratedNever()
             .IsRequired();
+        // Fase 32B (ADR 0096): an AI assistant prepares orders of the business unless it turns them off; the database default
+        // fills the rows that exist and those the previous version saves while this one is published. EF always writes it.
+        builder.Property(s => s.AssistantOrders)
+            .HasDefaultValue(true)
+            .ValueGeneratedNever()
+            .IsRequired();
         // Fase 26C (ADR 0035): credit reminders start off, every 7 days; the database defaults fill the rows that exist and
         // those the previous version saves while this one is published. EF always writes the values.
         builder.Property(s => s.CreditRemindersEnabled)

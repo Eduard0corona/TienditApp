@@ -144,6 +144,11 @@ public static class AgentPages
             .Append(" y cada opción una vez; el enlace entero, de hasta ").Append(MaxLinkLength.ToString("N0", Mexico)).Append(" caracteres.\n")
             .Append("3. Dale el enlace al cliente. Al abrirlo, la página del negocio llena su carrito; el cliente lo revisa, escribe sus datos y lo envía. ")
             .Append("El negocio confirma el pedido.\n\n")
+            .Append("## Servidor MCP\n\n")
+            .Append("Un asistente que acepta servidores MCP puede usar el de TienditApp: `").Append(baseUrl).Append(Mcp.McpServer.Path)
+            .Append("` (Streamable HTTP, sin cuenta). Sus herramientas: `buscar_negocios`, `ver_menu`, `cotizar_envio`, `preparar_pedido` ")
+            .Append("(calcula lo que cuesta y da un enlace para que el cliente revise y envíe el pedido desde la página del negocio; no lo envía) ")
+            .Append("y `ver_pedido` (si el cliente ya lo envió).\n\n")
             .Append("Reglas: usa solo los ids del menú en texto, sin inventar productos ni opciones. El total, el envío y el pago los calcula ")
             .Append("la página del negocio: los precios del menú son una referencia del momento. Lo que el menú no puede agregar ")
             .Append("(agotado, opciones que faltan) la página se lo dice al cliente. Nunca pidas datos de tarjeta: el pago, si es en línea, ")
@@ -154,9 +159,10 @@ public static class AgentPages
     /// <summary>
     /// The menu of a store in Markdown: what the store shows, with the ids of its products and options and the link that
     /// fills its cart. Everything its business wrote is escaped and on one line: it reads as data, never as a section or
-    /// a link of this page.
+    /// a link of this page. For the MCP server's tools (Fase 32B, <paramref name="forTools"/>), how to order is its
+    /// <c>preparar_pedido</c> tool, or the store's page when the business turned orders from assistants off.
     /// </summary>
-    public static string Menu(PublicMenuDto menu, string baseUrl)
+    public static string Menu(PublicMenuDto menu, string baseUrl, bool forTools = false)
     {
         var storeUrl = baseUrl + "/m/" + Uri.EscapeDataString(menu.Slug);
         // A store that takes online orders, now or once it opens again (paused: closed or without an open drawer).
@@ -200,7 +206,20 @@ public static class AgentPages
             text.Append("- Visitas a domicilio para cotizar: ").Append(storeUrl).Append("/visita\n");
         text.Append("- Precios en pesos mexicanos (MXN), ").Append(menu.PricesIncludeTax ? "con IVA incluido" : "sin IVA: la tienda lo suma al total").Append(".\n\n");
 
-        if (takesOrders)
+        if (takesOrders && forTools)
+        {
+            text.Append("## Cómo pedir\n\n");
+            if (menu.AssistantOrders)
+                text.Append("Con la herramienta `preparar_pedido`, el slug `").Append(Inline(menu.Slug)).Append("` y los ids de abajo: ")
+                    .Append("el servidor calcula lo que cuesta y da un enlace para el cliente, que lo abre, revisa el pedido, escribe sus datos ")
+                    .Append("y lo envía desde la página del negocio. Nada llega al negocio hasta entonces; el enlace vence en un día.\n");
+            else
+                text.Append("Este negocio no recibe pedidos desde asistentes de IA: el cliente puede pedir en su página, ").Append(storeUrl).Append(".\n");
+            if (menu.OrdersPaused)
+                text.Append("- Ahora no recibe pedidos: el cliente puede enviarlo cuando vuelva a recibirlos.\n");
+            text.Append('\n');
+        }
+        else if (takesOrders)
         {
             text.Append("## Cómo pedir\n\n")
                 .Append("Arma el enlace del pedido con los ids de abajo y dáselo al cliente: al abrirlo, la página del negocio llena su carrito, ")
@@ -362,7 +381,7 @@ public static class AgentPages
         _ => null
     };
 
-    private static string Money(decimal amount) => amount.ToString("C2", Mexico);
+    internal static string Money(decimal amount) => amount.ToString("C2", Mexico);
 
     private static string? Shortened(string? text)
     {

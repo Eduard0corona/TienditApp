@@ -78,6 +78,19 @@ public class AccountCart : AuditableEntity, IAggregateRoot
     /// </summary>
     public void Replace(IEnumerable<AccountCartLine> lines, int? reorderOf, int? skipped, DateTimeOffset now)
     {
+        _lines = NormalizeLines(lines);
+        ReorderOf = reorderOf is > 0 ? reorderOf : null;
+        Skipped = skipped is > 0 ? skipped : null;
+        SavedAt = now;
+    }
+
+    /// <summary>
+    /// The lines of a cart as a store keeps them, also the order an AI assistant prepares (Fase 32B): the same product with
+    /// the same options and the same note is one line (its quantities add up to the most a line takes), its options in
+    /// order and each once, a note trimmed (empty is none), within the limits of an order.
+    /// </summary>
+    public static List<AccountCartLine> NormalizeLines(IEnumerable<AccountCartLine> lines)
+    {
         var kept = new List<AccountCartLine>();
         foreach (var line in lines)
         {
@@ -101,11 +114,7 @@ public class AccountCart : AuditableEntity, IAggregateRoot
             throw new DomainException(TooManyLinesMessage);
         if (kept.Sum(line => line.OptionIds.Count) > MaxOptionsPerCart)
             throw new DomainException(TooManyOptionsMessage);
-
-        _lines = kept;
-        ReorderOf = reorderOf is > 0 ? reorderOf : null;
-        Skipped = skipped is > 0 ? skipped : null;
-        SavedAt = now;
+        return kept;
     }
 
     /// <summary>

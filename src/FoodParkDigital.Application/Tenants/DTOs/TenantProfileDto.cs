@@ -52,6 +52,8 @@ public class TenantProfileDto
     public InsufficientStockPolicy InsufficientStockPolicy { get; set; }
     /// <summary>The public menu (/m/{slug}): off, menu only, or menu that takes orders.</summary>
     public OnlineMenuMode OnlineMenuMode { get; set; }
+    /// <summary>Whether AI assistants prepare its orders (Fase 32B, ADR 0096).</summary>
+    public bool AssistantOrders { get; set; } = true;
     /// <summary>The colors of the business in its team's app and its public menu.</summary>
     public BusinessTheme Theme { get; set; }
     public DateTimeOffset? OnboardingCompletedAt { get; set; }

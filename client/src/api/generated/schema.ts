@@ -13289,6 +13289,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/menu/{slug}/assistant-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AssistantOrderLinkRequest"];
+                    "text/json": components["schemas"]["AssistantOrderLinkRequest"];
+                    "application/*+json": components["schemas"]["AssistantOrderLinkRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AssistantOrderDto"];
+                        "application/json": components["schemas"]["AssistantOrderDto"];
+                        "text/json": components["schemas"]["AssistantOrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/menu/{slug}/checkouts/{checkoutId}/confirm": {
         parameters: {
             query?: never;
@@ -16854,6 +16899,33 @@ export interface components {
             /** Format: int32 */
             trialDays?: number | null;
         };
+        AssistantOrderDto: {
+            slug: string;
+            businessName: string;
+            state: components["schemas"]["AssistantOrderState"];
+            lines: components["schemas"]["AssistantOrderLineDto"][];
+            postalCode?: string | null;
+            /** Format: date-time */
+            expiresAt: string;
+            orderNumber?: string | null;
+            orderStatus?: string | null;
+        };
+        AssistantOrderLineDto: {
+            /** Format: uuid */
+            productId: string;
+            optionIds: string[];
+            /** Format: int32 */
+            quantity: number;
+            notes?: string | null;
+        };
+        AssistantOrderLinkRequest: {
+            token: string;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        AssistantOrderState: 0 | 1 | 2;
         AttentionDto: {
             items: components["schemas"]["AttentionItemDto"][];
         };
@@ -17837,6 +17909,7 @@ export interface components {
             delivery?: components["schemas"]["OrderDeliveryInput"];
             saveAddress: boolean;
             addressLabel?: string | null;
+            assistantOrderToken?: string | null;
         };
         CreateOrderCommand: {
             /** Format: uuid */
@@ -20075,6 +20148,7 @@ export interface components {
         OnlineMenuSettingsDto: {
             mode: components["schemas"]["OnlineMenuMode"];
             slug: string;
+            assistantOrders: boolean;
         };
         OnlinePaymentConnectionStartDto: {
             authorizationUrl: string;
@@ -20769,6 +20843,7 @@ export interface components {
             idempotencyKey?: string | null;
             saveAddress: boolean;
             addressLabel?: string | null;
+            assistantOrderToken?: string | null;
         };
         PlanDto: {
             /** Format: uuid */
@@ -21676,6 +21751,7 @@ export interface components {
             acceptsOrders: boolean;
             ordersPaused: boolean;
             paysOnline: boolean;
+            assistantOrders: boolean;
             theme: components["schemas"]["BusinessTheme"];
             address?: string | null;
             mapPoint?: components["schemas"]["MapPointDto"];
@@ -23105,6 +23181,7 @@ export interface components {
             orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
             insufficientStockPolicy: components["schemas"]["InsufficientStockPolicy"];
             onlineMenuMode: components["schemas"]["OnlineMenuMode"];
+            assistantOrders: boolean;
             theme: components["schemas"]["BusinessTheme"];
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
@@ -23417,6 +23494,7 @@ export interface components {
         };
         UpdateOnlineMenuRequest: {
             mode: components["schemas"]["OnlineMenuMode"];
+            assistantOrders?: boolean | null;
         };
         UpdateOpeningHoursRequest: {
             intervals?: components["schemas"]["OpeningIntervalDto"][] | null;

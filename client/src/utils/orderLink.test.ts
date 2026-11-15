@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orderLinkMessage, orderLinkOf } from './orderLink';
+import { assistantOrderMessage, assistantOrderTokenOf, orderLinkMessage, orderLinkOf } from './orderLink';
 
 const LATTE = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
 const GRANDE = '9b2d7f1e-1c3a-4f5b-8d6e-7a8b9c0d1e2f';
@@ -75,5 +75,30 @@ describe('orderLinkMessage (Fase 32A)', () => {
     expect(orderLinkMessage(outcome({ paused: true, notOnMenu: 1 }))).toBe(
       'Guardamos el pedido del enlace: envíalo cuando este negocio vuelva a recibir pedidos. No agregamos todo; 1 producto ya no está en el menú o le falta elegir una opción.',
     );
+  });
+});
+
+describe('assistantOrderTokenOf (Fase 32B)', () => {
+  const TOKEN = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE';
+
+  it('reads the token of the fragment of an assistant\'s link, with or without its #', () => {
+    expect(assistantOrderTokenOf(`#pedido=${TOKEN}`)).toBe(TOKEN);
+    expect(assistantOrderTokenOf(`pedido=${TOKEN}`)).toBe(TOKEN);
+    expect(assistantOrderTokenOf(`#otro=1&pedido=${TOKEN}`)).toBe(TOKEN);
+  });
+
+  it('takes nothing that is not one of its tokens', () => {
+    expect(assistantOrderTokenOf('')).toBeNull();
+    expect(assistantOrderTokenOf('#pedido=')).toBeNull();
+    expect(assistantOrderTokenOf(`#pedido=${TOKEN.slice(1)}`)).toBeNull();
+    expect(assistantOrderTokenOf(`#pedido=${TOKEN}A`)).toBeNull();
+    expect(assistantOrderTokenOf(`#pedido=${TOKEN.slice(1)}+`)).toBeNull();
+    expect(assistantOrderTokenOf(`#seguimiento=${TOKEN}`)).toBeNull();
+  });
+
+  it('says an order sent, expired or not found', () => {
+    expect(assistantOrderMessage('sent')).toBe('Este pedido ya se envió. Síguelo con el enlace que te dio la página al enviarlo.');
+    expect(assistantOrderMessage('expired')).toBe('Este pedido venció. Pídele al asistente que lo prepare otra vez, o arma tu pedido aquí.');
+    expect(assistantOrderMessage('missing')).toBe('No encontramos ese pedido. Revisa el enlace, o arma tu pedido aquí.');
   });
 });
