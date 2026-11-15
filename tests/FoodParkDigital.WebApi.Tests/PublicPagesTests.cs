@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.WebApi.Http;
@@ -572,10 +573,12 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         }
     }
 
-    /// <summary>Answers the store and the sitemap the test set, and records what the pages asked.</summary>
+    /// <summary>Answers the store, its menu and the sitemap the test set, and records what the pages asked.</summary>
     public sealed class FakeSender : ISender
     {
         public StorePreviewDto? Store { get; set; }
+        /// <summary>The menu of the store in Markdown reads it (Fase 32A, AgentPagesTests).</summary>
+        public PublicMenuDto? Menu { get; set; }
         public PublicSitemapDto Sitemap { get; set; } = new();
         public Exception? Failure { get; set; }
         public List<object> Requests { get; } = [];
@@ -583,6 +586,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         public void Reset()
         {
             Store = null;
+            Menu = null;
             Sitemap = new PublicSitemapDto();
             Failure = null;
             Requests.Clear();
@@ -596,6 +600,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
             object? response = request switch
             {
                 GetStorePreviewQuery => Store,
+                GetPublicMenuQuery => Menu,
                 GetPublicSitemapQuery => Sitemap,
                 _ => throw new NotSupportedException($"Unexpected request {request.GetType().Name}.")
             };

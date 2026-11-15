@@ -1659,4 +1659,168 @@ describe('PublicMenuPage', () => {
     expect(await screen.findByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Reseñas' })).not.toBeInTheDocument();
   });
+
+  describe('el enlace de un asistente de IA (Fase 32A)', () => {
+    const size = {
+      id: 'g1', name: 'Tamaño', minSelections: 1, maxSelections: 1,
+      options: [
+        { id: 'o1', name: 'Chico', priceDelta: 0, isAvailable: true },
+        { id: 'o2', name: 'Grande', priceDelta: 12, isAvailable: true },
+      ],
+    };
+    const cafe = (overrides: Partial<PublicMenu> = {}) => menu({
+      categories: [{
+        id: 'c1',
+        name: 'Bebidas',
+        products: [
+          { id: 'p1', name: 'Latte', price: 55, isTaxExempt: false, isFeatured: false, availableNow: true, optionGroups: [size] },
+          { id: 'p2', name: 'Concha', price: 18, isTaxExempt: false, isFeatured: false, availableNow: true, optionGroups: [] },
+        ],
+      }],
+      ...overrides,
+    });
+
+    it('fills the cart with the order of the link and opens it to review, and says what the menu could not take', async () => {
+      api.getMenu.mockResolvedValue(cafe());
+
+      // Two large lattes, a concha, and a latte without the size it needs.
+      renderPage('/m/cafe-luna?agregar=p1:2:o2&agregar=p2:1&agregar=p1:1');
+
+      const cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(within(cart).getByText('Latte')).toBeInTheDocument();
+      expect(within(cart).getByText('Grande')).toBeInTheDocument();
+      expect(within(cart).getByText('Concha')).toBeInTheDocument();
+      // Said in the order that opened, which covers the page, and tied to it.
+      const notice = within(cart).getByRole('status');
+      expect(notice).toHaveTextContent('Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.');
+      expect(cart).toHaveAccessibleDescription('Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.');
+      // Kept on this device, and gone from the address: reloading does not fill the cart again.
+      await waitFor(() => expect(readCart('cafe-luna')?.lines).toEqual([
+        { productId: 'p1', optionIds: ['o2'], quantity: 2 },
+        { productId: 'p2', optionIds: [], quantity: 1 },
+      ]));
+      await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent(/^\/m\/cafe-luna$/));
+    });
+
+    it('says it only in the order that opened: closed and opened again, the notice is gone', async () => {
+      api.getMenu.mockResolvedValue(cafe());
+      const said = 'Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.';
+
+      renderPage('/m/cafe-luna?agregar=p2:1&agregar=p9:1');
+
+      let cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(within(cart).getByRole('status')).toHaveTextContent(said);
+      // To add more products: opened again, the order says nothing of the link.
+      await userEvent.click(within(cart).getByRole('button', { name: 'Agregar más productos' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tu pedido' })).not.toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido · 1 · / }));
+      cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(within(cart).queryByText(said)).not.toBeInTheDocument();
+      expect(cart).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('forgets the notice of the link with the cart when the customer signs out', async () => {
+      account.getCarts.mockResolvedValue([]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(cafe());
+      const said = 'Agregamos lo que sigue disponible; 1 producto ya no está en el menú o le falta elegir una opción.';
+      const page = renderPage('/m/cafe-luna?agregar=p2:1&agregar=p9:1', signedInAs('Customer'));
+      expect(within(await screen.findByRole('dialog', { name: 'Tu pedido' })).getByRole('status')).toHaveTextContent(said);
+
+      window.localStorage.removeItem('tienditapp.carts');
+      page.withSession({ isAuthenticated: false, isLoading: false, user: null });
+
+      await waitFor(() => expect(screen.queryByText(said)).not.toBeInTheDocument());
+    });
+
+    it('takes the place of the cart this device and the account had, and the account keeps the order of the link', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p2', optionIds: [], quantity: 4 }] });
+      account.getCarts.mockResolvedValue([{
+        slug: 'cafe-luna', businessName: 'Café Luna', savedAt: new Date(Date.now() + 3_600_000).toISOString(),
+        lines: [{ productId: 'p2', optionIds: [], quantity: 6, notes: null }],
+      }]);
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(cafe());
+
+      // Even with the account's cart «newer» (a device clock behind): the link is the order the customer just made.
+      renderPage('/m/cafe-luna?agregar=p1:1:o1', signedInAs('Customer'));
+
+      const cart = await screen.findByRole('dialog', { name: 'Tu pedido' });
+      expect(within(cart).getByText('Latte')).toBeInTheDocument();
+      expect(within(cart).queryByText('Concha')).not.toBeInTheDocument();
+      expect(within(cart).getByRole('status')).toHaveTextContent('Cambiamos el pedido que tenías por el del enlace.');
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p1', optionIds: ['o1'], quantity: 1 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+    });
+
+    it('leaves the cart the customer had when the menu can take none of the link, and says so', async () => {
+      saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'p2', optionIds: [], quantity: 3 }] });
+      api.getMenu.mockResolvedValue(cafe());
+
+      // A product the menu does not have, and one that is not a product.
+      renderPage('/m/cafe-luna?agregar=p9:1&agregar=p1:dos');
+
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'No pudimos agregar los productos del enlace: 1 producto ya no está en el menú o le falta elegir una opción; '
+        + '1 parte del enlace no se entiende (un id o una cantidad que no es válida). Mira el menú.',
+      );
+      expect(screen.getByRole('button', { name: /^Ver pedido · 3 · / })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Tu pedido' })).not.toBeInTheDocument();
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p2', optionIds: [], quantity: 3 }]);
+      await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent(/^\/m\/cafe-luna$/));
+    });
+
+    it('keeps the order of the link for when the store takes orders again, closed, while it takes none now', async () => {
+      // Paused: it takes online orders, but not now (the API sends acceptsOrders false then).
+      api.getMenu.mockResolvedValue(cafe({ acceptsOrders: false, ordersPaused: true }));
+
+      renderPage('/m/cafe-luna?agregar=p2:2');
+
+      expect(await screen.findByText(
+        'Guardamos el pedido del enlace: envíalo cuando este negocio vuelva a recibir pedidos.',
+      )).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Tu pedido' })).not.toBeInTheDocument();
+      await waitFor(() => expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p2', optionIds: [], quantity: 2 }]));
+    });
+
+    it('sends the order of the link to the account also when its carts could not be read', async () => {
+      account.getCarts.mockRejectedValue(new Error('offline'));
+      account.getAddresses.mockResolvedValue([]);
+      account.saveCart.mockResolvedValue({} as never);
+      api.getMenu.mockResolvedValue(cafe());
+
+      renderPage('/m/cafe-luna?agregar=p2:1', signedInAs('Customer'));
+
+      await screen.findByRole('dialog', { name: 'Tu pedido' });
+      await waitFor(() => expect(account.saveCart).toHaveBeenCalledWith(
+        'cafe-luna', { lines: [{ productId: 'p2', optionIds: [], quantity: 1 }], reorderOf: null, skipped: null },
+      ), { timeout: 3000 });
+    });
+
+    it('does nothing at a table: the customer orders there', async () => {
+      api.getMenu.mockResolvedValue(cafe());
+
+      renderPage('/m/cafe-luna?mesa=Mesa%204&agregar=p2:1');
+
+      expect(await screen.findByRole('button', { name: /^Agregar Concha/ })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Tu pedido' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Ver pedido/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('says the store takes no orders online when it does not, without a cart', async () => {
+      api.getMenu.mockResolvedValue(cafe({ acceptsOrders: false }));
+
+      renderPage('/m/cafe-luna?agregar=p2:1');
+
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Este negocio no recibe pedidos en línea: el enlace no puede llenar tu pedido. Mira su menú.',
+      );
+      expect(screen.queryByRole('button', { name: /^Ver pedido/ })).not.toBeInTheDocument();
+      expect(readCart('cafe-luna')).toBeNull();
+    });
+  });
 });

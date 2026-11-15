@@ -78,6 +78,15 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      // What an AI assistant reads (Fase 32A, AgentPages.cs): the API writes them, not the app.
+      '/llms.txt': {
+        target: 'http://localhost:5203',
+        changeOrigin: true,
+      },
+      '^/m/[^/]+/menu\\.md$': {
+        target: 'http://localhost:5203',
+        changeOrigin: true,
+      },
     },
   },
 })

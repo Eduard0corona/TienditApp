@@ -188,7 +188,8 @@ public static class PublicPages
         }
 
         var html = await File.ReadAllTextAsync(indexPath, context.RequestAborted);
-        await context.Response.WriteAsync(WithHead(html, head.Render(BaseUrl(context))), context.RequestAborted);
+        var baseUrl = BaseUrl(context);
+        await context.Response.WriteAsync(WithBody(WithHead(html, head.Render(baseUrl)), head.RenderNoScript(baseUrl)), context.RequestAborted);
     }
 
     /// <summary>The page with its own title and tags; as it is when it has no &lt;/head&gt;.</summary>
@@ -197,6 +198,19 @@ public static class PublicPages
         var withoutTitle = TitleTag.Replace(html, string.Empty, 1);
         var close = withoutTitle.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         return close < 0 ? html : withoutTitle.Insert(close, tags);
+    }
+
+    /// <summary>
+    /// The page with <paramref name="content"/> first in its body (Fase 32A): what a reader without JavaScript finds, an
+    /// assistant that reads the page as text. As it is without a body or without content.
+    /// </summary>
+    public static string WithBody(string html, string content)
+    {
+        if (content.Length == 0)
+            return html;
+        var body = html.IndexOf("<body", StringComparison.OrdinalIgnoreCase);
+        var open = body < 0 ? -1 : html.IndexOf('>', body);
+        return open < 0 ? html : html.Insert(open + 1, content);
     }
 
     /// <summary>
@@ -355,10 +369,31 @@ public static class PublicPages
                 tags.Append(Meta("property", "og:image", image));
             tags.Append(Meta("name", "twitter:card", image is not null && LargeImage ? "summary_large_image" : "summary"));
             if (Store is not null && url is not null)
+            {
                 tags.Append("<script type=\"application/ld+json\">")
                     .Append(JsonSerializer.Serialize(StructuredDataOf(Store, url, description, baseUrl), StructuredData))
                     .Append("</script>\n");
+                // Its menu in Markdown for an AI assistant (Fase 32A, ADR 0096).
+                tags.Append("<link rel=\"alternate\" type=\"text/markdown\" title=\"Menú en texto\" href=\"")
+                    .Append(Html(baseUrl + AgentPages.MenuPath(Store.Slug))).Append("\">\n");
+            }
+
             return tags.ToString();
+        }
+
+        /// <summary>
+        /// What a store says to a reader without JavaScript (Fase 32A): its name, its line and where its menu reads as
+        /// text, with its products, prices and how to order. Nothing for any other page.
+        /// </summary>
+        public string RenderNoScript(string baseUrl)
+        {
+            if (Store is null || CanonicalPath is null)
+                return string.Empty;
+            var menu = baseUrl + AgentPages.MenuPath(Store.Slug);
+            var line = string.IsNullOrWhiteSpace(Store.Description) ? string.Empty : " " + Html(Sentence(Store.Description));
+            var what = Store.TakesOrders ? "con sus productos, precios y cómo pedir" : "con sus productos y precios";
+            return $"<noscript><p>{Html(Store.BusinessName)}.{line} Esta página se ve con JavaScript. Su menú en texto, {what}: "
+                + $"<a href=\"{Html(menu)}\">{Html(menu)}</a></p></noscript>";
         }
 
         private static string Meta(string attribute, string name, string content)
