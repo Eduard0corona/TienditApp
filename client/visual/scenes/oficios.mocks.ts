@@ -153,6 +153,7 @@ const plumberStoreWith = (extra: Record<string, unknown> = {}): ExtraRoutes => (
     defaultTaxRate: 16,
     acceptsOrders: false,
     ordersPaused: false,
+    assistantOrders: false,
     deliveryOnly: true,
     theme: TALAVERA,
     categories: [],

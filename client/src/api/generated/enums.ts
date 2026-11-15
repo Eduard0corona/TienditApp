@@ -4,6 +4,7 @@
 export { AppointmentChannel } from './enums/AppointmentChannel';
 export { AppointmentDepositStatus } from './enums/AppointmentDepositStatus';
 export { AppointmentStatus } from './enums/AppointmentStatus';
+export { AssistantOrderState } from './enums/AssistantOrderState';
 export { BranchServiceMode } from './enums/BranchServiceMode';
 export { BusinessCategory } from './enums/BusinessCategory';
 export { BusinessReviewsFilter } from './enums/BusinessReviewsFilter';

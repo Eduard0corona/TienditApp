@@ -57,6 +57,8 @@ export function buildData() {
     // As the API answers a business that has not chosen them: the defaults the screens assumed when they were missing.
     orderNotificationPolicy: 0,
     onlineMenuMode: 0,
+    // Fase 32B: on by default, as the API answers a business that has not turned it off.
+    assistantOrders: true,
     timeZone: 'America/Mexico_City',
     onboardingCompletedAt: '2026-02-12T17:00:00.000Z',
     createdAt: '2026-02-12T16:20:00.000Z',

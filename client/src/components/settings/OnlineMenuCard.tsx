@@ -43,6 +43,7 @@ export default function OnlineMenuCard() {
   if (!tenant) return null;
 
   const mode = (tenant.onlineMenuMode ?? OnlineMenuMode.Off) as OnlineMenuMode;
+  const assistantOrders = tenant.assistantOrders ?? true;
   const menuUrl = buildMenuUrl(tenant.slug);
   const shareText = `Mira nuestro menú y haz tu pedido aquí: ${menuUrl}`;
 
@@ -54,6 +55,20 @@ export default function OnlineMenuCard() {
       toast.success(next === OnlineMenuMode.Off ? 'Menú en línea apagado.' : 'Menú en línea actualizado.');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo cambiar el menú en línea.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Fase 32B (ADR 0096): whether AI assistants prepare its orders, with the mode as it is.
+  const changeAssistants = async (next: boolean) => {
+    setSaving(true);
+    try {
+      await apiRequest('put', '/api/v1/auth/my-tenant/online-menu', { body: { mode, assistantOrders: next } });
+      await refreshTenant();
+      toast.success(next ? 'Recibes pedidos desde asistentes de IA.' : 'Ya no recibes pedidos desde asistentes de IA.');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo cambiar los pedidos desde asistentes de IA.'));
     } finally {
       setSaving(false);
     }
@@ -90,6 +105,25 @@ export default function OnlineMenuCard() {
           ))}
         </div>
         <p className="small mb-3">{MODES.find((item) => item.value === mode)?.help}</p>
+        {mode === OnlineMenuMode.Orders && (
+          <div className="form-check form-switch mb-3">
+            <input
+              id="online-menu-assistants"
+              className="form-check-input"
+              type="checkbox"
+              role="switch"
+              checked={assistantOrders}
+              disabled={saving}
+              aria-describedby="online-menu-assistants-help"
+              onChange={(event) => void changeAssistants(event.target.checked)}
+            />
+            <label className="form-check-label" htmlFor="online-menu-assistants">Recibir pedidos desde asistentes de IA</label>
+            <div id="online-menu-assistants-help" className="form-text">
+              Claude, ChatGPT y otros asistentes preparan el pedido con tu menú; tu cliente lo revisa y lo envía desde tu página,
+              y te llega como cualquier pedido en línea.
+            </div>
+          </div>
+        )}
 
         {mode !== OnlineMenuMode.Off && (
           <div className="row g-3 align-items-center">

@@ -35,6 +35,8 @@ export interface TenantProfileDto {
   autoCloseCounterSales: boolean;
   /** The public menu (/m/{slug}): off, menu only, or menu that takes orders. */
   onlineMenuMode?: OnlineMenuMode;
+  /** Whether AI assistants prepare its orders through the MCP server (Fase 32B, ADR 0096); absent is on. */
+  assistantOrders?: boolean;
   /** The colors the owner picked for the team's app and the public menu (Nopal until then). */
   theme?: BusinessTheme;
   /** Which orders send the customer WhatsApp messages (paid templates). */

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Offcanvas } from 'react-bootstrap';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress, type MyCart } from '../../api/accountApi';
-import { getApiErrorMessage } from '../../api/errors';
+import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
 import { publicMenuApi, type PlacePublicOrder, type PublicMenuProduct, type PublicOrderReceipt } from '../../api/publicMenuApi';
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
 import FeaturedProducts from '../../components/store/FeaturedProducts';
@@ -55,7 +55,11 @@ import { bookingPath } from '../../utils/onlineBooking';
 import { featuredProducts, mapsUrl, optionGroupsOf, searchMenu, storePageTitle } from '../../utils/storeMenu';
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
-import { ORDER_LINK_PARAMETER, orderLinkMessage, orderLinkOf, type OrderLink } from '../../utils/orderLink';
+import {
+  assistantOrderMessage, assistantOrderTokenOf, forgetAssistantOrder, ORDER_LINK_PARAMETER, orderLinkMessage, orderLinkOf,
+  rememberAssistantOrder, rememberedAssistantOrder, type OrderLink,
+} from '../../utils/orderLink';
+import { AssistantOrderState } from '../../api/generated/enums';
 import { newUuid } from '../../utils/uuid';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 import { goToExternalPage } from '../../utils/externalNavigation';
@@ -134,6 +138,25 @@ export default function PublicMenuPage() {
     return link ? { slug, link } : null;
   });
   const [orderLinkRead, setOrderLinkRead] = useState(false);
+  // The link of an order an AI assistant prepared through the MCP server (Fase 32B, ADR 0096): /m/{slug}#pedido={token}.
+  // Its cart is read from the server as the page opens, used like the link's once the menu is read, and its token goes with
+  // the order, which confirms it.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [assistantToken] = useState(() => assistantOrderTokenOf(location.hash));
+  const assistantOrder = useQuery({
+    queryKey: ['assistant-order', slug, assistantToken],
+    queryFn: ({ signal }) => publicMenuApi.getAssistantOrder(slug, assistantToken!, signal),
+    enabled: assistantToken !== null,
+    retry: false,
+    staleTime: Infinity,
+  });
+  const assistantKnown = assistantToken === null || !assistantOrder.isPending;
+  // Not read now (offline, the server busy) is not «not found»: the link stays in the address for a reload to try again.
+  const assistantFailed = assistantOrder.isError && getApiErrorStatus(assistantOrder.error) !== 404;
+  const [assistantOrderToken, setAssistantOrderToken] = useState<string | null>(null);
+  // Where the customer told the assistant to deliver it: the order opens to that address.
+  const [assistantPostalCode, setAssistantPostalCode] = useState<string | null>(null);
   const atTable = tableLabel !== '';
   const menu = useQuery({
     queryKey: ['public-menu', slug, tableLabel],
@@ -228,6 +251,12 @@ export default function PublicMenuPage() {
       return next;
     }, { replace: true });
   }, [orderLinkRead, linkInAddress, setSearchParams]);
+  // And the assistant's, from the fragment.
+  const assistantInAddress = assistantToken !== null && location.hash !== '';
+  useEffect(() => {
+    if (!orderLinkRead || !assistantInAddress || assistantFailed) return;
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true });
+  }, [orderLinkRead, assistantInAddress, assistantFailed, navigate, location.pathname, location.search]);
   // The saved address chosen; null while another one is written; undefined until the cart first goes to an address.
   const [addressChoice, setAddressChoice] = useState<string | null | undefined>(undefined);
   const [keepAddress, setKeepAddress] = useState(true);
@@ -293,7 +322,7 @@ export default function PublicMenuPage() {
   // The cart this device kept for this store, or the account's when it changed later, with what its menu has now (and
   // «Pedir otra vez»), once per store. The account's may be empty (ordered or emptied on another device later): this
   // device's then goes too.
-  if (data && restoredFor !== slug && accountKnown) {
+  if (data && restoredFor !== slug && accountKnown && assistantKnown) {
     setRestoredFor(slug);
     const accountRead = !!customer && accountCarts.isSuccess;
     const kept = accountRead ? accountCarts.data?.find((cart) => cart.slug === slug) ?? null : null;
@@ -301,8 +330,18 @@ export default function PublicMenuPage() {
     // The cart of a link (Fase 32A) takes the place of this device's and the account's: it is the order the customer just
     // put together. Only where the store takes online orders, now or once it opens again (paused), never at a table.
     const products = data.categories.flatMap((item) => item.products);
-    const link = orderLink?.slug === slug && !orderLinkRead ? orderLink.link : null;
-    if (link) setOrderLinkRead(true);
+    // An assistant's order the server says is open is a link, already checked; one sent, expired or not found fills nothing.
+    const assistant = assistantToken !== null && !orderLinkRead ? assistantOrder.data ?? null : null;
+    const assistantLink: OrderLink | null = assistant?.state === AssistantOrderState.Open
+      ? {
+        lines: assistant.lines.map((line) => ({
+          productId: line.productId, optionIds: line.optionIds, quantity: line.quantity, ...(line.notes ? { notes: line.notes } : {}),
+        })),
+        invalid: 0,
+      }
+      : null;
+    const link = assistantLink ?? (orderLink?.slug === slug && !orderLinkRead ? orderLink.link : null);
+    if (link || assistantToken !== null) setOrderLinkRead(true);
     const takesOrders = data.acceptsOrders || data.ordersPaused;
     // A link none of whose products the menu can take now leaves the cart the customer had.
     const linkRestored = link && takesOrders && !atTable && link.lines.length > 0 ? restoreLines(link.lines, products) : null;
@@ -342,6 +381,28 @@ export default function PublicMenuPage() {
         setCartOpen(true);
       }
     }
+    if (fromLink && assistantLink && assistantToken) {
+      setAssistantOrderToken(assistantToken);
+      rememberAssistantOrder(slug, assistantToken);
+      const code = normalizePostalCode(assistant?.postalCode ?? '');
+      if (deliveryOffered && isPostalCode(code)) {
+        setAssistantPostalCode(code);
+        setToAddress(true);
+      }
+    }
+    if (assistantToken !== null && !orderLinkRead && !assistantLink && !atTable) {
+      setRestoredNotice(assistantOrderMessage(assistantFailed ? 'failed'
+        : assistant?.state === AssistantOrderState.Sent ? 'sent'
+          : assistant?.state === AssistantOrderState.Expired ? 'expired' : 'missing'));
+    }
+    // The cart of another link is another order; the server said this one is not open any more. A cart that comes back
+    // without its link (a reload, back from signing in) is still the assistant's order this tab opened.
+    if ((fromLink && !assistantLink) || (assistantToken !== null && !assistantLink && !assistantFailed)) {
+      forgetAssistantOrder(slug);
+    } else if (!fromLink && assistantToken === null && saved && restored && !atTable) {
+      const remembered = rememberedAssistantOrder(slug);
+      if (remembered) setAssistantOrderToken(remembered);
+    }
     if (link && !fromLink && !atTable) {
       setRestoredNotice(!takesOrders
         ? 'Este negocio no recibe pedidos en línea: el enlace no puede llenar tu pedido. Mira su menú.'
@@ -355,6 +416,13 @@ export default function PublicMenuPage() {
       : cartSignature(restoredCart.current?.kept ?? { lines: [] });
   }
 
+  // An emptied cart (sent, or emptied by the customer) is no longer the order an assistant prepared.
+  useEffect(() => {
+    if (restoredFor !== slug || lines.length > 0) return;
+    setAssistantOrderToken(null);
+    forgetAssistantOrder(slug);
+  }, [restoredFor, slug, lines.length]);
+
   // The first time the order goes to an address: the account's last one used, or the postal code given in Explorar (with a
   // customer account, the one the account keeps, Fase 31P; only waited for when no saved address will be taken).
   const remembered = useRememberedPostalCode(deliveryOffered);
@@ -364,14 +432,20 @@ export default function PublicMenuPage() {
       ? { ...current, postalCode: saved.postalCode, addressLine: saved.addressLine, references: saved.references ?? '' }
       : { ...current, postalCode: remembered.postalCode, addressLine: '', references: '' }));
   };
-  // Not over an address the customer started writing while the account's ones loaded.
-  const takeSavedAddress = !!savedAddresses[0] && address.addressLine.trim() === '';
-  if (delivering && addressChoice === undefined && (!customer || !addresses.isPending) && (takeSavedAddress || !remembered.pending)) {
+  // Not over an address the customer started writing while the account's ones loaded. With the postal code the customer
+  // gave an assistant, a saved address only there, or that postal code alone.
+  const savedToTake = assistantPostalCode
+    ? savedAddresses.find((saved) => normalizePostalCode(saved.postalCode) === assistantPostalCode)
+    : savedAddresses[0];
+  const takeSavedAddress = !!savedToTake && address.addressLine.trim() === '';
+  if (delivering && addressChoice === undefined && (!customer || !addresses.isPending)
+    && (takeSavedAddress || assistantPostalCode !== null || !remembered.pending)) {
     if (takeSavedAddress) {
-      chooseAddress(savedAddresses[0]);
+      chooseAddress(savedToTake);
     } else {
       setAddressChoice(null);
-      if (remembered.postalCode && !address.postalCode) setAddress((current) => ({ ...current, postalCode: remembered.postalCode }));
+      const code = assistantPostalCode ?? remembered.postalCode;
+      if (code && !address.postalCode) setAddress((current) => ({ ...current, postalCode: code }));
     }
   }
   const usingSavedAddress = savedAddresses.some((saved) => saved.id === addressChoice);
@@ -532,6 +606,7 @@ export default function PublicMenuPage() {
       expectedTotal: totals.total,
       saveAddress: keeping,
       addressLabel: keeping ? addressLabel.trim() || null : null,
+      ...(assistantOrderToken ? { assistantOrderToken } : {}),
     };
     if (payingOnline) {
       await payOnline(order);
@@ -583,6 +658,7 @@ export default function PublicMenuPage() {
         delivery: order.delivery,
         saveAddress: order.saveAddress,
         addressLabel: order.addressLabel,
+        assistantOrderToken: order.assistantOrderToken,
       });
       rememberOnlineCheckout(started.checkoutId, started.returnKey);
       const reuseUntil = Date.now() + ONLINE_TIME_TO_PAY_MS - REUSE_CHECKOUT_MARGIN_MS;

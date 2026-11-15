@@ -170,6 +170,8 @@ function publicMenu(data: DemoData, slug: string, table: string | null) {
       booksOnline: !!data.menuBooksOnline,
       // Paying online in Mercado Pago (Fase 24I), when a scene turns it on.
       paysOnline: !!data.menuPaysOnline,
+      // Fase 32B: orders from AI assistants, on while it takes orders, as the API answers it.
+      assistantOrders: acceptsOrders,
       // Its rating (Fase 24H), from the reviews a scene gives it.
       rating: ratingOf((data.reviews ?? []).filter((review: { slug: string }) => review.slug === slug)),
       // How soon it confirms its online orders (Fase 29T), when a scene says it; never at a table, as the API does.
