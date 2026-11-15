@@ -1181,6 +1181,20 @@ Las tres fases van en un PR con tres migraciones y una sola carpeta, [`database/
 - **Volver a la versión anterior:** funciona sin tocar la base. Lo guardado se queda; esa versión lo ignora.
 - **Dejar también la base como estaba:** el `rollback.sql` revierte la 31L, la 31K y la 31J, cada una en su transacción. Se detiene con el error 50061, sin cambiar nada, si ya se guardó una foto o un audio de WhatsApp (consulta 4 del `verify.sql`), y con el 50060 en la 31J, ya revertidas las otras dos, si una cuenta dejó un carrito o su código postal (consulta 3). Las consultas dicen cómo borrarlos, solo si se decide perderlos; los archivos se quedan en `whatsapp/{negocio}`.
 
+## Pedidos desde asistentes de IA: el servidor MCP (Fase 32B)
+
+La Fase 32B trae una migración, [`database/production/20261115151611_AddAssistantOrders`](../../database/production/20261115151611_AddAssistantOrders). Su `apply.sql` va antes del merge ([ADR 0096](../adr/0096-orders-from-ai-assistants.md)).
+
+- **La migración:** la columna `TenantSettings.AssistantOrders` (`bit`, no nula, 1 por omisión: todos los negocios la tienen encendida) y la tabla `AssistantOrders` con sus llaves al negocio y al pedido (sin cascada), sus índices y sus restricciones. No cambia datos.
+- **Candados:** la columna toma un candado de esquema breve sobre `TenantSettings`, y crear la tabla, sobre `Tenants` y `Orders`. Mientras lo espera y lo tiene, esperan las solicitudes que leen esas tablas (casi todas): mejor en una hora tranquila, con `sqlcmd ... -b -t 15 -i apply.sql`. Si un lote tarda más de 15 s, sqlcmd lo cancela, `XACT_ABORT` deshace su transacción sin cambiar nada y se vuelve a correr en otro momento.
+- **El servidor:** `/mcp`, anónimo, con su propio límite de 300 peticiones por minuto por dirección (`assistant`, por instancia, con la dirección del cliente que entrega App Service) y peticiones de hasta 128 KB. Sin sesión: cualquier instancia contesta cualquier petición, sin afinidad. No sale en `openapi.json`.
+- **El worker:** un servicio borra cada hora los pedidos por confirmar cuyo enlace venció hace más de 7 días; corre en cada instancia (las pasadas a la vez borran lo mismo; no hace daño).
+- **Mientras se publica:** la versión de `master` (la 32A) no conoce la columna ni la tabla; no tiene `/mcp`.
+- **Sin `apply.sql`:** a la versión nueva le falta una migración, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base. `/mcp` deja de existir y un enlace `#pedido=` abre la tienda sin llenar el carrito; lo guardado se queda.
+- **Dejar también la base como estaba:** el `rollback.sql` borra la tabla y la columna, y se detiene con el error 50064, sin cambiar nada, mientras un negocio haya apagado la opción, haya un pedido enviado desde un asistente o un enlace abierto (consulta 2 del `verify.sql`, que dice cómo quitarlos solo si se decide perderlos).
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
