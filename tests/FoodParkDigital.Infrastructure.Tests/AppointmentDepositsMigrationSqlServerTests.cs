@@ -43,7 +43,7 @@ public class AppointmentDepositsMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeAssistantOrders.CreateContext(database, seed.TenantId))
         {
             Assert.Null((await context.TenantSettings.AsNoTracking().SingleAsync()).BookingDepositPercent);
             Assert.All(await context.Appointments.AsNoTracking().ToListAsync(),
@@ -55,7 +55,7 @@ public class AppointmentDepositsMigrationSqlServerTests
         // What the domain writes is kept: the share, a request booked with 105, the checkout that booked it and its refund.
         Guid booked;
         Guid paid;
-        await using (var write = database.CreateContext(seed.TenantId))
+        await using (var write = BeforeAssistantOrders.CreateContext(database, seed.TenantId))
         {
             (await write.TenantSettings.SingleAsync()).SetBookingDepositPercent(30);
             var appointment = Request(seed.TenantId, deposit: 105m);
@@ -69,7 +69,7 @@ public class AppointmentDepositsMigrationSqlServerTests
             await write.SaveChangesAsync();
             (booked, paid) = (appointment.Id, checkout.Id);
         }
-        await using var check = database.CreateContext(seed.TenantId);
+        await using var check = BeforeAssistantOrders.CreateContext(database, seed.TenantId);
         Assert.Equal(30, (await check.TenantSettings.AsNoTracking().SingleAsync()).BookingDepositPercent);
         var stored = await check.Appointments.AsNoTracking().SingleAsync(a => a.Id == booked);
         Assert.Equal(((decimal?)105m, (AppointmentDepositStatus?)AppointmentDepositStatus.Returned), (stored.DepositAmount, stored.DepositStatus));
@@ -117,7 +117,7 @@ public class AppointmentDepositsMigrationSqlServerTests
         // The app as deployed before this version, unaware of the columns.
         var seed = await SeedAsync(BeforeAppointmentDeposits.CreateContext(database));
 
-        await using var context = database.CreateContext(seed.TenantId);
+        await using var context = BeforeAssistantOrders.CreateContext(database, seed.TenantId);
         var request = await context.Appointments.AsNoTracking().SingleAsync(a => a.Id == seed.RequestId);
         Assert.Equal((AppointmentStatus.Requested, (decimal?)null, (AppointmentDepositStatus?)null), (request.Status, request.DepositAmount, request.DepositStatus));
         Assert.Equal(2, await context.OnlineCheckouts.CountAsync(c => !c.ForAppointment && c.AppointmentId == null));
@@ -128,7 +128,7 @@ public class AppointmentDepositsMigrationSqlServerTests
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
-        var seed = await SeedAsync(database.CreateContext());
+        var seed = await SeedAsync(BeforeAssistantOrders.CreateContext(database));
 
         // Each of the three alone stops it: the business's share, an appointment booked with one, and a checkout to book one.
         foreach (var leaveOnlyOne in new[]
@@ -138,7 +138,7 @@ public class AppointmentDepositsMigrationSqlServerTests
             $"UPDATE [Appointments] SET [DepositAmount] = NULL, [DepositStatus] = NULL WHERE [Id] = '{seed.RequestId}'"
         })
         {
-            await using (var context = database.CreateContext(seed.TenantId))
+            await using (var context = BeforeAssistantOrders.CreateContext(database, seed.TenantId))
             {
                 await context.Database.ExecuteSqlRawAsync(leaveOnlyOne);
                 if (!await context.TenantSettings.AnyAsync(t => t.BookingDepositPercent != null)
@@ -150,10 +150,10 @@ public class AppointmentDepositsMigrationSqlServerTests
             }
             var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
             Assert.True(stopped is SqlException { Number: 50063 }, stopped?.Message ?? "it was not stopped");
-            await using var after = database.CreateContext(seed.TenantId);
+            await using var after = BeforeAssistantOrders.CreateContext(database, seed.TenantId);
             Assert.Equal(Migration, await LatestMigrationAsync(after));
         }
-        await using (var clear = database.CreateContext(seed.TenantId))
+        await using (var clear = BeforeAssistantOrders.CreateContext(database, seed.TenantId))
             await clear.Database.ExecuteSqlRawAsync("DELETE FROM [OnlineCheckouts] WHERE [ForAppointment] = 1");
 
         // Without any, it drops only what it added: the appointments and the checkouts of the menu and the quote stay.
@@ -185,7 +185,7 @@ public class AppointmentDepositsMigrationSqlServerTests
         // Rolling back again does nothing; forward again, nothing asks a deposit.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeAssistantOrders.CreateContext(database, seed.TenantId);
         Assert.All(await forward.Appointments.AsNoTracking().ToListAsync(), appointment => Assert.Null(appointment.DepositStatus));
     }
 

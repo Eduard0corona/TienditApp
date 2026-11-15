@@ -21,6 +21,7 @@ internal static class BeforeAppointmentDeposits
     /// <summary>For the context of an earlier version, which does not know them either.</summary>
     public static void Ignore(ModelBuilder modelBuilder)
     {
+        BeforeAssistantOrders.Ignore(modelBuilder);
         modelBuilder.Entity<TenantSettings>().Ignore(settings => settings.BookingDepositPercent);
         var appointment = modelBuilder.Entity<Appointment>();
         appointment.Ignore(a => a.DepositAmount);
