@@ -10,11 +10,12 @@
 --   - 20261116030110_AddAssistantConnections (Fase 32E, ADR 0097): cuatro tablas nuevas para que un
 --     asistente de IA use la cuenta de un cliente con su permiso (OAuth):
 --       [AssistantClients] (las aplicaciones de los asistentes que se registran: su identificador,
---         su nombre y sus direcciones de regreso en JSON),
+--         su nombre, sus direcciones de regreso en JSON y cuándo una cuenta lo conectó por última vez),
 --       [AssistantAuthorizationCodes] (los códigos que da el permiso: solo su hash, de un uso y de
 --         cinco minutos),
---       [AssistantConnections] (los asistentes que cada cuenta conectó, con cuándo se dio el permiso,
---         cuándo se usó y cuándo se desconectó) y
+--       [AssistantConnections] (los asistentes que cada cuenta conectó, con la dirección a la que
+--         regresó el permiso, el servidor de sus tokens, cuándo se dio, cuándo se usó y cuándo se
+--         desconectó) y
 --       [AssistantTokens] (los tokens de cada conexión: solo su hash).
 --     Con sus llaves a [AspNetUsers] (en cascada: se van con la cuenta), entre ellas, sus índices
 --     (los hash y el identificador únicos, una conexión activa por cuenta y asistente, y los de la
@@ -10659,7 +10660,8 @@ BEGIN
         [ClientId] varchar(43) NOT NULL,
         [Name] nvarchar(100) NULL,
         [RegisteredAt] datetimeoffset NOT NULL,
-        [RedirectUris] nvarchar(max) NOT NULL,
+        [LastConnectedAt] datetimeoffset NULL,
+        [RedirectUris] varchar(2577) NOT NULL,
         [CreatedAt] datetimeoffset NOT NULL,
         [CreatedBy] nvarchar(max) NULL,
         [UpdatedAt] datetimeoffset NULL,
@@ -10679,6 +10681,8 @@ BEGIN
         [UserId] uniqueidentifier NOT NULL,
         [ClientId] uniqueidentifier NOT NULL,
         [Scope] varchar(20) NOT NULL,
+        [RedirectUri] varchar(512) NOT NULL,
+        [Resource] nvarchar(2000) NOT NULL,
         [GrantedAt] datetimeoffset NOT NULL,
         [LastUsedAt] datetimeoffset NULL,
         [RevokedAt] datetimeoffset NULL,
@@ -10702,7 +10706,7 @@ BEGIN
         [ClientId] uniqueidentifier NOT NULL,
         [UserId] uniqueidentifier NOT NULL,
         [CodeHash] varchar(64) NOT NULL,
-        [RedirectUri] nvarchar(2000) NOT NULL,
+        [RedirectUri] varchar(512) NOT NULL,
         [CodeChallenge] varchar(43) NOT NULL,
         [Resource] nvarchar(2000) NOT NULL,
         [Scope] varchar(20) NOT NULL,
@@ -10787,6 +10791,14 @@ IF NOT EXISTS (
 )
 BEGIN
     CREATE UNIQUE INDEX [IX_AssistantClients_ClientId] ON [AssistantClients] ([ClientId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261116030110_AddAssistantConnections'
+)
+BEGIN
+    EXEC(N'CREATE INDEX [IX_AssistantClients_LastConnectedAt] ON [AssistantClients] ([LastConnectedAt]) WHERE [LastConnectedAt] IS NOT NULL');
 END;
 
 IF NOT EXISTS (

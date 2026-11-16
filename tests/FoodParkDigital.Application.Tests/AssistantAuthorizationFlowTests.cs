@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Assistants;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Assistants;
 using FoodParkDigital.Domain.Assistants.Entities;
@@ -20,6 +21,7 @@ public class AssistantAuthorizationFlowTests
 {
     private const string Callback = "https://claude.ai/api/mcp/auth_callback";
     private const string Resource = "https://app.test/mcp/cuenta";
+    private const string OtherResource = "https://otra.test/mcp/cuenta";
     // RFC 7636, appendix B.
     private const string Verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
     private const string Challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
@@ -52,6 +54,25 @@ public class AssistantAuthorizationFlowTests
         Assert.Equal(OAuthErrors.InvalidClientMetadata, (await Register(fixture).Handle(
             new RegisterAssistantClientCommand { RedirectUris = [Callback], GrantTypes = ["client_credentials"] }, CancellationToken.None)).Error);
         Assert.Equal(1, await fixture.Context.AssistantClients.CountAsync());
+    }
+
+    [Fact]
+    public async Task Register_ShouldStop_At500ClientsInAnHour_FromEveryAddress()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var now = SalesTestFixture.Now;
+        // Those of more than an hour ago do not count.
+        fixture.Context.AssistantClients.Add(AssistantClient.Register(AssistantAuthorization.NewSecret(), "Antes", [Callback], now.AddMinutes(-61)));
+        fixture.Context.AssistantClients.AddRange(Enumerable.Range(0, AssistantClient.MaxRegisteredPerHour - 1)
+            .Select(i => AssistantClient.Register(AssistantAuthorization.NewSecret(), $"Bot {i}", [Callback], now.AddMinutes(-59))));
+        await fixture.Context.SaveChangesAsync();
+
+        Assert.Null((await Register(fixture).Handle(new RegisterAssistantClientCommand { RedirectUris = [Callback] }, CancellationToken.None)).Error);
+        var full = await Register(fixture).Handle(new RegisterAssistantClientCommand { RedirectUris = [Callback] }, CancellationToken.None);
+
+        Assert.Equal((OAuthErrors.TemporarilyUnavailable, RegisterAssistantClientCommandHandler.FullMessage), (full.Error, full.ErrorDescription));
+        Assert.Null(full.ClientId);
+        Assert.Equal(AssistantClient.MaxRegisteredPerHour + 1, await fixture.Context.AssistantClients.CountAsync());
     }
 
     [Fact]
@@ -142,7 +163,7 @@ public class AssistantAuthorizationFlowTests
             .Select(i => AssistantClient.Register(AssistantAuthorization.NewSecret(), $"Lleno {i}", [Callback], SalesTestFixture.Now))
             .ToList();
         fixture.Context.AssistantClients.AddRange(full);
-        fixture.Context.AssistantConnections.AddRange(full.Select(c => AssistantConnection.Grant(account0, c.Id, "cuenta", SalesTestFixture.Now)));
+        fixture.Context.AssistantConnections.AddRange(full.Select(c => Connected(account0, c)));
         await fixture.Context.SaveChangesAsync();
         var late = await ExchangeAsync(fixture, CodeExchange(early, clientId));
         Assert.Equal((OAuthErrors.InvalidGrant, AssistantConnection.TooManyMessage), (late.Error, late.ErrorDescription));
@@ -153,7 +174,7 @@ public class AssistantAuthorizationFlowTests
             .Select(i => AssistantClient.Register(AssistantAuthorization.NewSecret(), $"Otro {i}", [Callback], SalesTestFixture.Now))
             .ToList();
         fixture.Context.AssistantClients.AddRange(others);
-        fixture.Context.AssistantConnections.AddRange(others.Select(c => AssistantConnection.Grant(account, c.Id, "cuenta", SalesTestFixture.Now)));
+        fixture.Context.AssistantConnections.AddRange(others.Select(c => Connected(account, c)));
         await fixture.Context.SaveChangesAsync();
         Assert.Equal(AssistantConnection.TooManyMessage,
             (await Approve(fixture).Handle(Approval(clientId, allow: true), CancellationToken.None)).Error);
@@ -315,6 +336,86 @@ public class AssistantAuthorizationFlowTests
     }
 
     [Fact]
+    public async Task Tokens_ShouldBeFor_TheServerTheCodeWasGivenAt_Only()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var clientId = await RegisterAsync(fixture, Callback);
+        await CustomerAsync(fixture);
+
+        // A code given at one address is not exchanged at another, even without saying a resource.
+        var elsewhere = await ExchangeAsync(fixture, CodeExchange(await AllowAsync(fixture, clientId), clientId) with { Resource = null }, OtherResource);
+        Assert.Equal((OAuthErrors.InvalidTarget, $"El código es para {Resource}."), (elsewhere.Error, elsewhere.ErrorDescription));
+
+        var tokens = await ExchangeAsync(fixture, CodeExchange(await AllowAsync(fixture, clientId), clientId));
+        var connection = await fixture.Context.AssistantConnections.SingleAsync(c => c.RevokedAt == null);
+        Assert.Equal(Resource, connection.Resource);
+
+        // Its tokens neither open nor renew at another address.
+        Assert.Null(await Authenticate(fixture, tokens.AccessToken, OtherResource));
+        Assert.NotNull(await Authenticate(fixture, tokens.AccessToken));
+        var renewed = await ExchangeAsync(fixture, Renewal(tokens.RefreshToken!, clientId) with { Resource = null }, OtherResource);
+        Assert.Equal(OAuthErrors.InvalidGrant, renewed.Error);
+        Assert.Null((await ExchangeAsync(fixture, Renewal(tokens.RefreshToken!, clientId))).Error);
+    }
+
+    [Fact]
+    public async Task ExchangeCode_ShouldWaitFor_TheCode_AndThenForTheAccount()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var clientId = await RegisterAsync(fixture, Callback);
+        var account = await CustomerAsync(fixture);
+        var code = await AllowAsync(fixture, clientId);
+        var codeId = await fixture.Context.AssistantAuthorizationCodes.Select(c => c.Id).SingleAsync();
+        var locks = new RecordingLock();
+
+        var result = await new ExchangeAssistantTokenCommandHandler(
+                fixture.Context, locks, new Server(), fixture.Clock, NullLogger<ExchangeAssistantTokenCommandHandler>.Instance)
+            .Handle(CodeExchange(code, clientId), CancellationToken.None);
+
+        Assert.Null(result.Value!.Error);
+        // Two codes of the same account at once would both count its connections and replace the one with this assistant.
+        Assert.Equal([codeId, account], locks.Keys);
+    }
+
+    [Fact]
+    public async Task EndingEverySession_ShouldDisconnect_TheAccountsAssistants_AndDropItsCodesNotExchanged()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var clientId = await RegisterAsync(fixture, Callback);
+        var other = await CustomerAsync(fixture, email: "otra@demo.com");
+        var theirs = await ExchangeAsync(fixture, CodeExchange(await AllowAsync(fixture, clientId), clientId));
+        var account = await CustomerAsync(fixture);
+        var tokens = await ExchangeAsync(fixture, CodeExchange(await AllowAsync(fixture, clientId), clientId));
+        var pending = await AllowAsync(fixture, clientId);
+
+        // A password changed or reset ends them all (Change, Reset and the reset by SMS call this).
+        await UserSessions.EndAllAsync(fixture.Context, account, RefreshTokenRevocationReason.PasswordChanged, fixture.Clock.UtcNow, CancellationToken.None);
+
+        Assert.Null(await Authenticate(fixture, tokens.AccessToken));
+        Assert.Equal(OAuthErrors.InvalidGrant, (await ExchangeAsync(fixture, Renewal(tokens.RefreshToken!, clientId))).Error);
+        Assert.Equal(OAuthErrors.InvalidGrant, (await ExchangeAsync(fixture, CodeExchange(pending, clientId))).Error);
+        Assert.False(await fixture.Context.AssistantAuthorizationCodes.AnyAsync(c => c.UserId == account && c.RedeemedAt == null));
+        // Another account keeps its own.
+        Assert.Equal(other, (await Authenticate(fixture, theirs.AccessToken))!.UserId);
+    }
+
+    [Fact]
+    public async Task MiCuenta_ShouldShow_TheSiteTheCodeWentTo_NotTheClientsFirstAddress()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var clientId = await RegisterAsync(fixture, Callback, "https://evil.example/cb");
+        await CustomerAsync(fixture);
+
+        await ExchangeAsync(fixture, CodeExchange(await AllowAsync(fixture, clientId, "https://evil.example/cb"), clientId, "https://evil.example/cb"));
+
+        var listed = await new GetMyAssistantConnectionsQueryHandler(fixture.Context, fixture.CurrentUser)
+            .Handle(new GetMyAssistantConnectionsQuery(), CancellationToken.None);
+        Assert.Equal(("Claude", "evil.example"), (Assert.Single(listed).Name, listed[0].Site));
+        // The client stays registered while it is used.
+        Assert.Equal(SalesTestFixture.Now, (await fixture.Context.AssistantClients.SingleAsync()).LastConnectedAt);
+    }
+
+    [Fact]
     public async Task MiCuenta_ShouldListTheAccountsAssistants_AndDisconnectOnlyItsOwn()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -430,26 +531,44 @@ public class AssistantAuthorizationFlowTests
         Resource = Resource
     };
 
-    private static async Task<AssistantTokensDto> ExchangeAsync(SalesTestFixture fixture, ExchangeAssistantTokenCommand request)
+    /// <summary>The token endpoint of the server at <paramref name="resource"/> (this one, unless said).</summary>
+    private static async Task<AssistantTokensDto> ExchangeAsync(
+        SalesTestFixture fixture, ExchangeAssistantTokenCommand request, string resource = Resource)
     {
         var result = await new ExchangeAssistantTokenCommandHandler(
-                fixture.Context, new NoLock(), new Server(), fixture.Clock, NullLogger<ExchangeAssistantTokenCommandHandler>.Instance)
+                fixture.Context, new NoLock(), new Server(resource), fixture.Clock, NullLogger<ExchangeAssistantTokenCommandHandler>.Instance)
             .Handle(request, CancellationToken.None);
         Assert.True(result.IsSuccess, result.Error);
         return result.Value!;
     }
 
-    private static Task<AssistantIdentityDto?> Authenticate(SalesTestFixture fixture, string? accessToken)
-        => new AuthenticateAssistantCommandHandler(fixture.Context, fixture.Clock)
+    private static Task<AssistantIdentityDto?> Authenticate(SalesTestFixture fixture, string? accessToken, string resource = Resource)
+        => new AuthenticateAssistantCommandHandler(fixture.Context, new Server(resource), fixture.Clock)
             .Handle(new AuthenticateAssistantCommand(accessToken), CancellationToken.None);
 
-    private sealed class Server : IAssistantAccountServer
+    /// <summary>An account connected to <paramref name="client"/>, as a code exchanged at this server would leave it.</summary>
+    private static AssistantConnection Connected(Guid account, AssistantClient client) => AssistantConnection.Grant(
+        AssistantAuthorizationCode.Issue(client, account, AssistantAuthorization.NewSecret(), Callback, Challenge, Resource, "cuenta", SalesTestFixture.Now),
+        SalesTestFixture.Now);
+
+    private sealed class Server(string resource = AssistantAuthorizationFlowTests.Resource) : IAssistantAccountServer
     {
-        public string Resource => AssistantAuthorizationFlowTests.Resource;
+        public string Resource => resource;
     }
 
     private sealed class NoLock : IAssistantAuthorizationLock
     {
         public Task AcquireAsync(Guid key, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingLock : IAssistantAuthorizationLock
+    {
+        public List<Guid> Keys { get; } = [];
+
+        public Task AcquireAsync(Guid key, CancellationToken cancellationToken)
+        {
+            Keys.Add(key);
+            return Task.CompletedTask;
+        }
     }
 }

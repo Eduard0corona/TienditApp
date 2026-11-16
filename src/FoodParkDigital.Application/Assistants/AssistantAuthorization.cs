@@ -18,6 +18,9 @@ public static class OAuthErrors
     public const string AccessDenied = "access_denied";
     public const string InvalidRedirectUri = "invalid_redirect_uri";
     public const string InvalidClientMetadata = "invalid_client_metadata";
+
+    /// <summary>The server takes no more for now (RFC 6749, 4.1.2.1): the registration of clients answers it when full.</summary>
+    public const string TemporarilyUnavailable = "temporarily_unavailable";
 }
 
 /// <summary>

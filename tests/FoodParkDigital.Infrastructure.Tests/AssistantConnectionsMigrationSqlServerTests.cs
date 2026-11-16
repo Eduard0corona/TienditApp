@@ -61,12 +61,14 @@ public class AssistantConnectionsMigrationSqlServerTests
         var storedClient = await check.AssistantClients.AsNoTracking().SingleAsync();
         Assert.Equal("Claude", storedClient.Name);
         Assert.Equal([Callback, "http://127.0.0.1:33418/callback"], storedClient.RedirectUris);
+        Assert.Equal(client.LastConnectedAt, storedClient.LastConnectedAt);
         var storedCode = await check.AssistantAuthorizationCodes.AsNoTracking().SingleAsync();
         Assert.Equal((connection.Id, Challenge, Resource, "cuenta"), (storedCode.ConnectionId!.Value, storedCode.CodeChallenge, storedCode.Resource, storedCode.Scope));
         Assert.Equal(AssistantSecrets.HashOf(new string('a', 43)), storedCode.CodeHash);
         Assert.Equal(2, await check.AssistantTokens.CountAsync(t => t.ConnectionId == connection.Id));
         var storedConnection = await check.AssistantConnections.AsNoTracking().SingleAsync();
         Assert.Equal((account, client.Id, true), (storedConnection.UserId, storedConnection.ClientId, storedConnection.IsActive));
+        Assert.Equal((Callback, Resource), (storedConnection.RedirectUri, storedConnection.Resource));
 
         foreach (var (sql, constraint) in new (string, string)[]
         {
@@ -81,8 +83,8 @@ public class AssistantConnectionsMigrationSqlServerTests
             ($"UPDATE [AssistantTokens] SET [TokenHash] = (SELECT [TokenHash] FROM [AssistantTokens] WHERE [Id] = '{refresh.Id}') WHERE [Id] = '{access.Id}'", "IX_AssistantTokens_TokenHash"),
             // A second working connection with the same assistant; the client of a connection deleted.
             ($"""
-              INSERT INTO [AssistantConnections] ([Id], [UserId], [ClientId], [Scope], [GrantedAt], [CreatedAt])
-              VALUES (NEWID(), '{account}', '{client.Id}', 'cuenta', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET())
+              INSERT INTO [AssistantConnections] ([Id], [UserId], [ClientId], [Scope], [RedirectUri], [Resource], [GrantedAt], [CreatedAt])
+              VALUES (NEWID(), '{account}', '{client.Id}', 'cuenta', '{Callback}', '{Resource}', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET())
               """, "IX_AssistantConnections_UserId_ClientId"),
             ($"DELETE FROM [AssistantClients] WHERE [Id] = '{client.Id}'", "FK_AssistantConnections_AssistantClients_ClientId"),
         })
@@ -94,7 +96,8 @@ public class AssistantConnectionsMigrationSqlServerTests
 
         // Once disconnected, connecting the same assistant again is a new connection.
         await check.Database.ExecuteSqlRawAsync($"UPDATE [AssistantConnections] SET [RevokedAt] = SYSDATETIMEOFFSET() WHERE [Id] = '{connection.Id}'");
-        check.AssistantConnections.Add(AssistantConnection.Grant(account, client.Id, "cuenta", Now));
+        check.AssistantConnections.Add(AssistantConnection.Grant(
+            AssistantAuthorizationCode.Issue(client, account, new string('z', 43), Callback, Challenge, Resource, "cuenta", Now), Now));
         await check.SaveChangesAsync();
 
         // The account takes all of it when it is deleted; the client stays, for the cleanup.
@@ -163,7 +166,7 @@ public class AssistantConnectionsMigrationSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task Cleanup_ShouldDelete_WhatExpiredAWeekAgo_TheDisconnected30DaysAgo_AndTheClientsNeverConnected()
+    public async Task Cleanup_ShouldDelete_WhatExpiredAWeekAgo_TheDisconnected30DaysAgo_AndTheClientsNotConnectedInADayOrAYear()
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
@@ -174,14 +177,17 @@ public class AssistantConnectionsMigrationSqlServerTests
         old.Connection.Revoke(Now.AddDays(-31));
         // Connected a day ago and working; its access token expired 23 hours ago, kept for the week.
         var working = Connected(account, 'b', Now.AddDays(-1));
-        // Registered eight days ago and never connected; registered a day ago, still in its week.
-        var abandoned = AssistantClient.Register(new string('c', 43), "Bot", [Callback], Now.AddDays(-8));
-        var fresh = AssistantClient.Register(new string('d', 43), "Nuevo", [Callback], Now.AddDays(-1));
+        // Registered two days ago and never connected; registered twelve hours ago, still in its day.
+        var abandoned = AssistantClient.Register(new string('c', 43), "Bot", [Callback], Now.AddDays(-2));
+        var fresh = AssistantClient.Register(new string('d', 43), "Nuevo", [Callback], Now.AddHours(-12));
+        // Last connected 400 days ago, its connections long gone: an assistant that held its client_id that long registers again.
+        var forgotten = AssistantClient.Register(new string('e', 43), "Viejo", [Callback], Now.AddDays(-401));
+        forgotten.RecordConnection(Now.AddDays(-400));
         await using (var context = database.CreateContext())
         {
             context.AddRange(old.Client, old.Code, old.Connection, old.Access, old.Refresh);
             context.AddRange(working.Client, working.Code, working.Connection, working.Access, working.Refresh);
-            context.AddRange(abandoned, fresh);
+            context.AddRange(abandoned, fresh, forgotten);
             await context.SaveChangesAsync();
         }
 
@@ -191,11 +197,12 @@ public class AssistantConnectionsMigrationSqlServerTests
         var cleanup = new AssistantAuthorizationCleanupService(
             services.GetRequiredService<IServiceScopeFactory>(), new Clock(Now), NullLogger<AssistantAuthorizationCleanupService>.Instance);
 
-        // The old connection's two tokens and its code, the connection, and then its client and the abandoned one.
+        // The old connection's two tokens and its code, the connection, and the abandoned and forgotten clients. The old
+        // connection's client stays: connected 40 days ago, the assistant may still hold its client_id.
         Assert.Equal(6, await cleanup.DeleteBatchAsync(CancellationToken.None));
         Assert.Equal(0, await cleanup.DeleteBatchAsync(CancellationToken.None));
         await using var check = database.CreateContext();
-        Assert.Equal(new[] { working.Client.Id, fresh.Id }.Order(), (await check.AssistantClients.Select(c => c.Id).ToListAsync()).Order());
+        Assert.Equal(new[] { old.Client.Id, working.Client.Id, fresh.Id }.Order(), (await check.AssistantClients.Select(c => c.Id).ToListAsync()).Order());
         Assert.Equal(working.Connection.Id, (await check.AssistantConnections.SingleAsync()).Id);
         Assert.Equal(2, await check.AssistantTokens.CountAsync());
         Assert.Equal(1, await check.AssistantAuthorizationCodes.CountAsync());
@@ -209,8 +216,9 @@ public class AssistantConnectionsMigrationSqlServerTests
     {
         var client = AssistantClient.Register(new string(secret, 43), "Claude", [Callback, "http://127.0.0.1:33418/callback"], at);
         var code = AssistantAuthorizationCode.Issue(client, account, new string(secret, 43), Callback, Challenge, Resource, "cuenta", at);
-        var connection = AssistantConnection.Grant(account, client.Id, "cuenta", at);
+        var connection = AssistantConnection.Grant(code, at.AddMinutes(1));
         code.Redeem(connection.Id, at.AddMinutes(1));
+        client.RecordConnection(at.AddMinutes(1));
         var access = AssistantToken.Issue(connection.Id, AssistantTokenKind.Access, new string(secret, 42) + "A", at);
         var refresh = AssistantToken.Issue(connection.Id, AssistantTokenKind.Refresh, new string(secret, 42) + "R", at);
         return new Granted(client, code, connection, access, refresh);

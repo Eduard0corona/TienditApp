@@ -9,8 +9,9 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs.AssistantAuthorization;
 
 /// <summary>
 /// Once a day, deletes what the assistants' authorization (Fase 32E, ADR 0097) no longer needs, in batches: the tokens and
-/// codes expired a week ago, the connections disconnected 30 days ago (with their tokens), and the clients registered a
-/// week ago that no account connected. A bot registering clients leaves nothing behind after that week.
+/// codes expired a week ago, the connections disconnected 30 days ago (with their tokens), the clients registered a day ago
+/// that no account connected, and those whose last connection was a year ago and have none left. A bot registering clients
+/// leaves nothing behind after a day.
 /// </summary>
 public sealed class AssistantAuthorizationCleanupService : BackgroundService
 {
@@ -99,9 +100,12 @@ public sealed class AssistantAuthorizationCleanupService : BackgroundService
         deleted += connections.Count;
         await context.SaveChangesAsync(cancellationToken);
 
+        // Those no account connected in a day, and those connected long ago with no connection left: an assistant that still
+        // holds the client_id of one it connected is not sent to register again for a year.
         var unconnected = now - AssistantClient.TimeToConnect;
+        var forgotten = now - AssistantClient.KeptAfterLastConnection;
         var clients = await context.AssistantClients
-            .Where(client => client.RegisteredAt < unconnected
+            .Where(client => ((client.LastConnectedAt == null && client.RegisteredAt < unconnected) || client.LastConnectedAt < forgotten)
                 && !context.AssistantConnections.Any(connection => connection.ClientId == client.Id))
             .OrderBy(client => client.RegisteredAt)
             .Take(BatchSize)

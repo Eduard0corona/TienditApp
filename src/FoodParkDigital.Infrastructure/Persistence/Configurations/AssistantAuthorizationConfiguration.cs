@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using FoodParkDigital.Domain.Assistants;
 using FoodParkDigital.Domain.Assistants.Entities;
@@ -11,13 +12,16 @@ namespace FoodParkDigital.Infrastructure.Persistence.Configurations;
 
 /// <summary>
 /// The OAuth clients AI assistants register (Fase 32E, ADR 0097). Not of a business: anyone registers one, and it reads
-/// nothing until an account allows it. Its addresses are one JSON column, read and written whole.
+/// nothing until an account allows it. Its addresses are one JSON column, read and written whole: printable ASCII without
+/// quotes or backslashes, written as they are, so the column has the size of the most a client may register.
 /// </summary>
 public class AssistantClientConfiguration : IEntityTypeConfiguration<AssistantClient>
 {
+    private static readonly JsonSerializerOptions UrisJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
     private static readonly ValueConverter<List<string>, string> UrisConverter = new(
-        uris => JsonSerializer.Serialize(uris, (JsonSerializerOptions?)null),
-        json => JsonSerializer.Deserialize<List<string>>(json, (JsonSerializerOptions?)null) ?? new List<string>());
+        uris => JsonSerializer.Serialize(uris, UrisJson),
+        json => JsonSerializer.Deserialize<List<string>>(json, UrisJson) ?? new List<string>());
 
     private static readonly ValueComparer<List<string>> UrisComparer = new(
         (a, b) => a!.SequenceEqual(b!),
@@ -35,14 +39,17 @@ public class AssistantClientConfiguration : IEntityTypeConfiguration<AssistantCl
         builder.Property<List<string>>("_redirectUris")
             .HasColumnName("RedirectUris")
             .HasConversion(UrisConverter, UrisComparer)
-            .IsUnicode()
+            .HasMaxLength(AssistantClient.MaxRedirectUrisStoredLength)
+            .IsUnicode(false)
             .IsRequired();
         builder.Ignore(x => x.RedirectUris);
         builder.Property(x => x.RegisteredAt).IsRequired();
 
         builder.HasIndex(x => x.ClientId).IsUnique();
-        // The cleanup of clients no account connected goes by when they were registered.
+        // The registrations of the last hour, and the cleanup of clients no account connected, go by when they were registered;
+        // the cleanup of those connected long ago, by their last connection.
         builder.HasIndex(x => x.RegisteredAt);
+        builder.HasIndex(x => x.LastConnectedAt).HasFilter("[LastConnectedAt] IS NOT NULL");
     }
 }
 
@@ -65,7 +72,7 @@ public class AssistantAuthorizationCodeConfiguration : IEntityTypeConfiguration<
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.CodeHash).HasMaxLength(64).IsUnicode(false).IsRequired();
-        builder.Property(x => x.RedirectUri).HasMaxLength(AssistantClient.MaxRedirectUriLength).IsRequired();
+        builder.Property(x => x.RedirectUri).HasMaxLength(AssistantClient.MaxRedirectUriLength).IsUnicode(false).IsRequired();
         builder.Property(x => x.CodeChallenge).HasMaxLength(AssistantSecrets.Length).IsUnicode(false).IsRequired();
         builder.Property(x => x.Resource).HasMaxLength(AssistantAuthorizationCode.MaxResourceLength).IsRequired();
         builder.Property(x => x.Scope).HasMaxLength(20).IsUnicode(false).IsRequired();
@@ -109,6 +116,8 @@ public class AssistantConnectionConfiguration : IEntityTypeConfiguration<Assista
         builder.Property(x => x.UserId).IsRequired();
         builder.Property(x => x.ClientId).IsRequired();
         builder.Property(x => x.Scope).HasMaxLength(20).IsUnicode(false).IsRequired();
+        builder.Property(x => x.RedirectUri).HasMaxLength(AssistantClient.MaxRedirectUriLength).IsUnicode(false).IsRequired();
+        builder.Property(x => x.Resource).HasMaxLength(AssistantAuthorizationCode.MaxResourceLength).IsRequired();
         builder.Property(x => x.GrantedAt).IsRequired();
 
         builder.HasOne<ApplicationUser>()

@@ -592,6 +592,8 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         /// <summary>Who an assistant's access token is (Fase 32E): none by default, so /mcp/cuenta answers 401.</summary>
         public AssistantIdentityDto? AssistantIdentity { get; set; }
         public List<AccountAddressDto> Addresses { get; set; } = [];
+        /// <summary>What registering an assistant's client answers (Fase 32E).</summary>
+        public RegisteredAssistantClientDto? RegisteredClient { get; set; }
         public Exception? Failure { get; set; }
         public List<object> Requests { get; } = [];
 
@@ -606,6 +608,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
             AssistantOrder = null;
             AssistantIdentity = null;
             Addresses = [];
+            RegisteredClient = null;
             Failure = null;
             Requests.Clear();
         }
@@ -626,6 +629,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
                 GetAssistantOrderQuery => AssistantOrder,
                 AuthenticateAssistantCommand => AssistantIdentity,
                 GetMyAddressesQuery => Addresses,
+                RegisterAssistantClientCommand => RegisteredClient,
                 _ => throw new NotSupportedException($"Unexpected request {request.GetType().Name}.")
             };
             return Task.FromResult((TResponse)response!);

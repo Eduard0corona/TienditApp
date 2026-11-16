@@ -13,17 +13,31 @@ namespace FoodParkDigital.Domain.Assistants.Entities;
 public class AssistantClient : AuditableEntity, IAggregateRoot
 {
     public const int MaxNameLength = 100;
-    public const int MaxRedirectUris = 10;
-    public const int MaxRedirectUriLength = 2000;
+    public const int MaxRedirectUris = 5;
+    public const int MaxRedirectUriLength = 512;
 
-    /// <summary>How long a client no account connected stays registered.</summary>
-    public static readonly TimeSpan TimeToConnect = TimeSpan.FromDays(7);
+    /// <summary>
+    /// The longest its addresses take stored together (a JSON list): each one with its quotes and a comma, and the brackets.
+    /// </summary>
+    public const int MaxRedirectUrisStoredLength = MaxRedirectUris * (MaxRedirectUriLength + 3) + 2;
+
+    /// <summary>How long a client no account connected stays registered: an assistant registers one when it connects.</summary>
+    public static readonly TimeSpan TimeToConnect = TimeSpan.FromDays(1);
+
+    /// <summary>How long one that was connected stays registered after its last connection, once it has none.</summary>
+    public static readonly TimeSpan KeptAfterLastConnection = TimeSpan.FromDays(365);
+
+    /// <summary>
+    /// The clients registered in an hour, from every address: anyone registers one, and each is kept a day, so this is
+    /// what bounds the table. Far more than the assistants that connect in an hour.
+    /// </summary>
+    public const int MaxRegisteredPerHour = 500;
 
     public const string ClientIdRequiredMessage = "El cliente necesita su identificador.";
     public const string RedirectUrisRequiredMessage = "Registra al menos una dirección de regreso (redirect_uri).";
-    public const string TooManyRedirectUrisMessage = "Registra hasta 10 direcciones de regreso.";
+    public const string TooManyRedirectUrisMessage = "Registra hasta 5 direcciones de regreso.";
     public const string InvalidRedirectUriMessage =
-        "Cada dirección de regreso es https, o http a localhost, sin fragmento ni usuario.";
+        "Cada dirección de regreso es https, o http a localhost, sin fragmento ni usuario, de hasta 512 caracteres.";
 
     private List<string> _redirectUris = [];
 
@@ -39,6 +53,9 @@ public class AssistantClient : AuditableEntity, IAggregateRoot
     public IReadOnlyList<string> RedirectUris => _redirectUris;
 
     public DateTimeOffset RegisteredAt { get; private set; }
+
+    /// <summary>When an account last connected it (a code exchanged); null while none has.</summary>
+    public DateTimeOffset? LastConnectedAt { get; private set; }
 
     public static AssistantClient Register(string clientId, string? name, IEnumerable<string>? redirectUris, DateTimeOffset now)
     {
@@ -61,6 +78,13 @@ public class AssistantClient : AuditableEntity, IAggregateRoot
         };
     }
 
+    /// <summary>An account connected it now: it stays registered while it is used.</summary>
+    public void RecordConnection(DateTimeOffset now)
+    {
+        if (LastConnectedAt is null || now > LastConnectedAt)
+            LastConnectedAt = now;
+    }
+
     /// <summary>
     /// A name to show: trimmed, with spaces for its control characters and line breaks, up to <see cref="MaxNameLength"/>.
     /// </summary>
@@ -80,12 +104,13 @@ public class AssistantClient : AuditableEntity, IAggregateRoot
     /// <summary>
     /// Whether <paramref name="uri"/> may receive codes: https, or http to this device (localhost, 127.0.0.1 or [::1], the
     /// address of a desktop app); absolute, without a fragment and without a user before the host, so the site the
-    /// permission page shows is the one it goes to.
+    /// permission page shows is the one it goes to. Written in printable ASCII (an international host goes in punycode),
+    /// without quotes or backslashes, so it is stored as written, in <see cref="MaxRedirectUrisStoredLength"/>.
     /// </summary>
     public static bool IsRedirectUri(string? uri)
     {
         if (string.IsNullOrEmpty(uri) || uri.Length > MaxRedirectUriLength || uri.Contains('#')
-            || uri.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
+            || uri.Any(c => c is <= ' ' or > '~' or '"' or '\\'))
             return false;
         if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed) || parsed.UserInfo.Length > 0 || parsed.Host.Length == 0)
             return false;
@@ -114,9 +139,14 @@ public class AssistantClient : AuditableEntity, IAggregateRoot
             && string.Equals(PathAndQuery(registered), PathAndQuery(asked), StringComparison.Ordinal));
     }
 
-    private static bool IsLoopback(Uri uri) => uri.HostNameType == UriHostNameType.Dns
-        ? string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
-        : uri.IsLoopback;
+    /// <summary>The three names of this device that the permission page also returns to; not the rest of 127.0.0.0/8.</summary>
+    private static bool IsLoopback(Uri uri) => uri.HostNameType switch
+    {
+        UriHostNameType.Dns => string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase),
+        UriHostNameType.IPv4 => uri.Host == "127.0.0.1",
+        UriHostNameType.IPv6 => uri.Host == "[::1]",
+        _ => false
+    };
 
     private static string PathAndQuery(Uri uri) => uri.GetComponents(UriComponents.PathAndQuery, UriFormat.UriEscaped);
 }

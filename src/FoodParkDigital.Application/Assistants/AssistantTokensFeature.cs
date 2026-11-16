@@ -42,9 +42,10 @@ public sealed class AssistantTokensDto
 
 /// <summary>
 /// Gives an assistant its tokens (Fase 32E, ADR 0097): for a code, once, with its PKCE verifier and everything it was tied
-/// to, and then a new connection of the account (replacing the one it had with the same assistant); for a refresh token,
-/// the next one and a new access token. A code or a replaced refresh token presented again was copied: its connection ends.
-/// Two exchanges of the same code or connection at once wait for each other.
+/// to (the server included), and then a new connection of the account (replacing the one it had with the same assistant);
+/// for a refresh token of this server, the next one and a new access token. A code or a replaced refresh token presented
+/// again was copied: its connection ends. Two exchanges of the same code or connection at once wait for each other, and
+/// so do two codes of the same account: each counts and replaces the account's connections alone.
 /// </summary>
 public class ExchangeAssistantTokenCommandHandler : IRequestHandler<ExchangeAssistantTokenCommand, Result<AssistantTokensDto>>
 {
@@ -113,12 +114,17 @@ public class ExchangeAssistantTokenCommandHandler : IRequestHandler<ExchangeAssi
             return AssistantTokensDto.Refused(OAuthErrors.InvalidGrant, InvalidCodeMessage);
         }
 
-        var client = await _context.AssistantClients.AsNoTracking().FirstOrDefaultAsync(c => c.Id == code.ClientId, cancellationToken);
+        var client = await _context.AssistantClients.FirstOrDefaultAsync(c => c.Id == code.ClientId, cancellationToken);
         if (code.IsExpired(now) || client is null || client.ClientId != request.ClientId
             || code.RedirectUri != request.RedirectUri || !code.Verifies(request.CodeVerifier))
             return AssistantTokensDto.Refused(OAuthErrors.InvalidGrant, InvalidCodeMessage);
+        if (!code.IsFor(_server.Resource))
+            return AssistantTokensDto.Refused(OAuthErrors.InvalidTarget, $"El código es para {code.Resource}.");
         if (!await IsActiveCustomerAsync(code.UserId, cancellationToken))
             return AssistantTokensDto.Refused(OAuthErrors.InvalidGrant, InvalidCodeMessage);
+
+        // Two codes of the account at once would both count its connections, or both replace the one with this assistant.
+        await _lock.AcquireAsync(code.UserId, cancellationToken);
 
         // Permissions given before any was exchanged do not pass the account's limit either.
         var connected = await _context.AssistantConnections.CountAsync(
@@ -134,9 +140,10 @@ public class ExchangeAssistantTokenCommandHandler : IRequestHandler<ExchangeAssi
         if (previous.Count > 0)
             await _context.SaveChangesAsync(cancellationToken);
 
-        var connection = AssistantConnection.Grant(code.UserId, code.ClientId, code.Scope, now);
+        var connection = AssistantConnection.Grant(code, now);
         _context.AssistantConnections.Add(connection);
         code.Redeem(connection.Id, now);
+        client.RecordConnection(now);
         var tokens = Issue(connection, now);
         await _context.SaveChangesAsync(cancellationToken);
         return tokens;
@@ -161,7 +168,8 @@ public class ExchangeAssistantTokenCommandHandler : IRequestHandler<ExchangeAssi
         var connection = await _context.AssistantConnections.SingleAsync(c => c.Id == found.ConnectionId, cancellationToken);
         var client = await _context.AssistantClients.AsNoTracking().SingleAsync(c => c.Id == connection.ClientId, cancellationToken);
         var now = _clock.UtcNow;
-        if (!connection.IsActive || (request.ClientId is not null && request.ClientId != client.ClientId))
+        if (!connection.IsActive || !connection.IsFor(_server.Resource)
+            || (request.ClientId is not null && request.ClientId != client.ClientId))
             return AssistantTokensDto.Refused(OAuthErrors.InvalidGrant, InvalidRefreshMessage);
 
         if (token.RotatedAt is { } rotated)
@@ -254,8 +262,8 @@ public sealed record AssistantIdentityDto(Guid UserId, string? Email, Guid Conne
 
 /// <summary>
 /// The identity behind an access token of /mcp/cuenta (Fase 32E, ADR 0097), on every request: the token in its hour, its
-/// connection not disconnected and its account an active customer one. Writes when the connection was last used, at most
-/// every five minutes.
+/// connection not disconnected and given for this server (RFC 8707), and its account an active customer one. Writes when
+/// the connection was last used, at most every five minutes.
 /// </summary>
 [AllowAnonymousRequest("La identidad de un asistente de IA por el token de acceso que le dio una cuenta: sin un token válido no hay ninguna.")]
 public record AuthenticateAssistantCommand(string? AccessToken) : IRequest<AssistantIdentityDto?>;
@@ -263,11 +271,13 @@ public record AuthenticateAssistantCommand(string? AccessToken) : IRequest<Assis
 public class AuthenticateAssistantCommandHandler : IRequestHandler<AuthenticateAssistantCommand, AssistantIdentityDto?>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IAssistantAccountServer _server;
     private readonly IDateTimeProvider _clock;
 
-    public AuthenticateAssistantCommandHandler(IApplicationDbContext context, IDateTimeProvider clock)
+    public AuthenticateAssistantCommandHandler(IApplicationDbContext context, IAssistantAccountServer server, IDateTimeProvider clock)
     {
         _context = context;
+        _server = server;
         _clock = clock;
     }
 
@@ -278,11 +288,12 @@ public class AuthenticateAssistantCommandHandler : IRequestHandler<AuthenticateA
 
         var hash = AssistantSecrets.HashOf(request.AccessToken!);
         var now = _clock.UtcNow;
+        var resource = _server.Resource;
         var found = await (
                 from token in _context.AssistantTokens
                 where token.TokenHash == hash && token.Kind == AssistantTokenKind.Access && token.ExpiresAt > now
                 join connection in _context.AssistantConnections on token.ConnectionId equals connection.Id
-                where connection.RevokedAt == null
+                where connection.RevokedAt == null && connection.Resource == resource
                 join user in _context.Users on connection.UserId equals user.Id
                 where user.IsActive && user.Role == UserRole.Customer
                 select new { Connection = connection, user.Email })

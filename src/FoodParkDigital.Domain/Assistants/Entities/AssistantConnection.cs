@@ -33,23 +33,51 @@ public class AssistantConnection : AuditableEntity, IAggregateRoot
     public Guid ClientId { get; private set; }
 
     public string Scope { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Where the code that made it went (its client may have registered several): the site Mi cuenta shows is the one the
+    /// customer allowed on the permission page.
+    /// </summary>
+    public string RedirectUri { get; private set; } = string.Empty;
+
+    /// <summary>The server its tokens are for (RFC 8707): they open no other address.</summary>
+    public string Resource { get; private set; } = string.Empty;
+
     public DateTimeOffset GrantedAt { get; private set; }
     public DateTimeOffset? LastUsedAt { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
 
     public bool IsActive => RevokedAt is null;
 
-    public static AssistantConnection Grant(Guid userId, Guid clientId, string scope, DateTimeOffset now)
+    /// <summary>
+    /// The connection a code makes, with what the code was given for: its account, its assistant, its scope, the address it
+    /// went to and the server its tokens are for. The code is redeemed with it.
+    /// </summary>
+    public static AssistantConnection Grant(AssistantAuthorizationCode code, DateTimeOffset now)
     {
-        if (userId == Guid.Empty)
+        ArgumentNullException.ThrowIfNull(code);
+        if (code.UserId == Guid.Empty)
             throw new DomainException("La conexión necesita una cuenta.");
-        if (clientId == Guid.Empty)
+        if (code.ClientId == Guid.Empty)
             throw new DomainException("La conexión necesita un asistente.");
-        if (scope != AccountScope)
+        if (code.Scope != AccountScope)
             throw new DomainException("El permiso solo es para la cuenta.");
+        if (string.IsNullOrEmpty(code.RedirectUri) || string.IsNullOrEmpty(code.Resource))
+            throw new DomainException("La conexión necesita la dirección de regreso y el recurso de su código.");
 
-        return new AssistantConnection { UserId = userId, ClientId = clientId, Scope = scope, GrantedAt = now };
+        return new AssistantConnection
+        {
+            UserId = code.UserId,
+            ClientId = code.ClientId,
+            Scope = code.Scope,
+            RedirectUri = code.RedirectUri,
+            Resource = code.Resource,
+            GrantedAt = now
+        };
     }
+
+    /// <summary>Whether its tokens open <paramref name="resource"/>: only the server they were given for.</summary>
+    public bool IsFor(string resource) => string.Equals(Resource, resource, StringComparison.Ordinal);
 
     /// <summary>Stops it: its tokens stop opening the account. One already stopped keeps when it was.</summary>
     public void Revoke(DateTimeOffset now) => RevokedAt ??= now;

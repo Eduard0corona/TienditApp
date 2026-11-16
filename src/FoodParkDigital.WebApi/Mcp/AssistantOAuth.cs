@@ -58,7 +58,7 @@ public static class AssistantOAuth
         app.MapGet(ProtectedResourcePath, ProtectedResource).RequireRateLimiting(McpServer.RateLimitPolicy).ExcludeFromDescription();
         app.MapGet(AuthorizationServerPath, AuthorizationServer).RequireRateLimiting(McpServer.RateLimitPolicy).ExcludeFromDescription();
         app.MapPost(RegisterPath, RegisterAsync).RequireRateLimiting(RegisterRateLimitPolicy).ExcludeFromDescription();
-        app.MapGet(AuthorizePath, AuthorizeAsync).RequireRateLimiting(McpServer.RateLimitPolicy).ExcludeFromDescription();
+        app.MapGet(AuthorizePath, Authorize).RequireRateLimiting(McpServer.RateLimitPolicy).ExcludeFromDescription();
         app.MapPost(TokenPath, TokenAsync).RequireRateLimiting(McpServer.RateLimitPolicy).ExcludeFromDescription();
         app.MapPost(RevokePath, RevokeAsync).RequireRateLimiting(McpServer.RateLimitPolicy).ExcludeFromDescription();
     }
@@ -125,6 +125,11 @@ public static class AssistantOAuth
             GrantTypes = registration.GrantTypes,
             ResponseTypes = registration.ResponseTypes
         }, context.RequestAborted);
+        if (registered.Error == OAuthErrors.TemporarilyUnavailable)
+        {
+            context.Response.Headers.RetryAfter = "3600";
+            return Answer(context, new { registered.Error, registered.ErrorDescription }, StatusCodes.Status429TooManyRequests);
+        }
         if (registered.Error is not null)
             return Error(context, registered.Error, registered.ErrorDescription);
 
@@ -141,27 +146,15 @@ public static class AssistantOAuth
     }
 
     /// <summary>
-    /// The start of the permission: the browser goes to the permission page with the same parameters, or back to the assistant
-    /// with the error of a request it can fix. A client or address that is not right is said on the page, never followed.
+    /// The start of the permission: the browser always goes to the permission page with the same parameters, which checks
+    /// them. It never goes back to the assistant on its own, not even with an error: anyone registers a client with any
+    /// https address, so this would send anyone anywhere (RFC 9700, 4.11.2). The page says what is wrong and returns only
+    /// when the customer chooses to.
     /// </summary>
-    private static async Task<IResult> AuthorizeAsync(HttpContext context, ISender mediator)
+    private static IResult Authorize(HttpContext context)
     {
-        var query = context.Request.Query;
-        var check = await mediator.Send(new CheckAssistantAuthorizationQuery
-        {
-            ResponseType = query["response_type"],
-            ClientId = query["client_id"],
-            RedirectUri = query["redirect_uri"],
-            CodeChallenge = query["code_challenge"],
-            CodeChallengeMethod = query["code_challenge_method"],
-            Resource = query["resource"],
-            Scope = query["scope"],
-            State = query["state"]
-        }, context.RequestAborted);
         NoStore(context);
-        return check.ErrorRedirectUrl is { } back
-            ? Results.Redirect(back)
-            : Results.Redirect(ConsentPath + context.Request.QueryString);
+        return Results.Redirect(ConsentPath + context.Request.QueryString);
     }
 
     /// <summary>RFC 6749, 4.1.3 and 6: tokens for a code or a refresh token, form-encoded; 400 with the OAuth error otherwise.</summary>

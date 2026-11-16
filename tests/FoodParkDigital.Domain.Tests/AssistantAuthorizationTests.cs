@@ -76,16 +76,32 @@ public class AssistantAuthorizationTests
     [InlineData("http://localhost:6274/oauth/callback", true)]
     [InlineData("http://127.0.0.1/callback", true)]
     [InlineData("http://[::1]:8080/callback", true)]
+    // The rest of 127.0.0.0/8 is this device too, but the permission page returns only to these three.
+    [InlineData("http://127.0.0.2/callback", false)]
     [InlineData("http://claude.ai/callback", false)]
     [InlineData("https://claude.ai/callback#fragment", false)]
     [InlineData("https://claude.ai@evil.example/callback", false)]
     [InlineData("https://claude.ai/call back", false)]
     [InlineData("cursor://anysphere.cursor-retrieval/oauth/callback", false)]
     [InlineData("javascript:alert(1)", false)]
+    // Printable ASCII without quotes or backslashes: stored as written, in a column of its size.
+    [InlineData("https://café.test/callback", false)]
+    [InlineData("https://xn--caf-dma.test/callback", true)]
+    [InlineData("https://claude.ai/\"callback\"", false)]
+    [InlineData("https://claude.ai/call\\back", false)]
     [InlineData("/callback", false)]
     [InlineData("", false)]
     public void IsRedirectUri_ShouldTake_HttpsOrThisDevice_WithoutAFragmentOrAUser(string uri, bool taken)
         => Assert.Equal(taken, AssistantClient.IsRedirectUri(uri));
+
+    [Fact]
+    public void IsRedirectUri_ShouldTake_UpTo512Characters()
+    {
+        var longest = "https://a.test/" + new string('a', AssistantClient.MaxRedirectUriLength - 15);
+        Assert.Equal(512, longest.Length);
+        Assert.True(AssistantClient.IsRedirectUri(longest));
+        Assert.False(AssistantClient.IsRedirectUri(longest + "a"));
+    }
 
     [Fact]
     public void Register_ShouldRefuse_NoAddress_TooMany_OrOneThatIsNot()
@@ -95,7 +111,8 @@ public class AssistantAuthorizationTests
         Assert.Equal(AssistantClient.RedirectUrisRequiredMessage,
             Assert.Throws<DomainException>(() => AssistantClient.Register(ClientId, "x", null, Now)).Message);
         Assert.Equal(AssistantClient.TooManyRedirectUrisMessage, Assert.Throws<DomainException>(() =>
-            AssistantClient.Register(ClientId, "x", Enumerable.Range(0, 11).Select(i => $"https://a.test/{i}"), Now)).Message);
+            AssistantClient.Register(ClientId, "x", Enumerable.Range(0, 6).Select(i => $"https://a.test/{i}"), Now)).Message);
+        Assert.Equal(5, AssistantClient.Register(ClientId, "x", Enumerable.Range(0, 5).Select(i => $"https://a.test/{i}"), Now).RedirectUris.Count);
         Assert.Equal(AssistantClient.InvalidRedirectUriMessage,
             Assert.Throws<DomainException>(() => AssistantClient.Register(ClientId, "x", [Callback, "http://evil.example/cb"], Now)).Message);
         Assert.Equal(AssistantClient.ClientIdRequiredMessage,
@@ -153,6 +170,28 @@ public class AssistantAuthorizationTests
     }
 
     [Fact]
+    public void Code_ShouldBeFor_TheServerItWasGivenFor_Only()
+    {
+        var code = Issued();
+
+        Assert.True(code.IsFor(Resource));
+        Assert.False(code.IsFor("https://otra.test/mcp/cuenta"));
+        Assert.False(code.IsFor(Resource.ToUpperInvariant()));
+    }
+
+    [Fact]
+    public void Client_ShouldKeep_WhenAnAccountLastConnectedIt()
+    {
+        var client = Client();
+        Assert.Null(client.LastConnectedAt);
+
+        client.RecordConnection(Now.AddDays(2));
+        client.RecordConnection(Now.AddDays(1));
+
+        Assert.Equal(Now.AddDays(2), client.LastConnectedAt);
+    }
+
+    [Fact]
     public void Redeem_ShouldHappen_OnceAndInItsTime()
     {
         var connection = Guid.NewGuid();
@@ -171,11 +210,18 @@ public class AssistantAuthorizationTests
     [Fact]
     public void Connection_ShouldBeForTheAccount_StopOnce_AndWriteItsUseEveryFiveMinutes()
     {
-        var client = Guid.NewGuid();
-        var connection = AssistantConnection.Grant(Account, client, "cuenta", Now);
+        var client = Client(Callback, "https://claude.com/api/mcp/auth_callback");
+        var code = Issued(client, "https://claude.com/api/mcp/auth_callback");
+        var connection = AssistantConnection.Grant(code, Now);
 
         Assert.Equal(Account, connection.UserId);
-        Assert.Equal(client, connection.ClientId);
+        Assert.Equal(client.Id, connection.ClientId);
+        Assert.Equal("cuenta", connection.Scope);
+        // The address its code went to, not the client's first one: the site the customer allowed.
+        Assert.Equal("https://claude.com/api/mcp/auth_callback", connection.RedirectUri);
+        Assert.Equal(Resource, connection.Resource);
+        Assert.True(connection.IsFor(Resource));
+        Assert.False(connection.IsFor("https://otra.test/mcp/cuenta"));
         Assert.Equal(Now, connection.GrantedAt);
         Assert.True(connection.IsActive);
         Assert.Null(connection.LastUsedAt);
@@ -191,9 +237,7 @@ public class AssistantAuthorizationTests
         Assert.Equal(Now.AddMinutes(7), connection.RevokedAt);
         Assert.False(connection.RecordUse(Now.AddHours(1)));
 
-        Assert.Throws<DomainException>(() => AssistantConnection.Grant(Account, client, "todo", Now));
-        Assert.Throws<DomainException>(() => AssistantConnection.Grant(Guid.Empty, client, "cuenta", Now));
-        Assert.Throws<DomainException>(() => AssistantConnection.Grant(Account, Guid.Empty, "cuenta", Now));
+        Assert.Throws<ArgumentNullException>(() => AssistantConnection.Grant(null!, Now));
     }
 
     [Fact]

@@ -163,6 +163,34 @@ public sealed class AssistantOAuthTests : IClassFixture<PublicPagesTests.PagesAp
     }
 
     [Fact]
+    public async Task Registering_ShouldAnswer429_WhileTheHourIsFull()
+    {
+        _api.Sender.RegisteredClient = RegisteredAssistantClientDto.Refused(
+            OAuthErrors.TemporarilyUnavailable, RegisterAssistantClientCommandHandler.FullMessage);
+
+        using var response = await _api.Http.PostAsync(AssistantOAuth.RegisterPath,
+            new StringContent("""{"redirect_uris":["https://claude.ai/api/mcp/auth_callback"]}""", Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+        Assert.Equal("3600", response.Headers.GetValues("Retry-After").Single());
+        Assert.Equal("temporarily_unavailable", (string?)JsonNode.Parse(await response.Content.ReadAsStringAsync())!["error"]);
+    }
+
+    [Fact]
+    public async Task Authorize_ShouldAlwaysSendTheBrowser_ToThePermissionPage_AskingNothing()
+    {
+        // A request without PKCE, of a client that may be anyone's: to the page too, never straight to its address.
+        const string query = "response_type=token&client_id=zzz&redirect_uri=https%3A%2F%2Fevil.example%2Fcb&state=s1";
+
+        using var response = await _api.Http.GetAsync($"{AssistantOAuth.AuthorizePath}?{query}");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal($"{AssistantOAuth.ConsentPath}?{query}", response.Headers.Location!.OriginalString);
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        Assert.Empty(_api.Sender.Requests);
+    }
+
+    [Fact]
     public async Task TheOAuthEndpoints_ShouldNotBeInTheApiContract()
     {
         using var response = await _api.Http.GetAsync("/swagger/v1/swagger.json");

@@ -14,7 +14,7 @@ public sealed class MyAssistantConnectionDto
     /// <summary>The name it gave when it registered; null when it gave none.</summary>
     public string? Name { get; init; }
 
-    /// <summary>The site its permission returned to (the host of its first address).</summary>
+    /// <summary>The site its permission returned to: the host of the address its code went to, the one the page showed.</summary>
     public string Site { get; init; } = null!;
 
     public DateTimeOffset GrantedAt { get; init; }
@@ -48,14 +48,14 @@ public class GetMyAssistantConnectionsQueryHandler : IRequestHandler<GetMyAssist
                 where connection.UserId == userId && connection.RevokedAt == null
                 join client in _context.AssistantClients.AsNoTracking() on connection.ClientId equals client.Id
                 orderby connection.GrantedAt descending
-                select new { connection.Id, client.Name, client.RedirectUris, connection.GrantedAt, connection.LastUsedAt })
+                select new { connection.Id, client.Name, connection.RedirectUri, connection.GrantedAt, connection.LastUsedAt })
             .ToListAsync(cancellationToken);
         return connections
             .Select(c => new MyAssistantConnectionDto
             {
                 Id = c.Id,
                 Name = c.Name,
-                Site = AssistantAuthorization.SiteOf(c.RedirectUris[0]),
+                Site = AssistantAuthorization.SiteOf(c.RedirectUri),
                 GrantedAt = c.GrantedAt,
                 LastUsedAt = c.LastUsedAt
             })

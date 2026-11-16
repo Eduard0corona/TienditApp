@@ -171,14 +171,20 @@ public sealed class AssistantAccountSqlServerTests
         Assert.Equal("invalid_redirect_uri", (string?)(await JsonAsync(await assistant.PostAsJsonAsync(AssistantOAuth.RegisterPath,
             new Dictionary<string, object> { ["redirect_uris"] = new[] { "http://evil.example/cb" } }), HttpStatusCode.BadRequest))["error"]);
 
-        // Without PKCE: back to the assistant, with its state. On this device the port may change.
-        using (var withoutPkce = await assistant.GetAsync(
-            $"{AssistantOAuth.AuthorizePath}?response_type=code&client_id={clientId}&redirect_uri={Uri.EscapeDataString("http://localhost:50001/oauth/callback")}&state=s1"))
+        // Without PKCE: to the permission page as well, never straight back (anyone registers any https address). The page
+        // offers the way back with the error and the state; on this device the port may change.
+        var desktop = Uri.EscapeDataString("http://localhost:50001/oauth/callback");
+        var withoutPkce = $"response_type=code&client_id={clientId}&redirect_uri={desktop}&state=s1";
+        using (var authorize = await assistant.GetAsync($"{AssistantOAuth.AuthorizePath}?{withoutPkce}"))
         {
-            Assert.Equal(HttpStatusCode.Redirect, withoutPkce.StatusCode);
-            Assert.StartsWith("http://localhost:50001/oauth/callback?error=invalid_request&", withoutPkce.Headers.Location!.OriginalString);
-            Assert.EndsWith("&state=s1", withoutPkce.Headers.Location.OriginalString);
+            Assert.Equal(HttpStatusCode.Redirect, authorize.StatusCode);
+            Assert.Equal($"{AssistantOAuth.ConsentPath}?{withoutPkce}", authorize.Headers.Location!.OriginalString);
         }
+        var check = await JsonAsync(await assistant.GetAsync(
+            $"/api/v1/auth/assistant-authorizations?responseType=code&clientId={clientId}&redirectUri={desktop}&state=s1"));
+        Assert.False((bool)check["valid"]!);
+        Assert.StartsWith("http://localhost:50001/oauth/callback?error=invalid_request&", (string)check["errorRedirectUrl"]!);
+        Assert.EndsWith("&state=s1", (string)check["errorRedirectUrl"]!);
         // A client that does not exist, or an address that is not its own: the page says it; nothing goes there.
         foreach (var wrong in new[]
         {

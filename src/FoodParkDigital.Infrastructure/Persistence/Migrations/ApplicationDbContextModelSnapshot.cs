@@ -550,8 +550,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("RedirectUri")
                         .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                        .HasMaxLength(512)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(512)");
 
                     b.Property<string>("Resource")
                         .IsRequired()
@@ -608,6 +609,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTimeOffset?>("LastConnectedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Name")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -623,14 +627,18 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("_redirectUris")
                         .IsRequired()
-                        .IsUnicode(true)
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(2577)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(2577)")
                         .HasColumnName("RedirectUris");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId")
                         .IsUnique();
+
+                    b.HasIndex("LastConnectedAt")
+                        .HasFilter("[LastConnectedAt] IS NOT NULL");
 
                     b.HasIndex("RegisteredAt");
 
@@ -659,6 +667,17 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("LastUsedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("RedirectUri")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("Resource")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("datetimeoffset");

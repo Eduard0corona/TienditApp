@@ -83,6 +83,9 @@ public class AssistantAuthorizationCode : BaseEntity
     /// <summary>Whether <paramref name="codeVerifier"/> is the PKCE verifier of its challenge.</summary>
     public bool Verifies(string? codeVerifier) => AssistantSecrets.Verifies(CodeChallenge, codeVerifier);
 
+    /// <summary>Whether it was given for <paramref name="resource"/> (RFC 8707): it is exchanged only at that server.</summary>
+    public bool IsFor(string resource) => string.Equals(Resource, resource, StringComparison.Ordinal);
+
     /// <summary>The assistant exchanged it for the tokens of <paramref name="connectionId"/>: once, and in its time.</summary>
     public void Redeem(Guid connectionId, DateTimeOffset now)
     {

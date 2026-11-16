@@ -187,13 +187,14 @@ builder.Services.AddRateLimiter(options =>
     // The MCP server AI assistants call (Fase 32B, ADR 0096): each tool reads the database like a public page. An assistant
     // calls from the few addresses of its platform, for all its users at once: more generous, in a bucket of its own.
     // Registering an assistant's client for the customer's account (Fase 32E, ADR 0097): an assistant registers one when a
-    // customer adds it. Its platform calls from few addresses for all its users: enough for them, not for a bot filling the table.
+    // customer adds it. Its platform calls from few addresses for all its users: enough for them, not for a bot filling the
+    // table (the registration also stops at AssistantClient.MaxRegisteredPerHour from every address).
     options.AddPolicy(AssistantOAuth.RegisterRateLimitPolicy, httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = isDev ? 300 : 60,
+                PermitLimit = isDev ? 300 : 20,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));

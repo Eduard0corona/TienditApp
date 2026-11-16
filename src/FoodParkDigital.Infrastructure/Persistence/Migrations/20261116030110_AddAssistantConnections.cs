@@ -19,7 +19,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     ClientId = table.Column<string>(type: "varchar(43)", unicode: false, maxLength: 43, nullable: false),
                     Name = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
                     RegisteredAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    RedirectUris = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    LastConnectedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    RedirectUris = table.Column<string>(type: "varchar(2577)", unicode: false, maxLength: 2577, nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
@@ -39,6 +40,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     ClientId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Scope = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
+                    RedirectUri = table.Column<string>(type: "varchar(512)", unicode: false, maxLength: 512, nullable: false),
+                    Resource = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
                     GrantedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     LastUsedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
                     RevokedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
@@ -72,7 +75,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     ClientId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     CodeHash = table.Column<string>(type: "varchar(64)", unicode: false, maxLength: 64, nullable: false),
-                    RedirectUri = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
+                    RedirectUri = table.Column<string>(type: "varchar(512)", unicode: false, maxLength: 512, nullable: false),
                     CodeChallenge = table.Column<string>(type: "varchar(43)", unicode: false, maxLength: 43, nullable: false),
                     Resource = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
                     Scope = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
@@ -164,6 +167,12 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                 table: "AssistantClients",
                 column: "ClientId",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AssistantClients_LastConnectedAt",
+                table: "AssistantClients",
+                column: "LastConnectedAt",
+                filter: "[LastConnectedAt] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AssistantClients_RegisteredAt",

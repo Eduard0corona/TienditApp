@@ -33,8 +33,15 @@ public sealed class RegisteredAssistantClientDto
     public static RegisteredAssistantClientDto Refused(string error, string description) => new() { Error = error, ErrorDescription = description };
 }
 
+/// <summary>
+/// Registers a public client (Fase 32E, ADR 0097). Anyone may: the table is bounded by
+/// <see cref="AssistantClient.MaxRegisteredPerHour"/> from every address, by what one client may write, and by the cleanup
+/// of those no account connected in a day.
+/// </summary>
 public class RegisterAssistantClientCommandHandler : IRequestHandler<RegisterAssistantClientCommand, RegisteredAssistantClientDto>
 {
+    public const string FullMessage = "Hay demasiados registros de asistentes en este momento: intenta en una hora.";
+
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _clock;
 
@@ -59,9 +66,14 @@ public class RegisterAssistantClientCommandHandler : IRequestHandler<RegisterAss
         var uris = request.RedirectUris ?? [];
         if (uris.Count == 0 || uris.Count > AssistantClient.MaxRedirectUris || !uris.All(AssistantClient.IsRedirectUri))
             return RegisteredAssistantClientDto.Refused(OAuthErrors.InvalidRedirectUri,
-                $"De 1 a {AssistantClient.MaxRedirectUris} direcciones de regreso: https, o http a localhost, sin fragmento.");
+                $"De 1 a {AssistantClient.MaxRedirectUris} direcciones de regreso: https, o http a localhost, sin fragmento, de hasta {AssistantClient.MaxRedirectUriLength} caracteres.");
 
-        var client = AssistantClient.Register(AssistantAuthorization.NewSecret(), request.ClientName, uris, _clock.UtcNow);
+        var now = _clock.UtcNow;
+        var lastHour = now.AddHours(-1);
+        if (await _context.AssistantClients.CountAsync(c => c.RegisteredAt > lastHour, cancellationToken) >= AssistantClient.MaxRegisteredPerHour)
+            return RegisteredAssistantClientDto.Refused(OAuthErrors.TemporarilyUnavailable, FullMessage);
+
+        var client = AssistantClient.Register(AssistantAuthorization.NewSecret(), request.ClientName, uris, now);
         _context.AssistantClients.Add(client);
         await _context.SaveChangesAsync(cancellationToken);
         return new RegisteredAssistantClientDto
@@ -115,7 +127,10 @@ public sealed class AssistantAuthorizationCheckDto
     public bool RedirectsToThisDevice { get; init; }
 }
 
-/// <summary>Checks an authorization request without asking anything: GET /oauth/authorize and the permission page start here.</summary>
+/// <summary>
+/// Checks an authorization request without asking anything: the permission page starts here (GET /oauth/authorize only sends
+/// the browser to it, unchecked).
+/// </summary>
 [AllowAnonymousRequest("Revisa una solicitud de permiso de un asistente de IA (OAuth) antes de pedirlo: no da nada.")]
 public record CheckAssistantAuthorizationQuery : AssistantAuthorizationRequest, IRequest<AssistantAuthorizationCheckDto>;
 
@@ -197,7 +212,7 @@ public class ApproveAssistantAuthorizationCommandHandler
     }
 }
 
-/// <summary>The check of an authorization request, shared by the API that starts it and the permission that ends it.</summary>
+/// <summary>The check of an authorization request, shared by the permission page's check and its answer.</summary>
 internal static class AssistantAuthorizationRequests
 {
     public static async Task<(AssistantAuthorizationCheckDto Check, AssistantClient? Client, string? Scope)> CheckAsync(
