@@ -504,8 +504,9 @@ public class AssistantOrdersTests
         }, CancellationToken.None);
         Assert.True(placed.IsSuccess, placed.Error);
         var orderId = (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.CustomerUserId == account.Id)).Id;
-        // The concha left the menu since; the latte costs more today.
+        // The concha left the menu since; the latte costs more today (55 then, 60 now, and 12 for the grande).
         concha.SetAvailability(false);
+        Reprice(latte, 60m);
         await fixture.Context.SaveChangesAsync();
 
         var result = await ReorderHandler(fixture).Handle(
@@ -514,6 +515,8 @@ public class AssistantOrdersTests
         Assert.True(result.IsSuccess, result.Error);
         var line = Assert.Single(result.Value!.Order.Lines);
         Assert.Equal((latte.Id, 2, "sin azúcar", "Grande"), (line.ProductId, line.Quantity, line.Notes, Assert.Single(line.Options)));
+        // At today's price, not at the order's.
+        Assert.Equal((72m, 144m), (line.UnitPrice, line.Amount));
         Assert.StartsWith("Concha: ", Assert.Single(result.Value.Left));
         var kept = await fixture.Context.AssistantOrders.IgnoreQueryFilters().SingleAsync();
         Assert.Equal((result.Value.Order.Token, "Claude"), (kept.Token, kept.Source));
@@ -524,6 +527,52 @@ public class AssistantOrdersTests
             new PrepareAssistantReorderCommand { OrderId = orderId }, CancellationToken.None)).Error);
         Assert.Equal(1, await fixture.Context.AssistantOrders.IgnoreQueryFilters().CountAsync());
     }
+
+    [Fact]
+    public async Task Reorder_ShouldSay_WhatGoesWithLess_MoreThan99OfOne_AndANoteLongerThanACartKeeps()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (_, latte, grande, concha) = await StoreAsync(fixture);
+        var account = new ApplicationUser
+        {
+            Id = Guid.NewGuid(), UserName = "cliente@demo.com", Email = "cliente@demo.com", FirstName = "Ana", LastName = "López",
+            Role = UserRole.Customer, IsActive = true
+        };
+        fixture.Context.Users.Add(account);
+        await fixture.Context.SaveChangesAsync();
+        fixture.CurrentUser.UserId = account.Id.ToString();
+        fixture.CurrentUser.Role = "CUSTOMER";
+        // 120 conchas in two lines of 60, and a latte whose note (written at the counter) is longer than a cart keeps.
+        var placed = await OrderHandler(fixture).Handle(OrderOf(latte, grande) with
+        {
+            Items =
+            [
+                new CreateOrderItemDto { ProductId = concha.Id, Quantity = 60 },
+                new CreateOrderItemDto { ProductId = concha.Id, Quantity = 60 },
+                new CreateOrderItemDto { ProductId = latte.Id, Quantity = 1, OptionIds = [grande], Notes = "nota" }
+            ]
+        }, CancellationToken.None);
+        Assert.True(placed.IsSuccess, placed.Error);
+        var order = await fixture.Context.Orders.IgnoreQueryFilters().Include(o => o.Items).SingleAsync(o => o.CustomerUserId == account.Id);
+        fixture.Context.Entry(order.Items.Single(i => i.ProductId == latte.Id)).Property("Notes").CurrentValue = new string('n', 320);
+        await fixture.Context.SaveChangesAsync();
+
+        var result = await ReorderHandler(fixture).Handle(new PrepareAssistantReorderCommand { OrderId = order.Id }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(99, result.Value!.Order.Lines.Single(l => l.ProductId == concha.Id).Quantity);
+        Assert.Equal(300, result.Value.Order.Lines.Single(l => l.ProductId == latte.Id).Notes!.Length);
+        Assert.Equal(
+            ["Latte: su nota se recortó a 300 caracteres.", "Concha: un pedido lleva hasta 99; van 99 de 120."],
+            result.Value.Left);
+    }
+
+    private static void Reprice(Product product, decimal price)
+        => product.Update(
+            product.CategoryId, product.Name, product.Description, price, product.PriceCurrency, product.PreparationTimeMinutes,
+            product.Sku, product.Barcode, product.SortOrder, product.IsFeatured, product.Tags, product.CompareAtPrice, product.TaxRate,
+            product.Calories, product.Allergens, product.MaxQuantityPerOrder, product.Unit, product.AvailableFromTime,
+            product.AvailableToTime, product.IsTrackable, product.NotifyCustomer, product.IsTaxExempt);
 
     private static async Task<(Tenant Tenant, Product Latte, Guid Grande, Product Concha)> StoreAsync(
         SalesTestFixture fixture, bool openDrawer = true)

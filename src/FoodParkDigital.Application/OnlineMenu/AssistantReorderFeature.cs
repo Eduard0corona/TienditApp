@@ -16,7 +16,10 @@ public sealed class PreparedAssistantReorderDto
 {
     public PreparedAssistantOrderDto Order { get; init; } = null!;
 
-    /// <summary>The products of the order before that do not go («Pan de muerto: ya no está en el menú»).</summary>
+    /// <summary>
+    /// The products of the order before that do not go («Pan de muerto: ya no está en el menú»), or go with less than it had
+    /// (more than 99 of one, a note longer than a cart keeps).
+    /// </summary>
     public List<string> Left { get; init; } = new();
 }
 
@@ -70,7 +73,7 @@ public class PrepareAssistantReorderCommandHandler : IRequestHandler<PrepareAssi
             return Result.Failure<PreparedAssistantReorderDto>($"{before.BusinessName} no recibe pedidos en línea: el cliente puede pedirle directo.");
 
         var left = new List<string>();
-        var asked = new List<(string Name, AssistantOrderItemInput Item)>();
+        var asked = new List<(string Name, AssistantOrderItemInput Item, int Wanted)>();
         foreach (var item in before.Items.Where(item => item.Quantity > 0))
         {
             // A product sold by weight (1.5 kg) has no whole quantity for the cart of the store.
@@ -79,19 +82,31 @@ public class PrepareAssistantReorderCommandHandler : IRequestHandler<PrepareAssi
                 left.Add($"{item.ProductName}: se vende por peso, pídelo en la página del negocio.");
                 continue;
             }
+            if (item.Notes is { Length: > AccountCart.MaxLineNotesLength })
+                left.Add($"{item.ProductName}: su nota se recortó a {AccountCart.MaxLineNotesLength} caracteres.");
+            var wanted = (int)Math.Min(item.Quantity, int.MaxValue);
             asked.Add((item.ProductName, new AssistantOrderItemInput
             {
                 ProductId = item.ProductId,
-                Quantity = (int)Math.Min(item.Quantity, AccountCart.MaxLineQuantity),
+                Quantity = Math.Min(wanted, AccountCart.MaxLineQuantity),
                 OptionIds = item.OptionIds,
                 Notes = item.Notes is { Length: > AccountCart.MaxLineNotesLength } notes ? notes[..AccountCart.MaxLineNotesLength] : item.Notes
-            }));
+            }, wanted));
         }
         if (asked.Count == 0)
             return Result.Failure<PreparedAssistantReorderDto>(NothingToRepeatMessage);
-        foreach (var (name, _) in asked.Skip(AccountCart.MaxLines))
+        foreach (var (name, _, _) in asked.Skip(AccountCart.MaxLines))
             left.Add($"{name}: un pedido lleva hasta {AccountCart.MaxLines} productos distintos.");
         asked = asked.Take(AccountCart.MaxLines).ToList();
+        // The same product with the same options and note is one line of up to 99, as the cart of the store keeps it: what
+        // the order had above that is said, not dropped in silence.
+        foreach (var same in asked.GroupBy(a => (a.Item.ProductId, Notes: a.Item.Notes?.Trim() is { Length: > 0 } note ? note : null,
+                     Options: string.Join(',', a.Item.OptionIds.Distinct().Order()))))
+        {
+            var wanted = same.Sum(a => (long)a.Wanted);
+            if (wanted > AccountCart.MaxLineQuantity)
+                left.Add($"{same.First().Name}: un pedido lleva hasta {AccountCart.MaxLineQuantity}; van {AccountCart.MaxLineQuantity} de {wanted}.");
+        }
 
         // Joins this request's transaction: prepared as any order of an assistant, with its limits and the prices of today.
         var prepared = await _sender.Send(new PrepareAssistantOrderCommand

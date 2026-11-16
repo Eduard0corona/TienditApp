@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using FoodParkDigital.Application.Assistants;
 using FoodParkDigital.Domain.Assistants;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Mcp;
@@ -157,6 +158,65 @@ public sealed class AssistantAccountSqlServerTests
         Assert.Equal(HttpStatusCode.Unauthorized, closed.StatusCode);
         Assert.Contains("error=\"invalid_token\"", closed.Headers.WwwAuthenticate.ToString());
         Assert.Empty((await TwoBusinessesApi.ReadAsync(await customer.GetAsync("/api/v1/me/assistants"))).EnumerateArray());
+    }
+
+    [SqlServerFact]
+    public async Task ExchangesAndRenewalsAtOnce_ShouldWaitForEachOther_OnTheirLocks_NeverA500()
+    {
+        // Each request in its own transaction, with the locks of SQL Server: what two requests of an assistant sent at once meet.
+        var (_, customer, _) = await _api.SignUpCustomerAsync("a-la-vez");
+        using var assistant = _api.AnonymousClient(followRedirects: false);
+        var clientId = (string)(await JsonAsync(await assistant.PostAsJsonAsync(AssistantOAuth.RegisterPath, new Dictionary<string, object>
+        {
+            ["client_name"] = "Claude", ["redirect_uris"] = new[] { Callback }
+        }), HttpStatusCode.Created))["client_id"]!;
+        var answer = new
+        {
+            responseType = "code", clientId, redirectUri = Callback, codeChallenge = Challenge, codeChallengeMethod = "S256",
+            scope = "cuenta", state = "s", allow = true
+        };
+        async Task<string> AllowAsync() => Regex.Match((await TwoBusinessesApi.ReadAsync(
+                await customer.PostAsJsonAsync("/api/v1/auth/assistant-authorizations", answer))).GetProperty("redirectUrl").GetString()!,
+            "[?&]code=([A-Za-z0-9_-]{43})").Groups[1].Value;
+        Task<HttpResponseMessage> Exchange(string code) => assistant.PostAsync(AssistantOAuth.TokenPath, new FormUrlEncodedContent([
+            new("grant_type", "authorization_code"), new("code", code), new("redirect_uri", Callback), new("client_id", clientId),
+            new("code_verifier", Verifier)]));
+
+        // Two codes of the same account and assistant at once: both are exchanged, one after the other, and the second replaces
+        // the connection of the first. Without the account's lock both would insert one, and the second would fail on the
+        // unique index.
+        var exchanged = await Task.WhenAll(Exchange(await AllowAsync()), Exchange(await AllowAsync()));
+        var tokens = new List<JsonNode>();
+        foreach (var response in exchanged)
+            tokens.Add(await JsonAsync(response));
+        Assert.Single((await TwoBusinessesApi.ReadAsync(await customer.GetAsync("/api/v1/me/assistants"))).EnumerateArray());
+        var refresh = tokens.Select(t => (string)t["refresh_token"]!).ToList();
+
+        // The same refresh token twice at once: one renews, the other waits and is told to use the new one; the connection stays.
+        // Of the two exchanged, the one whose connection is working.
+        string? working = null;
+        foreach (var candidate in refresh)
+        {
+            using var probe = await assistant.PostAsync(AssistantOAuth.TokenPath, new FormUrlEncodedContent([
+                new("grant_type", "refresh_token"), new("refresh_token", candidate), new("client_id", clientId)]));
+            if (probe.StatusCode == HttpStatusCode.OK)
+                working = (string)JsonNode.Parse(await probe.Content.ReadAsStringAsync())!["refresh_token"]!;
+        }
+        Assert.NotNull(working);
+        Task<HttpResponseMessage> Renew() => assistant.PostAsync(AssistantOAuth.TokenPath, new FormUrlEncodedContent([
+            new("grant_type", "refresh_token"), new("refresh_token", working!), new("client_id", clientId)]));
+        var renewed = await Task.WhenAll(Renew(), Renew());
+        var answers = new List<(HttpStatusCode Status, JsonNode Body)>();
+        foreach (var response in renewed)
+            using (response)
+                answers.Add((response.StatusCode, JsonNode.Parse(await response.Content.ReadAsStringAsync())!));
+        Assert.Equal([HttpStatusCode.OK, HttpStatusCode.BadRequest], answers.Select(a => a.Status).Order());
+        var refused = answers.Single(a => a.Status == HttpStatusCode.BadRequest).Body;
+        Assert.Equal(("invalid_grant", ExchangeAssistantTokenCommandHandler.ConcurrentRenewalMessage),
+            ((string?)refused["error"], (string?)refused["error_description"]));
+        var access = (string)answers.Single(a => a.Status == HttpStatusCode.OK).Body["access_token"]!;
+        using var opened = await McpAsync(assistant, McpServer.AccountPath, "tools/list", new JsonObject(), access);
+        Assert.Equal(HttpStatusCode.OK, opened.StatusCode);
     }
 
     [SqlServerFact]
