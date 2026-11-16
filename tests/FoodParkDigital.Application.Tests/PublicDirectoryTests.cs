@@ -179,6 +179,28 @@ public class PublicDirectoryTests
     }
 
     [Fact]
+    public async Task ThePlatformsOwnBusiness_ShouldNeverBeListed_NorItsProductsFound_WhateverItsSwitchSays()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessAsync(fixture, "cafe-luna", OnlineMenuMode.Orders);
+        // The business the first super admin belongs to (SeedData), with its menu published and shown in Explorar.
+        var platform = await BusinessAsync(fixture, Tenant.PlatformSlug, OnlineMenuMode.Orders);
+        Assert.True((await SettingsAsync(fixture, platform)).ListedInDirectory);
+        var handler = Handler(fixture);
+
+        Assert.Equal(["cafe-luna"], (await DirectoryAsync(fixture)).Businesses.Items.Select(b => b.Slug));
+        // Both sell «Producto de …»: a search finds only the one Explorar lists.
+        var search = await handler.Handle(new GetPublicDirectoryQuery(Search: "producto"), CancellationToken.None);
+        Assert.Equal(["cafe-luna"], search.Products.Select(p => p.BusinessSlug).Distinct());
+
+        // Its owner sees it hidden, so the switch does not promise what Explorar does not do.
+        fixture.TenantService.SetTenant(platform.Id);
+        var profile = await new GetDirectoryProfileQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetDirectoryProfileQueryHandler>.Instance)
+            .Handle(new GetDirectoryProfileQuery(), CancellationToken.None);
+        Assert.Equal(DirectoryVisibility.HiddenByOwner, profile.Value!.Visibility);
+    }
+
+    [Fact]
     public async Task Snapshot_ShouldBeReusedFor30Seconds_ThenRebuilt()
     {
         await using var fixture = SalesTestFixture.Create();

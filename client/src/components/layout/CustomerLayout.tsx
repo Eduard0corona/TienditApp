@@ -84,8 +84,14 @@ export default function CustomerLayout() {
         <Outlet />
       </main>
       <footer className="cl-footer">
-        <span>¿Tienes un negocio?</span>{' '}
-        <Link to="/negocios">Conoce TienditApp para negocios</Link>
+        <p className="mb-1">
+          <span>¿Usas Claude, ChatGPT u otro asistente de IA?</span>{' '}
+          <Link to="/asistentes">Pide con tu asistente</Link>
+        </p>
+        <p className="mb-0">
+          <span>¿Tienes un negocio?</span>{' '}
+          <Link to="/negocios">Conoce TienditApp para negocios</Link>
+        </p>
       </footer>
     </div>
   );

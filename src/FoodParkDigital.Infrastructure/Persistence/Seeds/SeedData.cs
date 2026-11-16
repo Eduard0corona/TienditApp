@@ -35,13 +35,13 @@ public static class SeedData
         // Ensure system tenant exists
         var systemTenant = await context.Tenants
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.Slug == "system");
+            .FirstOrDefaultAsync(t => t.Slug == Tenant.PlatformSlug);
 
         if (systemTenant is null)
         {
             systemTenant = new Tenant(
                 name: "System",
-                slug: "system",
+                slug: Tenant.PlatformSlug,
                 businessType: BusinessType.Food,
                 contactEmail: "admin@foodparkdigital.com");
 
