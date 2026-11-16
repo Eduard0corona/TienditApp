@@ -44,9 +44,9 @@ public class AuthorizationBehaviorTests
 
         Assert.Equal(
         [
-            "AcceptInvitationCommand", "AddVisitProblemPhotoCommand", "ApplyOnlinePaymentCommand", "ApplyOnlinePaymentNotificationCommand", "ApplyWhatsAppStatusesCommand", "CancelPublicAppointmentCommand", "CancelPublicOrderCommand",
-            "ChangeUnconfirmedPhoneCommand", "CheckInvoiceCancellationsCommand", "ConfirmAppointmentDepositCommand", "ConfirmEmailCommand", "ConfirmOnlineCheckoutCommand", "ConfirmPhoneCommand", "ConfirmQuoteDepositCommand",
-            "CreateOnlineCheckoutCommand",
+            "AcceptInvitationCommand", "AddVisitProblemPhotoCommand", "ApplyOnlinePaymentCommand", "ApplyOnlinePaymentNotificationCommand", "ApplyWhatsAppStatusesCommand", "AuthenticateAssistantCommand", "CancelPublicAppointmentCommand", "CancelPublicOrderCommand",
+            "ChangeUnconfirmedPhoneCommand", "CheckAssistantAuthorizationQuery", "CheckInvoiceCancellationsCommand", "ConfirmAppointmentDepositCommand", "ConfirmEmailCommand", "ConfirmOnlineCheckoutCommand", "ConfirmPhoneCommand", "ConfirmQuoteDepositCommand",
+            "CreateOnlineCheckoutCommand", "ExchangeAssistantTokenCommand",
             "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetAssistantOrderQuery", "GetInvitationQuery", "GetPublicAppointmentQuery", "GetPublicBookingQuery",
             "GetPublicBookingSlotsQuery", "GetPublicCfdiFileQuery", "GetPublicCfdiQuery", "GetPublicDeliveryQuoteQuery",
             "GetPublicDirectoryQuery", "GetPublicHomeVisitCoverageQuery", "GetPublicHomeVisitQuery", "GetPublicHomeVisitSlotsQuery",
@@ -56,11 +56,11 @@ public class AuthorizationBehaviorTests
             "IssuePendingCreditNotesCommand", "IssuePendingPaymentComplementsCommand", "Login2FACommand", "LoginCommand", "LogoutCommand", "LookUpSelfInvoiceTicketQuery",
             "PlacePublicOrderCommand", "PrepareAssistantOrderCommand",
             "ProcessInboundMessageCommand", "QueueMonthlyAccountantEmailCommand", "ReconcileOnlinePaymentCommand", "RefreshTokenCommand",
-            "RegisterBusinessCommand", "RegisterCustomerCommand", "ReplyToQuoteFromLinkCommand", "RequestAutomaticCreditNoteCommand",
+            "RegisterAssistantClientCommand", "RegisterBusinessCommand", "RegisterCustomerCommand", "ReplyToQuoteFromLinkCommand", "RequestAutomaticCreditNoteCommand",
             "RequestAutomaticPaymentComplementCommand",
             "RequestPublicAppointmentCommand", "RequestPublicHomeVisitCommand", "RequestSelfInvoiceCommand", "ResendConfirmationEmailCommand",
             "ResendPhoneConfirmationCommand", "ResendSelfInvoiceCommand", "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand",
-            "ReviewOnlinePaymentsCommand", "SelfInvoiceCommand",
+            "ReviewOnlinePaymentsCommand", "RevokeAssistantTokenCommand", "SelfInvoiceCommand",
             "StampPendingInvoicesCommand", "StartAppointmentDepositCommand", "StartQuoteDepositCommand", "SweepOnlinePaymentsCommand",
             "VerifyWhatsAppWebhookTokenQuery"
         ], anonymous);

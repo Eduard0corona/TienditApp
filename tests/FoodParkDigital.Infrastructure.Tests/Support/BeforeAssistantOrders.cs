@@ -22,6 +22,7 @@ internal static class BeforeAssistantOrders
     {
         modelBuilder.Entity<TenantSettings>().Ignore(settings => settings.AssistantOrders);
         modelBuilder.Ignore<AssistantOrder>();
+        BeforeAssistantConnections.Ignore(modelBuilder);
     }
 
     private sealed class Context(
