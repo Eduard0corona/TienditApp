@@ -1250,56 +1250,56 @@
         ],
         "parameters": [
           {
-            "name": "ResponseType",
+            "name": "responseType",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "ClientId",
+            "name": "clientId",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "RedirectUri",
+            "name": "redirectUri",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "CodeChallenge",
+            "name": "codeChallenge",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "CodeChallengeMethod",
+            "name": "codeChallengeMethod",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "Resource",
+            "name": "resource",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "Scope",
+            "name": "scope",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "State",
+            "name": "state",
             "in": "query",
             "schema": {
               "type": "string"

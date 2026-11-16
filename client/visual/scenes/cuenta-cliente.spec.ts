@@ -57,6 +57,8 @@ test.describe('Cuenta', () => {
         await open(page, '/cuenta');
         await expect(page.getByText('Colima 145, depto. 3, Roma Norte · CP 06700')).toBeVisible();
         await expect(page.getByText('5522107765')).toBeVisible();
+        // Claude, connected last week (Fase 32E).
+        await expect(page.getByRole('button', { name: 'Desconectar Claude' })).toBeVisible();
         await snap(page, `cuenta-${look.suffix}`);
       });
     });
@@ -65,6 +67,7 @@ test.describe('Cuenta', () => {
   test('cuenta agregar una dirección', async ({ page }) => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/cuenta');
+    await expect(page.getByRole('button', { name: 'Desconectar Claude' })).toBeVisible();
     await page.getByRole('button', { name: 'Agregar dirección' }).click();
     const add = await dialog(page, 'Agregar una dirección');
     await add.getByLabel('Nombre (opcional)').fill('Casa de mi mamá');
@@ -77,6 +80,7 @@ test.describe('Cuenta', () => {
   test('cuenta borrar una dirección', async ({ page }) => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/cuenta');
+    await expect(page.getByRole('button', { name: 'Desconectar Claude' })).toBeVisible();
     await page.getByRole('button', { name: 'Borrar Oficina' }).click();
     const confirm = await dialog(page, 'Borrar dirección');
     await expect(confirm.getByText(/Los pedidos que ya enviaste ahí no cambian/)).toBeVisible();
@@ -90,8 +94,19 @@ test.describe('Cuenta', () => {
       await page.setViewportSize(SIZES.phone);
       await open(page, '/cuenta');
       await expect(page.getByText('Todavía no guardas direcciones')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Desconectar Claude' })).toBeVisible();
       await snap(page, 'cuenta-sin-direcciones-telefono');
     });
+  });
+
+  // Fase 32E: disconnecting the assistant connected to the account.
+  test('cuenta desconectar un asistente', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/cuenta');
+    await page.getByRole('button', { name: 'Desconectar Claude' }).click();
+    const confirm = await dialog(page, 'Desconectar asistente');
+    await expect(confirm.getByText(/Claude deja de ver tu cuenta/)).toBeVisible();
+    await snapScreen(page, 'cuenta-desconectar-asistente-telefono');
   });
 });
 

@@ -25,8 +25,26 @@ public class AssistantAuthorizationsController : ControllerBase
     [HttpGet]
     [AllowAnonymous]
     public async Task<ActionResult<AssistantAuthorizationCheckDto>> Check(
-        [FromQuery] CheckAssistantAuthorizationQuery request, CancellationToken cancellationToken)
-        => Ok(await _mediator.Send(request, cancellationToken));
+        [FromQuery] string? responseType,
+        [FromQuery] string? clientId,
+        [FromQuery] string? redirectUri,
+        [FromQuery] string? codeChallenge,
+        [FromQuery] string? codeChallengeMethod,
+        [FromQuery] string? resource,
+        [FromQuery] string? scope,
+        [FromQuery] string? state,
+        CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new CheckAssistantAuthorizationQuery
+        {
+            ResponseType = responseType,
+            ClientId = clientId,
+            RedirectUri = redirectUri,
+            CodeChallenge = codeChallenge,
+            CodeChallengeMethod = codeChallengeMethod,
+            Resource = resource,
+            Scope = scope,
+            State = state
+        }, cancellationToken));
 
     /// <summary>
     /// The customer allows the assistant, or does not: where the browser goes, the assistant with its code or with

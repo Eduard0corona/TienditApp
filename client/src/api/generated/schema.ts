@@ -1010,14 +1010,14 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    ResponseType?: string;
-                    ClientId?: string;
-                    RedirectUri?: string;
-                    CodeChallenge?: string;
-                    CodeChallengeMethod?: string;
-                    Resource?: string;
-                    Scope?: string;
-                    State?: string;
+                    responseType?: string;
+                    clientId?: string;
+                    redirectUri?: string;
+                    codeChallenge?: string;
+                    codeChallengeMethod?: string;
+                    resource?: string;
+                    scope?: string;
+                    state?: string;
                 };
                 header?: never;
                 path?: never;

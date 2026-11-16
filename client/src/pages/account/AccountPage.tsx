@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress, type AccountAddressInput } from '../../api/accountApi';
 import { getApiErrorMessage } from '../../api/errors';
 import PageTitle from '../../components/common/PageTitle';
+import ConnectedAssistantsCard from './ConnectedAssistantsCard';
 import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
@@ -146,7 +147,7 @@ function AddressDialog({ address, onClose }: { address: AccountAddress | 'new' |
 /**
  * Cuenta (/cuenta, Fase 24B): the customer account's details and the addresses it keeps for its orders. The store
  * offers them when an order goes to an address; here they are added, changed and deleted. The password and the phone
- * change in the profile.
+ * change in the profile. The AI assistants connected to the account are listed and disconnected here too (Fase 32E).
  */
 export default function AccountPage() {
   const { user } = useAuth();
@@ -256,6 +257,8 @@ export default function AccountPage() {
           )}
         </div>
       </section>
+
+      <ConnectedAssistantsCard />
 
       <AddressDialog address={editing} onClose={() => setEditing(null)} />
     </div>
