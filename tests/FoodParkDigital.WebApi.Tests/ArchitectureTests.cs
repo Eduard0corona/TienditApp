@@ -241,6 +241,10 @@ public class ArchitectureTests
             // The cart a customer account leaves in a store (Fase 31J, ADR 0090): read only by the account's own id, like a
             // favorite; the business it is for (BusinessId) is not its owner and never sees it.
             "AccountCart",
+            // The authorization an AI assistant gets for a customer account (Fase 32E, ADR 0097): its OAuth clients (anyone
+            // registers one; it reads nothing without a permission), and the codes, connections and tokens of an account,
+            // read by the account's own id or by the hash of a token.
+            "AssistantClient", "AssistantAuthorizationCode", "AssistantConnection", "AssistantToken",
             // A child of a tenant-scoped aggregate, filtered through it (its conversation's business).
             "WhatsAppMessage"
         };

@@ -21,8 +21,8 @@ test.describe('Pide con tu asistente', () => {
       test(`asistentes ${look.suffix}`, async ({ page }) => {
         await open(page, '/asistentes');
         await expect(page.getByRole('heading', { level: 1, name: 'Pide con tu asistente de IA' })).toBeVisible();
-        await expect(page.getByLabel('Dirección sin cuenta')).toHaveValue(/\/mcp$/);
-        await expect(page.getByLabel('Dirección con tu cuenta')).toHaveValue(/\/mcp\/cuenta$/);
+        await expect(page.getByLabel('Dirección sin cuenta', { exact: true })).toHaveValue(/\/mcp$/);
+        await expect(page.getByLabel('Dirección con tu cuenta', { exact: true })).toHaveValue(/\/mcp\/cuenta$/);
         await snap(page, `asistentes-${look.suffix}`);
       });
     });

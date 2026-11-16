@@ -12,6 +12,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/auth/assistant-authorizations")]
+[Authorize]
 public class AssistantAuthorizationsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -51,7 +52,6 @@ public class AssistantAuthorizationsController : ControllerBase
     /// access_denied. Only a customer account.
     /// </summary>
     [HttpPost]
-    [Authorize]
     public async Task<ActionResult<AssistantAuthorizationRedirectDto>> Answer(
         [FromBody] ApproveAssistantAuthorizationCommand request, CancellationToken cancellationToken)
     {

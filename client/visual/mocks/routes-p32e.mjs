@@ -5,7 +5,7 @@
 /** Claude, connected by María Fernanda last week and used yesterday. */
 export function demoAssistants() {
   return [
-    { id: 'asis-claude', name: 'Claude', site: 'claude.ai', grantedAt: '2026-09-28T17:10:00.000Z', lastUsedAt: '2026-10-03T21:15:00.000Z' },
+    { id: '7d3c5a10-2b4e-4f8a-9c61-0e5b8f2a4d17', name: 'Claude', site: 'claude.ai', grantedAt: '2026-09-28T17:10:00.000Z', lastUsedAt: '2026-10-03T21:15:00.000Z' },
   ];
 }
 
