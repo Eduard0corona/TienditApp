@@ -235,12 +235,12 @@ public sealed class StoreTools
             Slug = RequiredSlug(slug),
             Items = items,
             PostalCode = codigo_postal,
-            Source = Source()
+            Source = SourceOf(_http.HttpContext)
         }, cancellationToken);
         // Why the store refused it can carry what the business wrote (a product's name): as text, never as a mark.
         if (result.IsFailure)
             throw new McpException(AgentPages.Inline(result.Error!));
-        return Prepared(result.Value!);
+        return Prepared(result.Value!, BaseUrl);
     }
 
     [McpServerTool(Name = "ver_pedido", Title = "Ver un pedido preparado", ReadOnly = true, Idempotent = true, OpenWorld = false)]
@@ -275,7 +275,8 @@ public sealed class StoreTools
         return text.ToString();
     }
 
-    private string Prepared(PreparedAssistantOrderDto order)
+    /// <summary>An order prepared, as the assistant tells the customer: its link, what it carries and what the menu did not take.</summary>
+    internal static string Prepared(PreparedAssistantOrderDto order, string baseUrl, IReadOnlyList<string>? left = null)
     {
         var text = new StringBuilder()
             .Append("# Pedido preparado en ").Append(AgentPages.Inline(order.BusinessName)).Append("\n\n")
@@ -297,7 +298,14 @@ public sealed class StoreTools
         }
         text.Append("\nProductos: ").Append(AgentPages.Money(order.ItemsTotal))
             .Append(order.PricesIncludeTax ? " con IVA incluido" : " con IVA").Append(".\n");
-        if (order.Refused.Count > 0)
+        if (left is not null)
+        {
+            if (left.Count > 0)
+                text.Append("\n## No se agregó\n\n");
+            foreach (var reason in left)
+                text.Append("- ").Append(AgentPages.Inline(reason)).Append('\n');
+        }
+        else if (order.Refused.Count > 0)
         {
             text.Append("\n## No se agregó\n\n");
             foreach (var refused in order.Refused)
@@ -313,7 +321,7 @@ public sealed class StoreTools
         return text.ToString();
 
         string LinkOf(PreparedAssistantOrderDto prepared)
-            => $"{BaseUrl}/m/{Uri.EscapeDataString(prepared.Slug)}#{AssistantOrderLink.Parameter}={prepared.Token}";
+            => $"{baseUrl}/m/{Uri.EscapeDataString(prepared.Slug)}#{AssistantOrderLink.Parameter}={prepared.Token}";
     }
 
     private static string Delivery(PublicDeliveryQuoteDto quote)
@@ -330,7 +338,7 @@ public sealed class StoreTools
     }
 
     /// <summary>An instant as the business's clock reads it: the Application gives it at the business's offset.</summary>
-    private static string When(DateTimeOffset at) => at.DateTime.ToString("d 'de' MMMM 'a las' HH:mm", Mexico) + " (hora del negocio)";
+    internal static string When(DateTimeOffset at) => at.DateTime.ToString("d 'de' MMMM 'a las' HH:mm", Mexico) + " (hora del negocio)";
 
     private static string RequiredSlug(string? slug)
         => string.IsNullOrWhiteSpace(slug) ? throw new McpException("Falta el slug del negocio: búscalo con buscar_negocios.") : slug.Trim();
@@ -357,9 +365,9 @@ public sealed class StoreTools
     /// Who prepares an order, as its client introduces itself (its User-Agent), up to what the order keeps: a long one never
     /// keeps an assistant from preparing it.
     /// </summary>
-    private string? Source()
+    internal static string? SourceOf(HttpContext? context)
     {
-        var agent = _http.HttpContext?.Request.Headers.UserAgent.ToString().Trim();
+        var agent = context?.Request.Headers.UserAgent.ToString().Trim();
         if (string.IsNullOrEmpty(agent))
             return null;
         return agent.Length > AssistantOrder.MaxSourceLength ? agent[..AssistantOrder.MaxSourceLength] : agent;
@@ -369,11 +377,15 @@ public sealed class StoreTools
     /// Sends a request as the public store does. A rule it breaks (validation) is said to the assistant, which may fix it; any
     /// other failure is the SDK's generic error, without details.
     /// </summary>
-    private async Task<T> SendAsync<T>(IRequest<T> request, CancellationToken cancellationToken)
+    private Task<T> SendAsync<T>(IRequest<T> request, CancellationToken cancellationToken)
+        => SendAsync(_mediator, request, cancellationToken);
+
+    /// <inheritdoc cref="SendAsync{T}(IRequest{T}, CancellationToken)"/>
+    internal static async Task<T> SendAsync<T>(ISender mediator, IRequest<T> request, CancellationToken cancellationToken)
     {
         try
         {
-            return await _mediator.Send(request, cancellationToken);
+            return await mediator.Send(request, cancellationToken);
         }
         catch (ValidationException invalid)
         {

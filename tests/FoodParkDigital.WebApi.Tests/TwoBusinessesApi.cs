@@ -252,7 +252,8 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
         => _factory!.Services.GetRequiredService<FoodParkDigital.Application.Common.Interfaces.IPrivateFileStorage>();
 
     /// <summary>A client without a session: a customer on the public menu.</summary>
-    public HttpClient AnonymousClient() => NewClient();
+    /// <param name="followRedirects">False to read a redirect (an OAuth flow) instead of following it.</param>
+    public HttpClient AnonymousClient(bool followRedirects = true) => NewClient(followRedirects);
 
     private const string ClientAddressHeader = "X-Test-Client-Address";
     private int _clients;
@@ -261,9 +262,9 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     /// A client on a connection of its own, as each person is: the limits by IP (signing up, asking for appointments or
     /// orders) count each client apart, so the tests of the collection do not use up one shared limit.
     /// </summary>
-    private HttpClient NewClient()
+    private HttpClient NewClient(bool followRedirects = true)
     {
-        var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false, AllowAutoRedirect = followRedirects });
         var n = Interlocked.Increment(ref _clients);
         client.DefaultRequestHeaders.Add(ClientAddressHeader, $"10.{n / 65536 % 256}.{n / 256 % 256}.{n % 256}");
         return client;

@@ -1243,6 +1243,139 @@
         }
       }
     },
+    "/api/v1/auth/assistant-authorizations": {
+      "get": {
+        "tags": [
+          "AssistantAuthorizations"
+        ],
+        "parameters": [
+          {
+            "name": "ResponseType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ClientId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "RedirectUri",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CodeChallenge",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CodeChallengeMethod",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Resource",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Scope",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "State",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantAuthorizationCheckDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantAuthorizationCheckDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantAuthorizationCheckDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AssistantAuthorizations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveAssistantAuthorizationCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveAssistantAuthorizationCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveAssistantAuthorizationCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantAuthorizationRedirectDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantAuthorizationRedirectDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantAuthorizationRedirectDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit/logs": {
       "get": {
         "tags": [
@@ -10446,6 +10579,67 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/me/assistants": {
+      "get": {
+        "tags": [
+          "Me"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyAssistantConnectionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyAssistantConnectionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyAssistantConnectionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/assistants/{id}": {
+      "delete": {
+        "tags": [
+          "Me"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -20735,6 +20929,50 @@
         },
         "additionalProperties": false
       },
+      "ApproveAssistantAuthorizationCommand": {
+        "required": [
+          "allow"
+        ],
+        "type": "object",
+        "properties": {
+          "responseType": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientId": {
+            "type": "string",
+            "nullable": true
+          },
+          "redirectUri": {
+            "type": "string",
+            "nullable": true
+          },
+          "codeChallenge": {
+            "type": "string",
+            "nullable": true
+          },
+          "codeChallengeMethod": {
+            "type": "string",
+            "nullable": true
+          },
+          "resource": {
+            "type": "string",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "allow": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "AssignPlanRequest": {
         "required": [
           "planId"
@@ -20749,6 +20987,50 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssistantAuthorizationCheckDto": {
+        "required": [
+          "redirectsToThisDevice",
+          "valid"
+        ],
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "problem": {
+            "type": "string",
+            "nullable": true
+          },
+          "errorRedirectUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientName": {
+            "type": "string",
+            "nullable": true
+          },
+          "redirectSite": {
+            "type": "string",
+            "nullable": true
+          },
+          "redirectsToThisDevice": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssistantAuthorizationRedirectDto": {
+        "required": [
+          "redirectUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "redirectUrl": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -30830,6 +31112,37 @@
           "Upcoming",
           "Past"
         ]
+      },
+      "MyAssistantConnectionDto": {
+        "required": [
+          "grantedAt",
+          "id",
+          "site"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "site": {
+            "type": "string"
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "MyCartDto": {
         "required": [

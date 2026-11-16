@@ -1000,6 +1000,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/assistant-authorizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    ResponseType?: string;
+                    ClientId?: string;
+                    RedirectUri?: string;
+                    CodeChallenge?: string;
+                    CodeChallengeMethod?: string;
+                    Resource?: string;
+                    Scope?: string;
+                    State?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AssistantAuthorizationCheckDto"];
+                        "application/json": components["schemas"]["AssistantAuthorizationCheckDto"];
+                        "text/json": components["schemas"]["AssistantAuthorizationCheckDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ApproveAssistantAuthorizationCommand"];
+                    "text/json": components["schemas"]["ApproveAssistantAuthorizationCommand"];
+                    "application/*+json": components["schemas"]["ApproveAssistantAuthorizationCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AssistantAuthorizationRedirectDto"];
+                        "application/json": components["schemas"]["AssistantAuthorizationRedirectDto"];
+                        "text/json": components["schemas"]["AssistantAuthorizationRedirectDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit/logs": {
         parameters: {
             query?: never;
@@ -8742,6 +8815,78 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/assistants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyAssistantConnectionDto"][];
+                        "application/json": components["schemas"]["MyAssistantConnectionDto"][];
+                        "text/json": components["schemas"]["MyAssistantConnectionDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/assistants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -16893,11 +17038,33 @@ export interface components {
             addressLine: string;
             references?: string | null;
         };
+        ApproveAssistantAuthorizationCommand: {
+            responseType?: string | null;
+            clientId?: string | null;
+            redirectUri?: string | null;
+            codeChallenge?: string | null;
+            codeChallengeMethod?: string | null;
+            resource?: string | null;
+            scope?: string | null;
+            state?: string | null;
+            allow: boolean;
+        };
         AssignPlanRequest: {
             /** Format: uuid */
             planId: string;
             /** Format: int32 */
             trialDays?: number | null;
+        };
+        AssistantAuthorizationCheckDto: {
+            valid: boolean;
+            problem?: string | null;
+            errorRedirectUrl?: string | null;
+            clientName?: string | null;
+            redirectSite?: string | null;
+            redirectsToThisDevice: boolean;
+        };
+        AssistantAuthorizationRedirectDto: {
+            redirectUrl: string;
         };
         AssistantOrderDto: {
             slug: string;
@@ -19907,6 +20074,16 @@ export interface components {
          * @enum {integer}
          */
         MyAppointmentsScope: 0 | 1;
+        MyAssistantConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            name?: string | null;
+            site: string;
+            /** Format: date-time */
+            grantedAt: string;
+            /** Format: date-time */
+            lastUsedAt?: string | null;
+        };
         MyCartDto: {
             slug: string;
             businessName: string;

@@ -132,8 +132,16 @@ public static class DependencyInjection
             {
                 OnMessageReceived = context =>
                 {
-                    var accessToken = context.Request.Query["access_token"];
                     var path = context.HttpContext.Request.Path;
+                    // The MCP server's addresses never take the app's session: /mcp is anonymous and /mcp/cuenta reads the
+                    // token an assistant got with the customer's permission, with its own scheme (Fase 32E, ADR 0097).
+                    if (path.StartsWithSegments("/mcp"))
+                    {
+                        context.NoResult();
+                        return Task.CompletedTask;
+                    }
+
+                    var accessToken = context.Request.Query["access_token"];
                     if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                     {
                         context.Token = accessToken;

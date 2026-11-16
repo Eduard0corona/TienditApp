@@ -186,6 +186,18 @@ builder.Services.AddRateLimiter(options =>
 
     // The MCP server AI assistants call (Fase 32B, ADR 0096): each tool reads the database like a public page. An assistant
     // calls from the few addresses of its platform, for all its users at once: more generous, in a bucket of its own.
+    // Registering an assistant's client for the customer's account (Fase 32E, ADR 0097): an assistant registers one when a
+    // customer adds it. Its platform calls from few addresses for all its users: enough for them, not for a bot filling the table.
+    options.AddPolicy(AssistantOAuth.RegisterRateLimitPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 300 : 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
     options.AddPolicy(McpServer.RateLimitPolicy, httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
@@ -269,6 +281,8 @@ builder.Services.AddSwaggerGen(options =>
 
 // The MCP server AI assistants call (Fase 32B, ADR 0096): stateless, so any instance answers any request.
 builder.Services.AddStoreMcpServer();
+// Its account's address, /mcp/cuenta, with the access token a customer allowed (Fase 32E, ADR 0097).
+builder.Services.AddAssistantAuthentication();
 
 // SignalR
 // Live updates run in this process; with Azure:SignalR:ConnectionString they go through Azure SignalR Service,
@@ -350,6 +364,8 @@ app.MapPublicPages();
 // What an AI assistant reads to help a customer order: /llms.txt and each store's menu in Markdown (Fase 32A, ADR 0096).
 app.MapAgentPages();
 app.MapStoreMcpServer();
+// The authorization server of /mcp/cuenta: its metadata, registration, permission, tokens and revocation (Fase 32E).
+app.MapAssistantAuthorization();
 app.MapClientFallback();
 
 if (usesEphemeralJwtSecret)

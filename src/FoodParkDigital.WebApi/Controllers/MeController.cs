@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Assistants;
 using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Common.Models;
@@ -100,6 +101,19 @@ public class MeController : ControllerBase
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
+    }
+
+    /// <summary>The AI assistants connected to the customer account (Fase 32E, ADR 0097), the newest first.</summary>
+    [HttpGet("assistants")]
+    public async Task<ActionResult<List<MyAssistantConnectionDto>>> GetMyAssistants(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetMyAssistantConnectionsQuery(), cancellationToken));
+
+    /// <summary>Disconnects an assistant of the account: its tokens stop opening the account at its next request.</summary>
+    [HttpDelete("assistants/{id:guid}")]
+    public async Task<IActionResult> DisconnectMyAssistant(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DisconnectMyAssistantCommand(id), cancellationToken);
+        return result.IsSuccess ? NoContent() : this.ApiError(StatusCodes.Status404NotFound, result.Error!);
     }
 
     /// <summary>The addresses the customer account keeps for its orders (Fase 24B), the last one used first.</summary>
