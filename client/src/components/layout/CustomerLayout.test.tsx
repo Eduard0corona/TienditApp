@@ -47,6 +47,8 @@ describe('CustomerLayout', () => {
     expect(screen.getByRole('link', { name: 'Explorar' })).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('link', { name: /Mis pedidos/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Conoce TienditApp para negocios' })).toHaveAttribute('href', '/negocios');
+    // Fase 32D: how to order from an AI assistant.
+    expect(screen.getByRole('link', { name: 'Pide con tu asistente' })).toHaveAttribute('href', '/asistentes');
   });
 
   it('gives a customer its orders, its profile and a way out', async () => {

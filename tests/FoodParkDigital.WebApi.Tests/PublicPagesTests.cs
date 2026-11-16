@@ -271,6 +271,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
 
     [Theory]
     [InlineData("/explorar", "<title>Explorar · TienditApp</title>", "https://app.tienditapp.mx/explorar")]
+    [InlineData("/asistentes", "<title>Pide con tu asistente de IA · TienditApp</title>", "https://app.tienditapp.mx/asistentes")]
     [InlineData("/explorar/comida", "<title>Comida · Explorar · TienditApp</title>", "https://app.tienditapp.mx/explorar/comida")]
     [InlineData("/explorar/Ferreteria/", "<title>Ferretería y hogar · Explorar · TienditApp</title>", "https://app.tienditapp.mx/explorar/ferreteria")]
     public async Task Explorar_ShouldComeWithTheHeadOfItsPage_WithoutReadingTheStores(string path, string title, string canonical)
@@ -384,6 +385,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
             [
                 "https://app.tienditapp.mx/",
                 "https://app.tienditapp.mx/explorar",
+                "https://app.tienditapp.mx/asistentes",
                 "https://app.tienditapp.mx/explorar/comida",
                 "https://app.tienditapp.mx/explorar/belleza",
                 "https://app.tienditapp.mx/m/cafe-luna",

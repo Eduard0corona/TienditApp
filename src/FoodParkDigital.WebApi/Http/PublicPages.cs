@@ -47,6 +47,11 @@ public static class PublicPages
     /// session too (at / a session goes to its own start). The app titles its tab the same way (BusinessLandingPage).
     /// </summary>
     public const string BusinessesPath = "/negocios";
+    /// <summary>How a customer orders from their AI assistant (Fase 32D, ADR 0096): listed for search engines.</summary>
+    public const string AssistantsPath = "/asistentes";
+    private const string AssistantsTitle = "Pide con tu asistente de IA";
+    private const string AssistantsDescription =
+        "Pídele a Claude, ChatGPT u otro asistente que busque negocios en TienditApp, te muestre su menú y te prepare el pedido; tú lo envías.";
     private const string BusinessesTitle = "TienditApp para negocios: punto de venta, menú en línea y facturación";
     private const string BusinessesDescription =
         "Vende en mostrador y en línea, controla inventario y caja, recibe pedidos a domicilio y factura CFDI desde un solo lugar. Crea la cuenta de tu negocio gratis.";
@@ -99,6 +104,8 @@ public static class PublicPages
             return new PageHead(BusinessesTitle, BusinessesDescription, "/", null, false, false, null);
         if (value.Equals("/explorar", StringComparison.OrdinalIgnoreCase))
             return new PageHead($"Explorar · {SiteName}", ExploreDescription, "/explorar", null, false, true, null);
+        if (value.Equals(AssistantsPath, StringComparison.OrdinalIgnoreCase))
+            return new PageHead($"{AssistantsTitle} · {SiteName}", AssistantsDescription, AssistantsPath, null, false, true, null);
 
         const string prefix = "/explorar/";
         if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || value.IndexOf('/', prefix.Length) >= 0)
@@ -302,7 +309,7 @@ public static class PublicPages
         }
 
         var baseUrl = BaseUrl(context);
-        var paths = new List<string> { "/", "/explorar" };
+        var paths = new List<string> { "/", "/explorar", AssistantsPath };
         paths.AddRange(sitemap.Categories.Select(ExploreCategories.Of).Where(category => category is not null).Select(category => $"/explorar/{category!.Slug}"));
         foreach (var store in sitemap.Stores)
         {

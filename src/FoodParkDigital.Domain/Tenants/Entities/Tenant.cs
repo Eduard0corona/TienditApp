@@ -10,6 +10,12 @@ public class Tenant : AuditableEntity
     /// <summary>The description on its card in Explorar: one line, short enough to read at a glance.</summary>
     public const int MaxPublicDescriptionLength = 160;
 
+    /// <summary>
+    /// The slug of the platform's own business, the one the first super admin belongs to (SeedData): never a business of
+    /// Explorar, of search engines or of an assistant's search (Fase 32D), whatever its settings say.
+    /// </summary>
+    public const string PlatformSlug = "system";
+
     private Tenant() { }
 
     public Tenant(string name, string slug, BusinessType businessType, string contactEmail)

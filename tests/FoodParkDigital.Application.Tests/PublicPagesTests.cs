@@ -176,7 +176,10 @@ public class PublicPagesTests
         (await SettingsAsync(fixture, await BusinessAsync(fixture, "oculto", OnlineMenuMode.MenuOnly))).SetDirectoryListing(false);
         await BusinessAsync(fixture, "sin-menu", OnlineMenuMode.Off);
         await BusinessAsync(fixture, "vacio", OnlineMenuMode.MenuOnly, withProduct: false);
+        // The platform's own business, however it is set (Fase 32D): never for search engines.
+        await BusinessAsync(fixture, Tenant.PlatformSlug, OnlineMenuMode.Orders);
         await fixture.Context.SaveChangesAsync();
+        Assert.False((await PreviewAsync(fixture, Tenant.PlatformSlug))!.ListedInDirectory);
 
         var sitemap = await new GetPublicSitemapQueryHandler(
                 fixture.Context, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicSitemapQueryHandler>.Instance)

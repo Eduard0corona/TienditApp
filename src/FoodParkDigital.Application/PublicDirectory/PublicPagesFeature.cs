@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Tenants;
+using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -123,8 +124,9 @@ public class GetStorePreviewQueryHandler : IRequestHandler<GetStorePreviewQuery,
                 await _context.DeliveryZones.AnyAsync(zone => zone.IsActive, cancellationToken),
                 settings.OpeningHours is not null);
         // Listed as Explorar lists it (PublicDirectorySnapshot): shown there by its owner, with something to order, book
-        // or a visit to ask for.
+        // or a visit to ask for; never the platform's own business.
         var listed = settings.ListedInDirectory
+            && tenant.Slug != Tenant.PlatformSlug
             && (booksOnline || receivesVisits || await PublicDirectorySnapshot.MenuProducts(_context).AnyAsync(cancellationToken));
 
         return new StorePreviewDto

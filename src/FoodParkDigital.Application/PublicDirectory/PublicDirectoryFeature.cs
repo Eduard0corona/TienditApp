@@ -609,6 +609,7 @@ public sealed class PublicDirectorySnapshot
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(t => t.Status == TenantStatus.Active
+                && t.Slug != Tenant.PlatformSlug
                 && t.Settings != null
                 && t.Settings.OnlineMenuMode != OnlineMenuMode.Off
                 && t.Settings.ListedInDirectory

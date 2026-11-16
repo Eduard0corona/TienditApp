@@ -28,6 +28,7 @@ const PublicQuotePage = lazy(() => import('./pages/public/PublicQuotePage'));
 const AccountPage = lazy(() => import('./pages/account/AccountPage'));
 const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
 const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
+const AssistantsPage = lazy(() => import('./pages/explore/AssistantsPage'));
 const BusinessLandingPage = lazy(() => import('./pages/landing/BusinessLandingPage'));
 const ProductsList = lazy(() => import('./pages/products/ProductsList'));
 const ProductForm = lazy(() => import('./pages/products/ProductForm'));
@@ -130,6 +131,8 @@ export default function App() {
             <Route element={<CustomerLayout />}>
               <Route path="/explorar" element={<ExplorePage />} />
               <Route path="/explorar/:categoria" element={<ExplorePage />} />
+              {/* How a customer orders from their AI assistant through TienditApp's MCP server (Fase 32D, ADR 0096). */}
+              <Route path="/asistentes" element={<AssistantsPage />} />
               {/* The link of an online order's receipt (/seguimiento#link): no sign-in, the link is in the fragment. */}
               <Route path="/seguimiento" element={<OrderTrackingPage />} />
               {/* The link of an appointment booked online (/cita#link, Fase 24D), the same way. */}

@@ -286,7 +286,8 @@ internal static class DirectoryProfile
         CancellationToken cancellationToken,
         Func<CancellationToken, Task<PublicDirectorySnapshot.Entry?>>? readEntry = null)
     {
-        var listed = settings?.ListedInDirectory ?? true;
+        // The platform's own business is never listed (Fase 32D): it reads as hidden, whatever its switch says.
+        var listed = (settings?.ListedInDirectory ?? true) && tenant.Slug != Tenant.PlatformSlug;
         var visibility = tenant.Status != TenantStatus.Active ? DirectoryVisibility.Inactive
             : settings is null || settings.OnlineMenuMode == OnlineMenuMode.Off ? DirectoryVisibility.MenuOff
             : !listed ? DirectoryVisibility.HiddenByOwner
