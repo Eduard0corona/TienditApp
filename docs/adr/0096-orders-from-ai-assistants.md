@@ -1,6 +1,6 @@
 # ADR 0096: Pedidos desde asistentes de IA
 
-- Estado: Aceptada en la Fase 32A (2026-11-15). Los pasos 1 (Fase 32A) y 2 (Fase 32B) están hechos; el paso 3 es el plan.
+- Estado: Aceptada en la Fase 32A (2026-11-15). Los pasos 1 (Fase 32A), 2 (Fase 32B) y 3 (Fase 32E, [ADR 0097](0097-assistant-with-the-customer-account.md)) están hechos.
 - Fecha: 2026-11-15
 - Continúa: [ADR 0027](0027-search-engines-and-link-previews.md) (lo que leen los buscadores y las vistas previas), [ADR 0021](0021-business-directory.md) (Explorar) y [ADR 0090](0090-account-cart-and-postal-code.md) (el carrito en la cuenta).
 
@@ -50,7 +50,7 @@ Tres pasos, del que sirve a cualquier asistente al que da más a los que aceptan
    - **Configuración › Tienda en línea › «Recibir pedidos desde asistentes de IA»**, junto al modo del menú cuando recibe pedidos. **Encendida por omisión**, también para los negocios que ya existen (la columna nueva vale 1). Apagada, `preparar_pedido` no prepara pedidos de ese negocio y `ver_menu` dice que el cliente pida en su página; el menú en texto y su enlace `?agregar=` siguen, porque el cliente envía el pedido él mismo. El cambio queda en la actividad del negocio.
    - **Limpieza:** cada hora, un servicio borra, de todos los negocios y de 500 en 500, los pedidos por confirmar cuyo enlace venció hace más de 7 días, enviados o no. El pedido enviado es del negocio y se queda.
    - **Migración** `AddAssistantOrders`: `TenantSettings.AssistantOrders` (bit, 1 por omisión) y la tabla `AssistantOrders` con sus llaves sin cascada al negocio y al pedido, el token único, un pedido enviado una sola vez y restricciones para lo que el agregado nunca escribe. **Su rollback se detiene (error 50064) sin cambiar nada** mientras un negocio la haya apagado, haya un pedido enviado o un enlace abierto.
-3. **Paso 3 (después): con la cuenta del cliente.** El asistente pide a nombre de una cuenta de cliente (OAuth): sus direcciones, Mis pedidos, «Pedir otra vez» y favoritos. Y ACP o UCP cuando lleguen a México con un medio de pago que sirva.
+3. **Paso 3 (Fase 32E, con migración): con la cuenta del cliente.** El mismo servidor en `/mcp/cuenta`, con OAuth: el cliente da permiso en TienditApp y el asistente conoce sus direcciones, sus pedidos y sus favoritos, y le prepara otra vez un pedido anterior; sigue sin enviar nada. El diseño está en la [ADR 0097](0097-assistant-with-the-customer-account.md). Queda para después ACP o UCP, cuando lleguen a México con un medio de pago que sirva.
 
 ## Consecuencias
 
@@ -81,4 +81,5 @@ Tres pasos, del que sirve a cualquier asistente al que da más a los que aceptan
 - **Fase 32D:**
   - **`/asistentes`** («Pide con tu asistente de IA»), en el marco de Explorar y con su enlace en el pie de esas pantallas, le dice a la gente cómo usar el servidor: la dirección para copiar, los pasos en Claude (Customize › Connectors, «No sign-in») y Claude Code, ChatGPT y otros que acepten conectores, qué hacer con un asistente que no los acepta (la página del negocio y su menú en texto), ejemplos de qué pedirle y lo que el asistente no hace. Va en el mapa del sitio y `llms.txt` la nombra.
   - **El negocio de la plataforma** (`system`, el del primer super admin) nunca sale en Explorar, en la búsqueda de productos, en `buscar_negocios`, en el mapa del sitio ni como listado en la vista previa de su tienda, diga lo que diga su opción; su dueño lo ve oculto. Antes aparecía en las búsquedas de los asistentes.
+- **Fase 32E (paso 3):** `/mcp/cuenta`, la autorización OAuth en la app, la pantalla de permiso `/autorizar`, «Asistentes conectados» en Mi cuenta y las herramientas `mis_direcciones`, `mis_pedidos`, `mis_favoritos` y `pedir_otra_vez`; `/asistentes` da las dos direcciones. Ver la [ADR 0097](0097-assistant-with-the-customer-account.md).
 - **Reversibilidad:** el paso 1 no tiene migración: volver a la versión anterior a la 32A quita `/llms.txt`, `/m/{slug}/menu.md`, el `alternate` y el `noscript`, y un enlace con `?agregar=` abre la tienda sin llenar el carrito. El paso 2 sí: la versión anterior funciona sobre la base migrada (no conoce la columna, que tiene su valor por omisión, ni la tabla), así que se puede volver al código anterior sin `rollback.sql`; `/mcp` deja de existir y un enlace `#pedido=` abre la tienda sin llenar el carrito. `rollback.sql` se detiene mientras haya algo que se perdería (consulta 2 de su `verify.sql`).

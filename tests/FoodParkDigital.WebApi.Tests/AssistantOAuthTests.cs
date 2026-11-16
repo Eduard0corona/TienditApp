@@ -16,7 +16,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// </summary>
 public sealed class AssistantOAuthTests : IClassFixture<PublicPagesTests.PagesApi>
 {
-    private const string Base = "https://app.tienditapp.mx";
+    // The address the request came to, not the configured AppUrl (https://app.tienditapp.mx): Development, so http.
+    private const string Base = "http://localhost";
     private const string AccessToken = "access-access-access-access-access-access-a";
 
     private readonly PublicPagesTests.PagesApi _api;

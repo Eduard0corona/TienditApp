@@ -3,7 +3,6 @@ using System.Text.Encodings.Web;
 using FoodParkDigital.Application.Assistants;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Assistants.Entities;
-using FoodParkDigital.WebApi.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
@@ -28,7 +27,7 @@ public static class AssistantAuthentication
     public static bool IsAccount(ClaimsPrincipal? user) => user?.Identity is { IsAuthenticated: true, AuthenticationType: Scheme };
 
     /// <summary>Where an assistant reads how to get a token for /mcp/cuenta.</summary>
-    public static string ResourceMetadataUrl(HttpContext context) => PublicPages.BaseUrl(context) + AssistantOAuth.ProtectedResourcePath;
+    public static string ResourceMetadataUrl(HttpContext context) => AssistantOAuth.OriginOf(context) + AssistantOAuth.ProtectedResourcePath;
 
     public static IServiceCollection AddAssistantAuthentication(this IServiceCollection services)
     {
@@ -92,7 +91,7 @@ public sealed class AssistantTokenHandler : AuthenticationHandler<Authentication
     }
 }
 
-/// <summary>The account's MCP server at this app's public address: what every code and token is for.</summary>
+/// <summary>The account's MCP server at the address of this request (<see cref="AssistantOAuth.OriginOf"/>): what every code and token is for.</summary>
 public sealed class AssistantAccountServer : IAssistantAccountServer
 {
     private readonly IHttpContextAccessor _http;
@@ -103,6 +102,6 @@ public sealed class AssistantAccountServer : IAssistantAccountServer
     }
 
     public string Resource => _http.HttpContext is { } context
-        ? PublicPages.BaseUrl(context) + McpServer.AccountPath
+        ? AssistantOAuth.OriginOf(context) + McpServer.AccountPath
         : throw new InvalidOperationException("The account's MCP server is only known within a request.");
 }

@@ -1195,6 +1195,20 @@ La Fase 32B trae una migración, [`database/production/20261115151611_AddAssista
 - **Volver a la versión anterior:** funciona sin tocar la base. `/mcp` deja de existir y un enlace `#pedido=` abre la tienda sin llenar el carrito; lo guardado se queda.
 - **Dejar también la base como estaba:** el `rollback.sql` borra la tabla y la columna, y se detiene con el error 50064, sin cambiar nada, mientras un negocio haya apagado la opción, haya un pedido enviado desde un asistente o un enlace abierto (consulta 2 del `verify.sql`, que dice cómo quitarlos solo si se decide perderlos).
 
+## El asistente con la cuenta del cliente: OAuth y /mcp/cuenta (Fase 32E)
+
+La Fase 32E trae una migración, [`database/production/20261116030110_AddAssistantConnections`](../../database/production/20261116030110_AddAssistantConnections). Su `apply.sql` va antes del merge ([ADR 0097](../adr/0097-assistant-with-the-customer-account.md)).
+
+- **La migración:** cuatro tablas nuevas, vacías: `AssistantClients` (las aplicaciones de los asistentes que se registran), `AssistantAuthorizationCodes` (los códigos del permiso, solo su hash), `AssistantConnections` (los asistentes que cada cuenta conectó) y `AssistantTokens` (sus tokens, solo su hash), con sus llaves a `AspNetUsers` en cascada, sus índices y sus restricciones. No toca tablas que existen ni cambia datos.
+- **Candados:** crear tablas no bloquea a la app; las llaves a `AspNetUsers` toman un candado breve sobre ella. Con `sqlcmd ... -b -t 15 -i apply.sql`, como siempre.
+- **El servidor:** `/mcp/cuenta` es el mismo servidor MCP con el límite `assistant`; sin un token de acceso válido responde 401 con `WWW-Authenticate` y la dirección de sus metadatos. La autorización vive en la app: `/.well-known/oauth-protected-resource/mcp/cuenta`, `/.well-known/oauth-authorization-server`, `/oauth/authorize`, `/oauth/token` y `/oauth/revoke` (límite `assistant`) y `/oauth/register` (límite propio `assistant-register`: 60 por minuto por dirección). Ninguna sale en `openapi.json`. El emisor y el recurso son la dirección a la que llega cada petición (no `AppUrl`): conectarse por el dominio público, por el de Azure o por un slot funciona igual.
+- **El worker:** un servicio borra una vez al día los tokens y códigos vencidos hace más de 7 días, las conexiones desconectadas hace más de 30 y los clientes registrados hace más de 7 días que ninguna cuenta conectó; corre en cada instancia (las pasadas a la vez borran lo mismo).
+- **Mientras se publica:** la versión de `master` (la 32D) no conoce las tablas; no tiene `/mcp/cuenta` ni `/oauth/*` (sus `/.well-known` responden 404).
+- **Sin `apply.sql`:** a la versión nueva le falta una migración, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva.** Los tokens se generan con 32 bytes al azar y se guardan como SHA-256: no hay llave que guardar ni rotar.
+- **Volver a la versión anterior:** funciona sin tocar la base. Los asistentes conectados dejan de entrar (su servidor y sus endpoints ya no existen) y vuelven cuando regrese esta versión, con sus tokens si no vencieron.
+- **Dejar también la base como estaba:** el `rollback.sql` borra las cuatro tablas, y se detiene con el error 50065, sin cambiar nada, mientras un cliente tenga un asistente conectado (consulta 2 del `verify.sql`, que dice cómo desconectarlos solo si se decide).
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

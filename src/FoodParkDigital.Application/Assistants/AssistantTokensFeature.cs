@@ -120,6 +120,12 @@ public class ExchangeAssistantTokenCommandHandler : IRequestHandler<ExchangeAssi
         if (!await IsActiveCustomerAsync(code.UserId, cancellationToken))
             return AssistantTokensDto.Refused(OAuthErrors.InvalidGrant, InvalidCodeMessage);
 
+        // Permissions given before any was exchanged do not pass the account's limit either.
+        var connected = await _context.AssistantConnections.CountAsync(
+            c => c.UserId == code.UserId && c.RevokedAt == null && c.ClientId != code.ClientId, cancellationToken);
+        if (connected >= AssistantConnection.MaxActivePerAccount)
+            return AssistantTokensDto.Refused(OAuthErrors.InvalidGrant, AssistantConnection.TooManyMessage);
+
         // Allowing the same assistant again replaces its connection; the database keeps one working per account and assistant.
         var previous = await _context.AssistantConnections
             .Where(c => c.UserId == code.UserId && c.ClientId == code.ClientId && c.RevokedAt == null)

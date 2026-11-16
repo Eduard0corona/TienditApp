@@ -67,6 +67,10 @@ public class AssistantAuthorizationFlowTests
         // Without a scope or a resource it is the account and this server; on this device, any port.
         var desktop = await Check(fixture, Request(clientId) with { Scope = null, Resource = null, RedirectUri = "http://127.0.0.1:50000/callback" });
         Assert.Equal((true, "127.0.0.1:50000", true), (desktop.Valid, desktop.RedirectSite, desktop.RedirectsToThisDevice));
+        // A name in other letters is shown as the DNS knows it: one that looks like another site cannot pass for it.
+        Assert.Equal("xn--bcher-kva.example", AssistantAuthorization.SiteOf("https://bücher.example/cb"));
+        Assert.Equal("claude.ai:8443", AssistantAuthorization.SiteOf("https://claude.ai:8443/cb"));
+        Assert.Equal("[::1]:8080", AssistantAuthorization.SiteOf("http://[::1]:8080/cb"));
 
         // The client or its address wrong: said here, never sent anywhere.
         var unknown = await Check(fixture, Request(new string('z', 43)));
@@ -130,6 +134,18 @@ public class AssistantAuthorizationFlowTests
         var inactive = await CustomerAsync(fixture, active: false);
         Assert.Equal(AssistantAuthorization.CustomersOnlyMessage,
             (await Approve(fixture).Handle(Approval(clientId, allow: true), CancellationToken.None)).Error);
+
+        // A code given while there was room is not exchanged once the account is full.
+        var account0 = await CustomerAsync(fixture);
+        var early = await AllowAsync(fixture, clientId);
+        var full = Enumerable.Range(0, AssistantConnection.MaxActivePerAccount)
+            .Select(i => AssistantClient.Register(AssistantAuthorization.NewSecret(), $"Lleno {i}", [Callback], SalesTestFixture.Now))
+            .ToList();
+        fixture.Context.AssistantClients.AddRange(full);
+        fixture.Context.AssistantConnections.AddRange(full.Select(c => AssistantConnection.Grant(account0, c.Id, "cuenta", SalesTestFixture.Now)));
+        await fixture.Context.SaveChangesAsync();
+        var late = await ExchangeAsync(fixture, CodeExchange(early, clientId));
+        Assert.Equal((OAuthErrors.InvalidGrant, AssistantConnection.TooManyMessage), (late.Error, late.ErrorDescription));
 
         // Twenty connected: a new one waits until one is disconnected; the same one again replaces itself.
         var account = await CustomerAsync(fixture);

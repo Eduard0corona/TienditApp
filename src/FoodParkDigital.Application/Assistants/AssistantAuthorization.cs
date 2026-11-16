@@ -70,8 +70,17 @@ public static class AssistantAuthorization
         return asked.All(s => s is AssistantConnection.AccountScope or OfflineAccessScope) ? AssistantConnection.AccountScope : null;
     }
 
-    /// <summary>The site a redirect_uri goes to, as the permission page shows it: its host, and its port if it has one.</summary>
-    public static string SiteOf(string redirectUri) => new Uri(redirectUri).Authority;
+    /// <summary>
+    /// The site a redirect_uri goes to, as the permission page shows it: its host, and its port if it is not the default one.
+    /// A name with letters of other alphabets is shown as the DNS knows it (punycode, «xn--…»): one that only looks like
+    /// another site cannot pass for it.
+    /// </summary>
+    public static string SiteOf(string redirectUri)
+    {
+        var uri = new Uri(redirectUri);
+        var host = uri.HostNameType == UriHostNameType.Dns ? uri.IdnHost : uri.Host;
+        return uri.IsDefaultPort ? host : $"{host}:{uri.Port}";
+    }
 
     /// <summary>Whether a redirect_uri goes to this device (http to localhost): a desktop app, or anything running on it.</summary>
     public static bool IsThisDevice(string redirectUri) => new Uri(redirectUri).Scheme == Uri.UriSchemeHttp;

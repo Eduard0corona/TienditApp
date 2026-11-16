@@ -1,7 +1,6 @@
 using System.Text.Json;
 using FoodParkDigital.Application.Assistants;
 using FoodParkDigital.Domain.Assistants.Entities;
-using FoodParkDigital.WebApi.Http;
 using MediatR;
 using Microsoft.AspNetCore.Http.Features;
 
@@ -43,6 +42,17 @@ public static class AssistantOAuth
     private static readonly string[] ResponseTypes = [AssistantAuthorization.ResponseType];
     private static readonly string[] AuthMethods = [AssistantAuthorization.ClientAuthenticationMethod];
 
+    /// <summary>
+    /// The issuer and the resource are this request's own address, not the configured AppUrl: an MCP client checks that the
+    /// metadata names the address it used (RFC 8414 and 9728), so the public domain, Azure's and a staging slot each work.
+    /// Always https outside Development.
+    /// </summary>
+    public static string OriginOf(HttpContext context)
+    {
+        var development = context.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment();
+        return $"{(development ? context.Request.Scheme : Uri.UriSchemeHttps)}://{context.Request.Host.Value}";
+    }
+
     public static void MapAssistantAuthorization(this WebApplication app)
     {
         app.MapGet(ProtectedResourcePath, ProtectedResource).RequireRateLimiting(McpServer.RateLimitPolicy).ExcludeFromDescription();
@@ -56,7 +66,7 @@ public static class AssistantOAuth
     /// <summary>RFC 9728: the account's MCP server, who issues its tokens and its only scope.</summary>
     private static IResult ProtectedResource(HttpContext context)
     {
-        var baseUrl = PublicPages.BaseUrl(context);
+        var baseUrl = OriginOf(context);
         return Answer(context, new
         {
             Resource = baseUrl + McpServer.AccountPath,
@@ -71,7 +81,7 @@ public static class AssistantOAuth
     /// <summary>RFC 8414: its endpoints and what it supports — the code flow with PKCE S256, for public clients.</summary>
     private static IResult AuthorizationServer(HttpContext context)
     {
-        var baseUrl = PublicPages.BaseUrl(context);
+        var baseUrl = OriginOf(context);
         return Answer(context, new
         {
             Issuer = baseUrl,
