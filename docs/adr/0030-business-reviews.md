@@ -59,7 +59,7 @@ Una reseña es texto que escribe un cliente sobre un negocio y que ve cualquiera
   - La plataforma tiene una cola con lo que los negocios reportan y deja registro de lo que decide.
 - **Lo que limita:**
   - **Sin respaldo de una compra concreta:** la reseña es del negocio, no de un pedido. Quien compró una vez hace un año puede reseñar hoy.
-  - **Sin aviso:** el negocio no recibe un mensaje cuando llega una reseña, y la plataforma tampoco cuando hay un reporte; se ven al abrir sus pantallas.
+  - **Sin aviso:** el negocio no recibe un mensaje cuando llega una reseña, y la plataforma tampoco cuando hay un reporte; se ven al abrir sus pantallas. (Desde la Fase 31K cada reseña nueva llega por correo al negocio, [ADR 0091](0091-online-order-reminder-and-review-emails.md), y desde la 32F cada reporte a los administradores de la plataforma, [ADR 0098](0098-review-report-email-to-the-platform.md).)
   - **Sin fotos** en las reseñas, ni calificación por producto.
   - **Autorreseñas:** el dueño de un negocio puede abrir una cuenta de cliente con otro correo, comprarse a sí mismo y reseñarse.
     - **Qué lo frena hoy:** pide un pedido entregado o una cita completada, y solo una reseña por cuenta.

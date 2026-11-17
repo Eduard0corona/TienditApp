@@ -133,7 +133,8 @@ public partial class BusinessReview : AuditableEntity, IAggregateRoot, ITenantSc
 
     /// <summary>
     /// The business asks the platform to look at it. It stays published meanwhile: a business never takes down what a
-    /// customer said. One the platform kept is reported again only after its author changes it.
+    /// customer said. One the platform kept is reported again only after its author changes it. The platform is told
+    /// (<see cref="BusinessReviewReportedEvent"/>, Fase 32F, ADR 0098).
     /// </summary>
     public void Report(ReviewConcern reason, DateTimeOffset now)
     {
@@ -148,6 +149,7 @@ public partial class BusinessReview : AuditableEntity, IAggregateRoot, ITenantSc
 
         ReportedAt = now;
         ReportReason = reason;
+        AddDomainEvent(new BusinessReviewReportedEvent(Id, TenantId));
     }
 
     /// <summary>The platform takes it down: out of the store and of the average. Its author sees why.</summary>
