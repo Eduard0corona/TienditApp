@@ -1,6 +1,7 @@
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Assistants.Entities;
 using FoodParkDigital.Domain.Billing.Entities;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
@@ -52,6 +53,10 @@ public interface IApplicationDbContext
     DbSet<OnlinePaymentAuthorization> OnlinePaymentAuthorizations { get; }
     DbSet<OnlineCheckout> OnlineCheckouts { get; }
     DbSet<AssistantOrder> AssistantOrders { get; }
+    DbSet<AssistantClient> AssistantClients { get; }
+    DbSet<AssistantAuthorizationCode> AssistantAuthorizationCodes { get; }
+    DbSet<AssistantConnection> AssistantConnections { get; }
+    DbSet<AssistantToken> AssistantTokens { get; }
     DbSet<OnlinePaymentRefund> OnlinePaymentRefunds { get; }
     DbSet<OrderInvoice> OrderInvoices { get; }
     DbSet<InvoicingProfile> InvoicingProfiles { get; }

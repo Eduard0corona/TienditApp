@@ -3,17 +3,21 @@ using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Delivery;
+using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -476,6 +480,51 @@ public class AssistantOrdersTests
             error => error.ErrorMessage == "Una opción no tiene un id válido.");
     }
 
+    [Fact]
+    public async Task Reorder_ShouldPrepare_WhatTheMenuTakesToday_OfAnOrderOfTheAccount_AndSayWhatNot()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (_, latte, grande, concha) = await StoreAsync(fixture);
+        var account = new ApplicationUser
+        {
+            Id = Guid.NewGuid(), UserName = "cliente@demo.com", Email = "cliente@demo.com", FirstName = "Ana", LastName = "López",
+            Role = UserRole.Customer, IsActive = true
+        };
+        fixture.Context.Users.Add(account);
+        await fixture.Context.SaveChangesAsync();
+        fixture.CurrentUser.UserId = account.Id.ToString();
+        fixture.CurrentUser.Role = "CUSTOMER";
+        var placed = await OrderHandler(fixture).Handle(OrderOf(latte, grande) with
+        {
+            Items =
+            [
+                new CreateOrderItemDto { ProductId = latte.Id, Quantity = 2, OptionIds = [grande], Notes = "sin azúcar" },
+                new CreateOrderItemDto { ProductId = concha.Id, Quantity = 1 }
+            ]
+        }, CancellationToken.None);
+        Assert.True(placed.IsSuccess, placed.Error);
+        var orderId = (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.CustomerUserId == account.Id)).Id;
+        // The concha left the menu since; the latte costs more today.
+        concha.SetAvailability(false);
+        await fixture.Context.SaveChangesAsync();
+
+        var result = await ReorderHandler(fixture).Handle(
+            new PrepareAssistantReorderCommand { OrderId = orderId, Source = "Claude" }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var line = Assert.Single(result.Value!.Order.Lines);
+        Assert.Equal((latte.Id, 2, "sin azúcar", "Grande"), (line.ProductId, line.Quantity, line.Notes, Assert.Single(line.Options)));
+        Assert.StartsWith("Concha: ", Assert.Single(result.Value.Left));
+        var kept = await fixture.Context.AssistantOrders.IgnoreQueryFilters().SingleAsync();
+        Assert.Equal((result.Value.Order.Token, "Claude"), (kept.Token, kept.Source));
+
+        // Another account's order is not found, nor is one that does not exist.
+        fixture.CurrentUser.UserId = Guid.NewGuid().ToString();
+        Assert.Equal(PrepareAssistantReorderCommandHandler.NotFoundMessage, (await ReorderHandler(fixture).Handle(
+            new PrepareAssistantReorderCommand { OrderId = orderId }, CancellationToken.None)).Error);
+        Assert.Equal(1, await fixture.Context.AssistantOrders.IgnoreQueryFilters().CountAsync());
+    }
+
     private static async Task<(Tenant Tenant, Product Latte, Guid Grande, Product Concha)> StoreAsync(
         SalesTestFixture fixture, bool openDrawer = true)
     {
@@ -531,6 +580,30 @@ public class AssistantOrdersTests
 
     private static PrepareAssistantOrderCommandHandler PrepareHandler(SalesTestFixture fixture)
         => new(fixture.Context, fixture.TenantService, new AssistantOrdersLock(fixture.Context), fixture.Clock);
+
+    private static PrepareAssistantReorderCommandHandler ReorderHandler(SalesTestFixture fixture)
+        => new(new Dispatcher(fixture));
+
+    /// <summary>Sends what «pedir otra vez» asks to the handlers it reaches, as the pipeline would.</summary>
+    private sealed class Dispatcher(SalesTestFixture fixture) : ISender
+    {
+        public async Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
+            => request switch
+            {
+                GetMyOrderQuery query => (TResponse)(object)(await new GetMyOrderQueryHandler(fixture.Context, fixture.CurrentUser, fixture.Clock)
+                    .Handle(query, cancellationToken))!,
+                PrepareAssistantOrderCommand command => (TResponse)(object)await PrepareHandler(fixture).Handle(command, cancellationToken),
+                _ => throw new NotSupportedException(request.GetType().Name)
+            };
+
+        public Task Send<TRequest>(TRequest request, CancellationToken cancellationToken = default) where TRequest : IRequest
+            => throw new NotSupportedException();
+        public Task<object?> Send(object request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public IAsyncEnumerable<TResponse> CreateStream<TResponse>(IStreamRequest<TResponse> request, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+    }
 
     private static GetAssistantOrderQueryHandler GetHandler(SalesTestFixture fixture)
         => new(fixture.Context, fixture.TenantService, fixture.Clock);

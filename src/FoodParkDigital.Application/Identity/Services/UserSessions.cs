@@ -37,14 +37,28 @@ public static class UserSessions
         CancellationToken cancellationToken) =>
         RevokeAsync(context, context.RefreshTokens.Where(t => t.SessionId == sessionId), reason, now, cancellationToken);
 
-    /// <summary>Ends every session of the account and saves.</summary>
-    public static Task EndAllAsync(
+    /// <summary>
+    /// Ends every session of the account and saves. The AI assistants connected to it end too (Fase 32E, ADR 0097), and
+    /// the codes it gave that no assistant exchanged yet are deleted: whoever had the account's password cannot keep reading
+    /// it through an assistant they connected.
+    /// </summary>
+    public static async Task EndAllAsync(
         IApplicationDbContext context,
         Guid userId,
         RefreshTokenRevocationReason reason,
         DateTimeOffset now,
-        CancellationToken cancellationToken) =>
-        RevokeAsync(context, context.RefreshTokens.Where(t => t.UserId == userId), reason, now, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        var assistants = await context.AssistantConnections
+            .Where(c => c.UserId == userId && c.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+        assistants.ForEach(c => c.Revoke(now));
+        context.AssistantAuthorizationCodes.RemoveRange(await context.AssistantAuthorizationCodes
+            .Where(c => c.UserId == userId && c.RedeemedAt == null)
+            .ToListAsync(cancellationToken));
+
+        await RevokeAsync(context, context.RefreshTokens.Where(t => t.UserId == userId), reason, now, cancellationToken);
+    }
 
     private static async Task RevokeAsync(
         IApplicationDbContext context,

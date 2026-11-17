@@ -26,6 +26,7 @@ const SelfInvoicePage = lazy(() => import('./pages/public/SelfInvoicePage'));
 const PublicCfdiPage = lazy(() => import('./pages/public/PublicCfdiPage'));
 const PublicQuotePage = lazy(() => import('./pages/public/PublicQuotePage'));
 const AccountPage = lazy(() => import('./pages/account/AccountPage'));
+const AuthorizeAssistantPage = lazy(() => import('./pages/assistants/AuthorizeAssistantPage'));
 const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
 const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
 const AssistantsPage = lazy(() => import('./pages/explore/AssistantsPage'));
@@ -105,6 +106,16 @@ export default function App() {
             <Route path="/confirm-email" element={<ConfirmEmail />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            {/* The permission an AI assistant asks to use the customer's account (Fase 32E, ADR 0097): /oauth/authorize sends
+                the browser here; without a session, the sign-in comes back with the same request. */}
+            <Route
+              path="/autorizar"
+              element={(
+                <ProtectedRoute>
+                  <AuthorizeAssistantPage />
+                </ProtectedRoute>
+              )}
+            />
             {/* The link of an invitation to a team (from the email or shared by WhatsApp). */}
             <Route path="/aceptar-invitacion" element={<AcceptInvitation />} />
             {/* TienditApp presented to whoever has a business: what it does and how to join. A visitor sees it at /;

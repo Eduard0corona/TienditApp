@@ -8,6 +8,7 @@ using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Infrastructure.BackgroundJobs.AssistantAuthorization;
 using FoodParkDigital.Infrastructure.BackgroundJobs.AssistantOrders;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Billing;
@@ -131,8 +132,16 @@ public static class DependencyInjection
             {
                 OnMessageReceived = context =>
                 {
-                    var accessToken = context.Request.Query["access_token"];
                     var path = context.HttpContext.Request.Path;
+                    // The MCP server's addresses never take the app's session: /mcp is anonymous and /mcp/cuenta reads the
+                    // token an assistant got with the customer's permission, with its own scheme (Fase 32E, ADR 0097).
+                    if (path.StartsWithSegments("/mcp"))
+                    {
+                        context.NoResult();
+                        return Task.CompletedTask;
+                    }
+
+                    var accessToken = context.Request.Query["access_token"];
                     if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                     {
                         context.Token = accessToken;
@@ -193,6 +202,7 @@ public static class DependencyInjection
             services.AddHostedService<SubscriptionStatusWorkerService>();
             services.AddHostedService<OnlinePaymentsWorkerService>();
             services.AddHostedService<AssistantOrdersCleanupService>();
+            services.AddHostedService<AssistantAuthorizationCleanupService>();
             services.AddHostedService<InvoicingWorkerService>();
             services.AddHostedService<PrivateFilesMigrationService>();
         }
@@ -207,6 +217,7 @@ public static class DependencyInjection
         services.AddScoped<IInvoicingLock, InvoicingLock>();
         services.AddScoped<IQuoteSendingLock, QuoteSendingLock>();
         services.AddScoped<IAssistantOrdersLock, AssistantOrdersLock>();
+        services.AddScoped<IAssistantAuthorizationLock, AssistantAuthorizationLock>();
         services.AddScoped<IInventoryLocationLock, InventoryLocationLock>();
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();

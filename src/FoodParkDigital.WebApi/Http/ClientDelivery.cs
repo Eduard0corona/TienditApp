@@ -93,10 +93,13 @@ public static class ClientDelivery
                 return Task.CompletedTask;
             }
 
-            // The MCP server answers POST only: stateless, it opens no stream for a GET and has no session to close with a
-            // DELETE, and the spec asks for 405 then. Nothing under its address is a screen of the app.
+            // The MCP server answers POST only, at /mcp and at /mcp/cuenta: stateless, it opens no stream for a GET and has no
+            // session to close with a DELETE, and the spec asks for 405 then. Nothing under its address is a screen of the app.
             if (path.StartsWithSegments(McpServer.Path, out var rest))
             {
+                // What follows the address of the server it names, the anonymous one or the account's.
+                if (path.StartsWithSegments(McpServer.AccountPath, out var accountRest))
+                    rest = accountRest;
                 if (rest.HasValue && rest != "/")
                 {
                     context.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -107,8 +110,9 @@ public static class ClientDelivery
                 return Task.CompletedTask;
             }
 
-            // The app publishes no discovery document: an MCP client looking for how to sign in (OAuth metadata), or any
-            // other service looking for one, must find there is none, not a page it cannot read.
+            // The app publishes only the OAuth metadata of /mcp/cuenta (AssistantOAuth, mapped before this): an MCP client
+            // looking for any other discovery document, or any other service looking for one, must find there is none, not a
+            // page it cannot read.
             if (path.StartsWithSegments("/.well-known"))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;

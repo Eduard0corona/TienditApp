@@ -11,6 +11,8 @@ import AccountPage from './AccountPage';
 
 // The title of the customer's frame only: its section tabs read the business, which a customer has none of.
 vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
+// Its assistants are their own card (ConnectedAssistantsCard.test.tsx).
+vi.mock('./ConnectedAssistantsCard', () => ({ default: () => null }));
 vi.mock('../../api/accountApi', () => ({
   MAX_ACCOUNT_ADDRESSES: 10,
   accountApi: { getAddresses: vi.fn(), saveAddress: vi.fn(), updateAddress: vi.fn(), deleteAddress: vi.fn() },

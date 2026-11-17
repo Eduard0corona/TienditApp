@@ -1,3 +1,5 @@
+using FoodParkDigital.Application.Assistants;
+using FoodParkDigital.Application.Customers;
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -587,6 +589,11 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         public PublicDeliveryQuoteDto? DeliveryQuote { get; set; }
         public Result<PreparedAssistantOrderDto> Prepared { get; set; } = Result.Failure<PreparedAssistantOrderDto>("Sin preparar.");
         public AssistantOrderDto? AssistantOrder { get; set; }
+        /// <summary>Who an assistant's access token is (Fase 32E): none by default, so /mcp/cuenta answers 401.</summary>
+        public AssistantIdentityDto? AssistantIdentity { get; set; }
+        public List<AccountAddressDto> Addresses { get; set; } = [];
+        /// <summary>What registering an assistant's client answers (Fase 32E).</summary>
+        public RegisteredAssistantClientDto? RegisteredClient { get; set; }
         public Exception? Failure { get; set; }
         public List<object> Requests { get; } = [];
 
@@ -599,6 +606,9 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
             DeliveryQuote = null;
             Prepared = Result.Failure<PreparedAssistantOrderDto>("Sin preparar.");
             AssistantOrder = null;
+            AssistantIdentity = null;
+            Addresses = [];
+            RegisteredClient = null;
             Failure = null;
             Requests.Clear();
         }
@@ -617,6 +627,9 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
                 GetPublicDeliveryQuoteQuery => DeliveryQuote,
                 PrepareAssistantOrderCommand => Prepared,
                 GetAssistantOrderQuery => AssistantOrder,
+                AuthenticateAssistantCommand => AssistantIdentity,
+                GetMyAddressesQuery => Addresses,
+                RegisterAssistantClientCommand => RegisteredClient,
                 _ => throw new NotSupportedException($"Unexpected request {request.GetType().Name}.")
             };
             return Task.FromResult((TResponse)response!);

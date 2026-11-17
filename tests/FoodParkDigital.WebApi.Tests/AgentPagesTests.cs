@@ -51,6 +51,9 @@ public sealed class AgentPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Contains("Nunca pidas datos de tarjeta", text);
         // Fase 32B: the MCP server, for an assistant that takes one.
         Assert.Contains("`https://app.tienditapp.mx/mcp` (Streamable HTTP, sin cuenta)", text);
+        // Fase 32E: the same server with the customer's account, which takes OAuth.
+        Assert.Contains("Con la cuenta del cliente, el mismo servidor está en `https://app.tienditapp.mx/mcp/cuenta` (OAuth 2.1", text);
+        Assert.Contains("`pedir_otra_vez`", text);
         // Fase 32D: and the page that tells people how to add it.
         Assert.Contains("Cómo agregarlo a un asistente, para personas: https://app.tienditapp.mx/asistentes.", text);
         Assert.Contains("`preparar_pedido`", text);

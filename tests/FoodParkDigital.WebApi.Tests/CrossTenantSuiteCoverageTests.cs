@@ -17,6 +17,7 @@ public class CrossTenantSuiteCoverageTests
 {
     private static readonly Dictionary<string, string> OutsideTheSuite = new(StringComparer.Ordinal)
     {
+        [nameof(AssistantAuthorizationsController)] = "El permiso de un asistente de IA es de la cuenta del cliente (Fase 32E): no tiene datos de un negocio.",
         [nameof(PasswordRecoveryController)] = "Recuperar la contraseña es de la cuenta y anónimo: no tiene datos de un negocio.",
         [nameof(ProfileController)] = "El perfil es de la cuenta (datos, avatar, teléfono, contraseña y el WhatsApp de sus códigos): no tiene datos de un negocio.",
         [nameof(TwoFactorController)] = "El 2FA es de la cuenta: no tiene datos de un negocio."

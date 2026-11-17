@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Assistants.Entities;
 using FoodParkDigital.Domain.Billing.Entities;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
@@ -173,6 +174,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OnlinePaymentAuthorization> OnlinePaymentAuthorizations => Set<OnlinePaymentAuthorization>();
     public DbSet<OnlineCheckout> OnlineCheckouts => Set<OnlineCheckout>();
     public DbSet<AssistantOrder> AssistantOrders => Set<AssistantOrder>();
+    public DbSet<AssistantClient> AssistantClients => Set<AssistantClient>();
+    public DbSet<AssistantAuthorizationCode> AssistantAuthorizationCodes => Set<AssistantAuthorizationCode>();
+    public DbSet<AssistantConnection> AssistantConnections => Set<AssistantConnection>();
+    public DbSet<AssistantToken> AssistantTokens => Set<AssistantToken>();
     public DbSet<OnlinePaymentRefund> OnlinePaymentRefunds => Set<OnlinePaymentRefund>();
     public DbSet<OrderInvoice> OrderInvoices => Set<OrderInvoice>();
     public DbSet<InvoicingProfile> InvoicingProfiles => Set<InvoicingProfile>();
