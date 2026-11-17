@@ -3610,6 +3610,21 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la limpieza podía borrar un cliente sin conectar con un código por canjear: ya no, con su caso en la prueba de la limpieza.
   - **Verificación:** Domain 1,593, Application 2,388, Infrastructure 812 y WebApi 602 en verde, las dos últimas contra SQL Server 2022 (con Azurite); las 4 de extremo a extremo; cliente: lint, `tsc`, `visual:typecheck`, `e2e:typecheck`, build y Vitest (2,292 pruebas; dos agotaron su tiempo con la máquina cargada y pasaron solas). La primera visita crece 37 B (la ruta `/autorizar`; la página se carga aparte): 180,808 B, y su presupuesto sube a eso.
 
+- Fase 32F, el correo a la plataforma cuando un negocio reporta una reseña ([ADR 0098](../adr/0098-review-report-email-to-the-platform.md)). Sin migración:
+  - **Domain:** `BusinessReviewTests` (+1): reportar levanta `BusinessReviewReportedEvent` una vez con la reseña y su negocio; un reporte rechazado no levanta nada, y dejarla y editarla tampoco; reportarla otra vez después de que su autor la cambió levanta otro.
+  - **Application:** `ReviewReportEmailTests` (7 pruebas, 11 casos, nuevo):
+    - un correo por administrador de la plataforma (`SuperAdmin`) con la cuenta activa y el correo confirmado, y nunca al dueño del negocio;
+    - nada en la cola si la reseña se dejó, se ocultó o se borró;
+    - de un negocio, los primeros 5 reportes de una hora; el sexto espera, y uno 61 minutos después del primero se manda, porque los dos primeros ya quedaron fuera de su hora; los de otro negocio no cuentan;
+    - el asunto y el cuerpo con el negocio, el motivo, las estrellas y el comentario codificados, el enlace a `/platform/reviews`, sin `@` ni «Mi perfil», y sin enlaces cuando no hay dirección de la app;
+    - el texto de cada motivo como lo dice la consola;
+    - nada al mandarlo si el reporte se cerró, si pasó más de un día o si la cuenta dejó de ser administradora o se desactivó;
+    - el proveedor que falla reintenta solo ese correo.
+  - **Infrastructure:** `OutboxTests`: los dos eventos nuevos se leen igual de la cola.
+  - **Mutaciones:** sin el tope por negocio, sin el filtro del rol o sin revisar al mandarlo que siga reportada, falla al menos una prueba en cada una.
+  - **El menor del PR 227:** `AssistantAccountSqlServerTests` saca primero los dos códigos, así que los dos canjes salen juntos; sin el candado de la cuenta falla 3 de 3, y con él pasa 3 de 3.
+  - **Verificación:** `dotnet build` sin errores; `BusinessReviewTests` (34), las de reseñas de Application (22: `ReviewReportEmailTests`, `ReviewEmailTests` y los flujos de reseñas) y `AssistantAccountSqlServerTests` (3, tres corridas contra SQL Server 2022) en verde.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

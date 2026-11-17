@@ -1,6 +1,6 @@
 # ADR 0091: Recordatorio del pedido en línea que espera y correo de reseñas nuevas
 
-- Estado: Aceptada en la Fase 31K (2026-11-12).
+- Estado: Aceptada en la Fase 31K (2026-11-12). Los reportes de reseñas, que aquí esperaban la decisión del dueño, se avisan a la plataforma desde la Fase 32F ([ADR 0098](0098-review-report-email-to-the-platform.md)).
 - Fecha: 2026-11-12
 - Continúa: la [ADR 0078](0078-online-order-waiting-notice.md) (el aviso en pantalla del pedido que lleva 15 minutos), la [ADR 0082](0082-order-cancellation-email-reminder-lead-and-online-orders-index.md) (el correo de los pedidos en línea cancelados) y la [ADR 0030](0030-business-reviews.md) (reseñas).
 

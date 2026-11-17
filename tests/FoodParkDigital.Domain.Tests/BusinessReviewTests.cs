@@ -150,6 +150,7 @@ public class BusinessReviewTests
     public void Report_ShouldLeaveItPublished_UntilThePlatformDecides()
     {
         var review = Review();
+        review.ClearDomainEvents();
 
         review.Report(ReviewConcern.NotAnExperience, Now);
 
@@ -160,6 +161,27 @@ public class BusinessReviewTests
             Assert.Throws<DomainException>(() => review.Report(ReviewConcern.Spam, Now)).Message);
         Assert.Equal(BusinessReview.ConcernMessage,
             Assert.Throws<DomainException>(() => Review().Report((ReviewConcern)9, Now)).Message);
+    }
+
+    [Fact]
+    public void Report_ShouldTellThePlatform_OncePerReport_AndARefusedOneShouldNot()
+    {
+        var review = Review();
+        review.ClearDomainEvents();
+
+        review.Report(ReviewConcern.Spam, Now);
+        Assert.Throws<DomainException>(() => review.Report(ReviewConcern.Spam, Now));
+
+        var reported = Assert.IsType<BusinessReviewReportedEvent>(Assert.Single(review.DomainEvents));
+        Assert.Equal((review.Id, review.TenantId), (reported.ReviewId, reported.TenantId));
+
+        // Kept, changed by its author and reported again: a new report, told again.
+        review.ClearDomainEvents();
+        review.Keep(Now.AddHours(1));
+        review.Edit("Mariana O.", 1, "Otra cosa.", Now.AddHours(2));
+        Assert.Empty(review.DomainEvents);
+        review.Report(ReviewConcern.Offensive, Now.AddHours(3));
+        Assert.IsType<BusinessReviewReportedEvent>(Assert.Single(review.DomainEvents));
     }
 
     [Fact]

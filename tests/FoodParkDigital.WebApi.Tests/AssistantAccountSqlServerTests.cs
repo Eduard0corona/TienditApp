@@ -185,7 +185,9 @@ public sealed class AssistantAccountSqlServerTests
         // Two codes of the same account and assistant at once: both are exchanged, one after the other, and the second replaces
         // the connection of the first. Without the account's lock both would insert one, and the second would fail on the
         // unique index.
-        var exchanged = await Task.WhenAll(Exchange(await AllowAsync()), Exchange(await AllowAsync()));
+        // Both codes first, so the two exchanges leave together.
+        var codes = new[] { await AllowAsync(), await AllowAsync() };
+        var exchanged = await Task.WhenAll(codes.Select(Exchange));
         var tokens = new List<JsonNode>();
         foreach (var response in exchanged)
             tokens.Add(await JsonAsync(response));
