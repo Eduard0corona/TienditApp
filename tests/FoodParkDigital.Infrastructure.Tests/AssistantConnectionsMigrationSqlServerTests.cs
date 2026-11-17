@@ -183,11 +183,14 @@ public class AssistantConnectionsMigrationSqlServerTests
         // Last connected 400 days ago, its connections long gone: an assistant that held its client_id that long registers again.
         var forgotten = AssistantClient.Register(new string('e', 43), "Viejo", [Callback], Now.AddDays(-401));
         forgotten.RecordConnection(Now.AddDays(-400));
+        // Registered two days ago and allowed a minute ago: its code is still to be exchanged, so it stays.
+        var allowing = AssistantClient.Register(new string('f', 43), "Tarde", [Callback], Now.AddDays(-2));
+        var pending = AssistantAuthorizationCode.Issue(allowing, account, new string('f', 43), Callback, Challenge, Resource, "cuenta", Now.AddMinutes(-1));
         await using (var context = database.CreateContext())
         {
             context.AddRange(old.Client, old.Code, old.Connection, old.Access, old.Refresh);
             context.AddRange(working.Client, working.Code, working.Connection, working.Access, working.Refresh);
-            context.AddRange(abandoned, fresh, forgotten);
+            context.AddRange(abandoned, fresh, forgotten, allowing, pending);
             await context.SaveChangesAsync();
         }
 
@@ -202,10 +205,11 @@ public class AssistantConnectionsMigrationSqlServerTests
         Assert.Equal(6, await cleanup.DeleteBatchAsync(CancellationToken.None));
         Assert.Equal(0, await cleanup.DeleteBatchAsync(CancellationToken.None));
         await using var check = database.CreateContext();
-        Assert.Equal(new[] { old.Client.Id, working.Client.Id, fresh.Id }.Order(), (await check.AssistantClients.Select(c => c.Id).ToListAsync()).Order());
+        Assert.Equal(new[] { old.Client.Id, working.Client.Id, fresh.Id, allowing.Id }.Order(),
+            (await check.AssistantClients.Select(c => c.Id).ToListAsync()).Order());
         Assert.Equal(working.Connection.Id, (await check.AssistantConnections.SingleAsync()).Id);
         Assert.Equal(2, await check.AssistantTokens.CountAsync());
-        Assert.Equal(1, await check.AssistantAuthorizationCodes.CountAsync());
+        Assert.Equal(2, await check.AssistantAuthorizationCodes.CountAsync());
     }
 
     private sealed record Granted(

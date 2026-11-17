@@ -101,12 +101,14 @@ public sealed class AssistantAuthorizationCleanupService : BackgroundService
         await context.SaveChangesAsync(cancellationToken);
 
         // Those no account connected in a day, and those connected long ago with no connection left: an assistant that still
-        // holds the client_id of one it connected is not sent to register again for a year.
+        // holds the client_id of one it connected is not sent to register again for a year. Never one with a code still to
+        // exchange: the customer just allowed it.
         var unconnected = now - AssistantClient.TimeToConnect;
         var forgotten = now - AssistantClient.KeptAfterLastConnection;
         var clients = await context.AssistantClients
             .Where(client => ((client.LastConnectedAt == null && client.RegisteredAt < unconnected) || client.LastConnectedAt < forgotten)
-                && !context.AssistantConnections.Any(connection => connection.ClientId == client.Id))
+                && !context.AssistantConnections.Any(connection => connection.ClientId == client.Id)
+                && !context.AssistantAuthorizationCodes.Any(code => code.ClientId == client.Id && code.ExpiresAt > now))
             .OrderBy(client => client.RegisteredAt)
             .Take(BatchSize)
             .ToListAsync(cancellationToken);
