@@ -3623,7 +3623,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Infrastructure:** `OutboxTests`: los dos eventos nuevos se leen igual de la cola.
   - **Mutaciones:** sin el tope por negocio, sin el filtro del rol o sin revisar al mandarlo que siga reportada, falla al menos una prueba en cada una.
   - **El menor del PR 227:** `AssistantAccountSqlServerTests` saca primero los dos códigos, así que los dos canjes salen juntos; sin el candado de la cuenta falla 3 de 3, y con él pasa 3 de 3.
-  - **Verificación:** `dotnet build` sin errores; `BusinessReviewTests` (34), las de reseñas de Application (22: `ReviewReportEmailTests`, `ReviewEmailTests` y los flujos de reseñas) y `AssistantAccountSqlServerTests` (3, tres corridas contra SQL Server 2022) en verde.
+  - **Verificación:** Domain 1,594, Application 2,400, Infrastructure 812 y WebApi 603 en verde, las dos últimas contra SQL Server 2022 (con Azurite). `AssistantAccountSqlServerTests` (3) pasó tres corridas seguidas. Sin cambios en el cliente ni en el contrato.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
