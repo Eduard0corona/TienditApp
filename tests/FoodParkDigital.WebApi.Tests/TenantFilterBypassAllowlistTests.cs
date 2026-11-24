@@ -105,6 +105,9 @@ public class TenantFilterBypassAllowlistTests
         // The platform's moderation of reviews (a platform admin only): the reported or hidden ones of every business, and
         // the business of the one it decides on, which it then enters to write the change and its audit entry (Fase 24H).
         ["src/FoodParkDigital.Application/Reviews/PlatformReviewsFeature.cs"] = 2,
+        // Fase 32G: the platform admin's own open support accesses, in every business they opened one, by their own user id
+        // (read only, platform admin); each business's are read in its scope.
+        ["src/FoodParkDigital.Application/Audit/SupportAccessFeature.cs"] = 1,
         // Fase 30A: the platform watches the requests marked as fake in every business (read only, platform admin).
         ["src/FoodParkDigital.Application/OnlineBooking/FakeRequestsWatchFeature.cs"] = 2,
         // Its search reads the products the menus of those businesses show, each with its own business and only what its

@@ -23,6 +23,13 @@ public static class ApiErrorCodes
     public const string TenantAccessDenied = "tenant_access_denied";
     /// <summary>403. The business is suspended; <c>detail</c> says what to do.</summary>
     public const string TenantSuspended = "tenant_suspended";
+    /// <summary>
+    /// 403. The platform admin sent the business header without an open support access to it (Fase 32G, ADR 0099): they
+    /// open one, with its reason and time, in <c>POST /api/v1/platform/support-access</c>.
+    /// </summary>
+    public const string SupportAccessRequired = "support_access_required";
+    /// <summary>403. The platform admin's support access to the business reached its time; they open another.</summary>
+    public const string SupportAccessExpired = "support_access_expired";
     /// <summary>403. The module (kitchen, inventory...) is not enabled for the business.</summary>
     public const string ModuleDisabled = "module_disabled";
     /// <summary>404. The record does not exist or belongs to another business.</summary>

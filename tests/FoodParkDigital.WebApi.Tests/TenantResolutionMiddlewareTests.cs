@@ -183,15 +183,32 @@ public class TenantResolutionMiddlewareTests
     [Fact]
     public async Task SuperAdminTenantOverride_ShouldNotRun_ForABusinessThatDoesNotExist()
     {
-        var result = await InvokeAsSuperAdminAsync("/api/v1/orders", Guid.NewGuid(), new FakeSupportAccessAudit(exists: false));
+        var result = await InvokeAsSuperAdminAsync(
+            "/api/v1/orders", Guid.NewGuid(), new FakeSupportAccessAudit(SupportAccessOutcome.BusinessNotFound));
 
         Assert.False(result.NextCalled);
         Assert.Equal(StatusCodes.Status404NotFound, result.StatusCode);
     }
 
     [Theory]
+    [InlineData(SupportAccessOutcome.AccessRequired, "support_access_required")]
+    [InlineData(SupportAccessOutcome.AccessExpired, "support_access_expired")]
+    public async Task SuperAdminTenantOverride_ShouldNotRun_WithoutAnOpenSupportAccess(SupportAccessOutcome outcome, string code)
+    {
+        var audit = new FakeSupportAccessAudit(outcome);
+
+        var result = await InvokeAsSuperAdminAsync("/api/v1/orders", Guid.NewGuid(), audit);
+
+        Assert.False(result.NextCalled);
+        Assert.Equal(StatusCodes.Status403Forbidden, result.StatusCode);
+        Assert.Contains($"\"code\":\"{code}\"", result.Body);
+        Assert.Empty(audit.Recorded);
+    }
+
+    [Theory]
     [InlineData("/api/v1/orders", true)]
     [InlineData("/api/v1/me", false)]
+    [InlineData("/api/v1/platform/tenants", false)]
     public async Task SuperAdmin_ShouldNotBeRecorded_InTheirOwnBusinessOrOnAccountRoutes(string path, bool ownBusiness)
     {
         var audit = new FakeSupportAccessAudit();
@@ -200,6 +217,8 @@ public class TenantResolutionMiddlewareTests
 
         Assert.True(result.NextCalled);
         Assert.Empty(audit.Recorded);
+        // On the account's routes the header changes nothing: the business stays the one of the session.
+        Assert.Equal(TenantId, result.TenantService.TenantId);
     }
 
     [Fact]
@@ -300,20 +319,20 @@ public class TenantResolutionMiddlewareTests
 
     private sealed record SuperAdminResult(bool NextCalled, int StatusCode, FakeCurrentTenantService TenantService, string Body);
 
-    private sealed class FakeSupportAccessAudit(bool exists = true, bool fails = false) : ISupportAccessAudit
+    private sealed class FakeSupportAccessAudit(SupportAccessOutcome outcome = SupportAccessOutcome.Recorded, bool fails = false)
+        : ISupportAccessAudit
     {
         public List<(Guid TenantId, Guid SessionTenantId, string Method, string Path)> Recorded { get; } = [];
         public bool RecordedBeforeNext { get; set; }
 
-        public Task<bool> RecordAsync(Guid tenantId, Guid sessionTenantId, string method, string path, CancellationToken cancellationToken)
+        public Task<SupportAccessOutcome> RecordAsync(
+            Guid tenantId, Guid sessionTenantId, string method, string path, CancellationToken cancellationToken)
         {
             if (fails)
                 throw new InvalidOperationException("The database is not available.");
-            if (!exists)
-                return Task.FromResult(false);
-
-            Recorded.Add((tenantId, sessionTenantId, method, path));
-            return Task.FromResult(true);
+            if (outcome == SupportAccessOutcome.Recorded)
+                Recorded.Add((tenantId, sessionTenantId, method, path));
+            return Task.FromResult(outcome);
         }
     }
 
