@@ -1,6 +1,6 @@
 # ADR 0085: Pruebas de extremo a extremo contra la API y SQL Server reales
 
-- Estado: Aceptada en la Fase 31D (2026-11-10).
+- Estado: Aceptada en la Fase 31D (2026-11-10). El 2026-11-24 se sumaron el pago en línea y las citas en línea. Para el pago, Mercado Pago se simula en la frontera (`client/e2e/fake-mercadopago.ts`), porque el real necesita la aplicación de TienditApp, cuentas con dinero e internet; todo lo de TienditApp sigue siendo real.
 - Fecha: 2026-11-10
 
 ## Contexto

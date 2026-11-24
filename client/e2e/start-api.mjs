@@ -2,6 +2,7 @@
 // database in the SQL Server of E2E_SQLSERVER. Everything it writes goes to the log the tests read: without an email
 // provider, Development writes the email it could not send, and the activation link comes from there.
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { createWriteStream, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
@@ -29,6 +30,10 @@ for (const file of readdirSync(path.dirname(dll))) {
 }
 const noUserSecrets = path.join(work, 'no-user-secrets');
 mkdirSync(noUserSecrets, { recursive: true });
+// Mercado Pago is the stand-in of e2e/fake-mercadopago.ts: the API calls it on this port, and the browser goes to its pages,
+// which the test answers. The application's id is the one the stand-in accepts; the secrets are new on each run, and the key
+// that protects the accounts' tokens too (an account connected in an earlier run then reads as without a key).
+const mercadoPagoPort = Number(process.env.E2E_MP_PORT ?? 5298);
 
 const log = createWriteStream(logFile, { flags: 'w' });
 const api = spawn('dotnet', [dll], {
@@ -42,6 +47,13 @@ const api = spawn('dotnet', [dll], {
     AppUrl: url,
     // As the app's connection strings come (docs/architecture/data-consistency-and-domain-events.md).
     ConnectionStrings__DefaultConnection: `${server.replace(/;+$/, '')};Database=${database};MultipleActiveResultSets=True`,
+    MercadoPago__ClientId: 'tienditapp-e2e',
+    MercadoPago__ClientSecret: randomBytes(24).toString('hex'),
+    MercadoPago__WebhookSecret: randomBytes(24).toString('hex'),
+    MercadoPago__Sandbox: 'false',
+    MercadoPago__ApiBaseUrl: `http://127.0.0.1:${mercadoPagoPort}`,
+    MercadoPago__AuthorizationUrl: 'https://mercadopago.e2e.test/authorization',
+    SecretProtection__Key: randomBytes(32).toString('base64'),
     EmailSettings__Provider: 'None',
     SmsSettings__Provider: 'None',
     APPLICATIONINSIGHTS_CONNECTION_STRING: '',

@@ -1223,6 +1223,7 @@ Desde el 2026-11-24, `.github/dependabot.yml` propone cada lunes las versiones n
   - Solo propone versiones con una semana de publicadas (`cooldown`).
   - Las versiones menores y los parches de cada grupo van juntos en un PR. Una versión mayor llega en su propio PR.
   - Nunca propone otra versión mayor de .NET (es un cambio de la solución: `TargetFramework`, paquetes y `global.json`) ni de SQL Server (CI prueba el que habla Azure SQL).
+  - **El CU de SQL Server se sigue subiendo a mano.** Dependabot compara etiquetas con el mismo sufijo, y el de `2022-CU27-ubuntu-22.04` cambia en cada CU, así que nunca propone el siguiente; a lo más el digest de la misma etiqueta. Se sube con `imagetools inspect` (arriba), en `.github/ci-images/docker-compose.yml` y en el `docker-compose.yml` de la raíz.
   - NuGet y npm quedan fuera: sus versiones se mueven con el código que las usa.
 - **Al recibir uno:**
   - Cada merge a `master` despliega, así que nadie los fusiona sin ver CI en verde.
