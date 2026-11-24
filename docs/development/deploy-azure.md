@@ -90,7 +90,11 @@ El `apply.sql` de la Fase 10 borra `RefreshTokens.Token`, `ReplacedByToken` y su
 
 - Los códigos que piden las pantallas sin sesión (recuperar la contraseña por SMS, reenviar la confirmación del teléfono) se envían después de responder. En la Fase 10 salían de una cola en memoria de cada instancia; desde la Fase 11 salen del outbox (sección siguiente).
 - Los rechazos esperados (validación, regla de negocio, sin acceso, no encontrado, cambio concurrente) quedan en el log como advertencia; solo los 500 son errores. La alerta de 5xx por negocio de [observabilidad](../architecture/observability.md) no cambia.
-- Una petición de un `SUPER_ADMIN` con `X-Tenant-Id` en otro negocio queda en la actividad de ese negocio (acción `SupportAccess`) antes de ejecutarse; si la base no la puede guardar, responde 503.
+- Una petición de un `SUPER_ADMIN` con `X-Tenant-Id` en otro negocio queda en la actividad de ese negocio (acción `SupportAccess`) antes de ejecutarse; si la base no la puede guardar, responde 503. Desde la Fase 32G solo corre con un acceso de soporte abierto ([ADR 0099](../adr/0099-support-access-with-reason-and-time.md)):
+  - Se abre con `POST /api/v1/platform/support-access` `{ "tenantId": "…", "reason": "Por qué entras (10 a 500 caracteres)", "minutes": 30 }` (de 15 a 240).
+  - Se cierra antes de tiempo con `POST /api/v1/platform/support-access/{tenantId}/end`, y `GET /api/v1/platform/support-access` lista los abiertos.
+  - Sin uno, responde 403 `support_access_required`; vencido, `support_access_expired`.
+  - El dueño ve el motivo en Seguridad y actividad.
 - Los workflows usan `actions/checkout`, `actions/setup-dotnet` y `actions/setup-node` v5 y `actions/upload-artifact` v6, que corren en Node 24 (desde la Fase 12, fijadas por SHA).
 
 ## Códigos por el outbox, recepción idempotente y cancelación (Fase 11)
