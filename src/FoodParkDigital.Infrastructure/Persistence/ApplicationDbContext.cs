@@ -222,6 +222,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<CashSession> CashSessions => Set<CashSession>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<SupportAccess> SupportAccesses => Set<SupportAccess>();
     public DbSet<AiAgent> AiAgents => Set<AiAgent>();
     public DbSet<SupplyItem> SupplyItems => Set<SupplyItem>();
     public DbSet<InventoryLocation> InventoryLocations => Set<InventoryLocation>();

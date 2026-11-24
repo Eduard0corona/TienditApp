@@ -22,6 +22,7 @@ internal static class BeforeAssistantConnections
         modelBuilder.Ignore<AssistantAuthorizationCode>();
         modelBuilder.Ignore<AssistantConnection>();
         modelBuilder.Ignore<AssistantClient>();
+        BeforeSupportAccesses.Ignore(modelBuilder);
     }
 
     private sealed class Context(

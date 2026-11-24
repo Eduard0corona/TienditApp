@@ -800,6 +800,48 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("AuditLogs", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Audit.Entities.SupportAccess", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AdminUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdminUserId", "StartedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex("TenantId", "AdminUserId", "ExpiresAt");
+
+                    b.ToTable("SupportAccesses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SupportAccesses_Duration", "[ExpiresAt] > [StartedAt]");
+
+                            t.HasCheckConstraint("CK_SupportAccesses_EndedAt", "[EndedAt] IS NULL OR ([EndedAt] >= [StartedAt] AND [EndedAt] < [ExpiresAt])");
+
+                            t.HasCheckConstraint("CK_SupportAccesses_Reason", "LEN([Reason]) BETWEEN 10 AND 500");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Billing.Entities.Plan", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8139,6 +8181,21 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Audit.Entities.SupportAccess", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("AdminUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
