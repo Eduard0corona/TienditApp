@@ -321,20 +321,54 @@ public sealed class CrossTenantHttpSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task PlatformAdmin_InAnotherBusiness_ShouldBeRecordedInItsActivity()
+    public async Task PlatformAdmin_InAnotherBusiness_ShouldNeedAnOpenSupportAccess_AndBeRecordedInItsActivityWithItsReason()
     {
+        const string reason = "El dueño reporta que no ve sus productos en el menú.";
         var platform = await _api.SignUpAsync("plataforma");
         using var admin = await _api.SignInAsPlatformAdminAsync(platform);
+        var categoriesBefore = await CountCategoriesAsync(A);
 
-        // A read (its search stays out of the record) and a change in A, by its header.
+        // Without an access, the header acts on nothing: neither a read nor a change runs, and nothing is recorded.
+        var refused = await admin.SendAsync(InBusiness(A.TenantId, HttpMethod.Get, "/api/v1/products"));
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Contains("\"code\":\"support_access_required\"", await refused.Content.ReadAsStringAsync());
+        using (var change = InBusiness(A.TenantId, HttpMethod.Post, "/api/v1/categories"))
+        {
+            change.Content = JsonContent.Create(new { name = "Sin acceso", sortOrder = 9 });
+            Assert.Equal(HttpStatusCode.Forbidden, (await admin.SendAsync(change)).StatusCode);
+        }
+        Assert.Equal(categoriesBefore, await CountCategoriesAsync(A));
+
+        // Only the platform opens one, with a reason and a time; a business that does not exist has none.
+        Assert.Equal(HttpStatusCode.Forbidden, (await B.Client.PostAsJsonAsync(SupportAccess, new { tenantId = A.TenantId, reason, minutes = 30 })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync(SupportAccess, new { tenantId = A.TenantId, reason = "revisar", minutes = 30 })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync(SupportAccess, new { tenantId = A.TenantId, reason, minutes = 241 })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.PostAsJsonAsync(SupportAccess, new { tenantId = Guid.NewGuid(), reason, minutes = 30 })).StatusCode);
+        var opened = await admin.PostAsJsonAsync(SupportAccess, new { tenantId = A.TenantId, reason, minutes = 30 });
+        Assert.Equal(HttpStatusCode.Created, opened.StatusCode);
+        var access = await TwoBusinessesApi.ReadAsync(opened);
+        var accessId = access.GetProperty("id").GetGuid();
+        Assert.Equal((A.TenantId, reason), (access.GetProperty("tenantId").GetGuid(), access.GetProperty("reason").GetString()));
+        Assert.Equal(TimeSpan.FromMinutes(30), access.GetProperty("expiresAt").GetDateTimeOffset() - access.GetProperty("startedAt").GetDateTimeOffset());
+        // One at a time per business.
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync(SupportAccess, new { tenantId = A.TenantId, reason, minutes = 60 })).StatusCode);
+        var mine = await TwoBusinessesApi.ReadAsync(await admin.GetAsync(SupportAccess));
+        Assert.Contains(mine.EnumerateArray(), a => a.GetProperty("id").GetGuid() == accessId && a.GetProperty("tenantId").GetGuid() == A.TenantId);
+
+        // With it: a read (its search stays out of the record) and a change in A. B stays closed.
         var products = await TwoBusinessesApi.ReadAsync(await admin.SendAsync(InBusiness(A.TenantId, HttpMethod.Get, "/api/v1/products?search=Agua&pageSize=5")));
         Assert.Contains(products.GetProperty("items").EnumerateArray(), product => product.GetProperty("id").GetGuid() == A.ProductId);
-        using var newCategory = InBusiness(A.TenantId, HttpMethod.Post, "/api/v1/categories");
-        newCategory.Content = JsonContent.Create(new { name = "Puesta por soporte", sortOrder = 9 });
-        await TwoBusinessesApi.ReadAsync(await admin.SendAsync(newCategory));
+        using (var newCategory = InBusiness(A.TenantId, HttpMethod.Post, "/api/v1/categories"))
+        {
+            newCategory.Content = JsonContent.Create(new { name = "Puesta por soporte", sortOrder = 9 });
+            await TwoBusinessesApi.ReadAsync(await admin.SendAsync(newCategory));
+        }
+        Assert.Equal(categoriesBefore + 1, await CountCategoriesAsync(A));
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.SendAsync(InBusiness(B.TenantId, HttpMethod.Get, "/api/v1/products"))).StatusCode);
         // A business that does not exist: nothing runs.
         Assert.Equal(HttpStatusCode.NotFound, (await admin.SendAsync(InBusiness(Guid.NewGuid(), HttpMethod.Get, "/api/v1/products"))).StatusCode);
 
+        // The owner sees each request with the access and its reason, and when it was opened.
         var activity = await A.Client.GetFromJsonAsync<JsonElement>($"/api/v1/audit/logs?action={SupportAccessAudit.Action}&pageSize=50");
         var entries = activity.GetProperty("items").EnumerateArray()
             .Where(entry => entry.GetProperty("performedBy").GetString() == platform.Email)
@@ -344,10 +378,49 @@ public sealed class CrossTenantHttpSqlServerTests
         Assert.Contains(entries, entry => entry.GetProperty("Method").GetString() == "GET" && entry.GetProperty("Path").GetString() == "/api/v1/products");
         Assert.Contains(entries, entry => entry.GetProperty("Method").GetString() == "POST" && entry.GetProperty("Path").GetString() == "/api/v1/categories");
         Assert.All(entries, entry => Assert.Equal(platform.TenantId, entry.GetProperty("SessionTenantId").GetGuid()));
+        Assert.All(entries, entry => Assert.Equal((accessId, reason), (entry.GetProperty("SupportAccessId").GetGuid(), entry.GetProperty("Reason").GetString())));
         Assert.DoesNotContain("Agua", activity.GetRawText());
+        var started = await A.Client.GetFromJsonAsync<JsonElement>($"/api/v1/audit/logs?action={SupportAccessHandlers.StartedAction}&pageSize=50");
+        var startedEntry = Assert.Single(started.GetProperty("items").EnumerateArray(), entry => entry.GetProperty("entityId").GetString() == accessId.ToString());
+        Assert.Equal(platform.Email, startedEntry.GetProperty("performedBy").GetString());
+        using (var startedDetails = JsonDocument.Parse(startedEntry.GetProperty("metadata").GetString()!))
+            Assert.Equal(reason, startedDetails.RootElement.GetProperty("Reason").GetString());
         // Only in the business it acted on.
         Assert.DoesNotContain(platform.Email, await B.Client.GetStringAsync($"/api/v1/audit/logs?action={SupportAccessAudit.Action}&pageSize=50"));
+        Assert.DoesNotContain(platform.Email, await B.Client.GetStringAsync($"/api/v1/audit/logs?action={SupportAccessHandlers.StartedAction}&pageSize=50"));
+
+        // Closed before its time, the header acts on nothing again; closing it twice finds nothing open.
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PostAsync($"{SupportAccess}/{A.TenantId}/end", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.PostAsync($"{SupportAccess}/{A.TenantId}/end", null)).StatusCode);
+        var afterClosing = await admin.SendAsync(InBusiness(A.TenantId, HttpMethod.Get, "/api/v1/products"));
+        Assert.Equal(HttpStatusCode.Forbidden, afterClosing.StatusCode);
+        Assert.Contains("\"code\":\"support_access_required\"", await afterClosing.Content.ReadAsStringAsync());
+        var ended = await A.Client.GetFromJsonAsync<JsonElement>($"/api/v1/audit/logs?action={SupportAccessHandlers.EndedAction}&pageSize=50");
+        Assert.Single(ended.GetProperty("items").EnumerateArray(), entry => entry.GetProperty("entityId").GetString() == accessId.ToString());
+        Assert.DoesNotContain((await TwoBusinessesApi.ReadAsync(await admin.GetAsync(SupportAccess))).EnumerateArray(), a => a.GetProperty("id").GetGuid() == accessId);
+
+        // Another one, that reached its time: the header says so. Both are moved an hour back, in their order.
+        var second = await TwoBusinessesApi.ReadAsync(await admin.PostAsJsonAsync(SupportAccess, new { tenantId = A.TenantId, reason, minutes = 15 }));
+        await _api.QueryAsync(A.TenantId, db => db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE [SupportAccesses] SET [StartedAt] = DATEADD(MINUTE, -60, SYSDATETIMEOFFSET()), [ExpiresAt] = DATEADD(MINUTE, -30, SYSDATETIMEOFFSET()),
+                [EndedAt] = DATEADD(MINUTE, -50, SYSDATETIMEOFFSET()) WHERE [Id] = {0};
+            UPDATE [SupportAccesses] SET [StartedAt] = DATEADD(MINUTE, -20, SYSDATETIMEOFFSET()), [ExpiresAt] = DATEADD(MINUTE, -5, SYSDATETIMEOFFSET())
+                WHERE [Id] = {1};
+            """,
+            accessId, second.GetProperty("id").GetGuid()));
+        var expired = await admin.SendAsync(InBusiness(A.TenantId, HttpMethod.Get, "/api/v1/products"));
+        Assert.Equal(HttpStatusCode.Forbidden, expired.StatusCode);
+        Assert.Contains("\"code\":\"support_access_expired\"", await expired.Content.ReadAsStringAsync());
+        // And on the account's routes the header changes nothing: the business of the admin's session.
+        var myAccess = await TwoBusinessesApi.ReadAsync(await admin.SendAsync(InBusiness(A.TenantId, HttpMethod.Get, "/api/v1/me/access")));
+        Assert.Equal(platform.TenantId, myAccess.GetProperty("tenantId").GetGuid());
     }
+
+    private const string SupportAccess = "/api/v1/platform/support-access";
+
+    private Task<int> CountCategoriesAsync(Business business)
+        => _api.QueryAsync(business.TenantId, db => db.Categories.CountAsync());
 
     [SqlServerFact]
     public async Task Inventory_OfAnotherBusiness_ShouldBeInvisible_AndItsStockShouldNotMove()

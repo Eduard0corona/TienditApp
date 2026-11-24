@@ -11821,6 +11821,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/support-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SupportAccessDto"][];
+                        "application/json": components["schemas"]["SupportAccessDto"][];
+                        "text/json": components["schemas"]["SupportAccessDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StartSupportAccessCommand"];
+                    "text/json": components["schemas"]["StartSupportAccessCommand"];
+                    "application/*+json": components["schemas"]["StartSupportAccessCommand"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SupportAccessDto"];
+                        "application/json": components["schemas"]["SupportAccessDto"];
+                        "text/json": components["schemas"]["SupportAccessDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/support-access/{tenantId}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform-settlements": {
         parameters: {
             query?: never;
@@ -23163,6 +23262,13 @@ export interface components {
             supplyItemIds: string[];
             notes?: string | null;
         };
+        StartSupportAccessCommand: {
+            /** Format: uuid */
+            tenantId: string;
+            reason: string;
+            /** Format: int32 */
+            minutes: number;
+        };
         StarterCatalogDto: {
             id: string;
             name: string;
@@ -23301,6 +23407,18 @@ export interface components {
             readonly totalCount: number;
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
+        };
+        SupportAccessDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            tenantId: string;
+            businessName: string;
+            reason: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
         };
         SwitchTenantCommand: {
             /** Format: uuid */

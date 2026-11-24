@@ -91,10 +91,11 @@ public class TenantResolutionMiddleware
             return;
         }
 
-        // SUPER_ADMIN can override tenant via header
+        // The platform admin acts on another business by its header, only on a business route and only while they have
+        // an open support access to it (checked below, ADR 0099). On the account's routes the header changes nothing.
         var role = context.User.FindFirst(ClaimTypes.Role)?.Value;
         Guid? sessionTenantId = null;
-        if (role == "SUPER_ADMIN" &&
+        if (role == "SUPER_ADMIN" && tenantScopedPath &&
             context.Request.Headers.TryGetValue("X-Tenant-Id", out var headerTenantId) &&
             Guid.TryParse(headerTenantId, out var overrideTenantId))
         {
@@ -155,9 +156,9 @@ public class TenantResolutionMiddleware
         tenantService.SetTenant(tenantId);
         TagTelemetry(context, tenantId);
 
-        // On a business route, the request is recorded in the business it acts on before it runs, and does not run
-        // when it cannot be recorded.
-        if (sessionTenantId is { } fromTenant && tenantScopedPath
+        // The request runs only with an open support access to the business it acts on, and is recorded in it first;
+        // it does not run when it cannot be recorded.
+        if (sessionTenantId is { } fromTenant
             && !await RecordSupportAccessAsync(context, supportAccessAudit, tenantId, fromTenant))
             return;
 
@@ -174,13 +175,28 @@ public class TenantResolutionMiddleware
         {
             if (supportAccessAudit is not null)
             {
-                if (await supportAccessAudit.RecordAsync(
-                        tenantId, sessionTenantId, context.Request.Method, context.Request.Path.Value ?? "", context.RequestAborted))
-                    return true;
-
-                await ApiProblem.WriteAsync(
-                    context, StatusCodes.Status404NotFound, "El negocio no existe.", ApiErrorCodes.NotFound, "Tenant not found");
-                return false;
+                switch (await supportAccessAudit.RecordAsync(
+                            tenantId, sessionTenantId, context.Request.Method, context.Request.Path.Value ?? "", context.RequestAborted))
+                {
+                    case SupportAccessOutcome.Recorded:
+                        return true;
+                    case SupportAccessOutcome.BusinessNotFound:
+                        await ApiProblem.WriteAsync(
+                            context, StatusCodes.Status404NotFound, "El negocio no existe.", ApiErrorCodes.NotFound, "Tenant not found");
+                        return false;
+                    case SupportAccessOutcome.AccessExpired:
+                        await ApiProblem.WriteAsync(
+                            context, StatusCodes.Status403Forbidden,
+                            "Tu acceso de soporte a este negocio terminó. Abre otro, con su motivo, para seguir.",
+                            ApiErrorCodes.SupportAccessExpired, "Support access expired");
+                        return false;
+                    default:
+                        await ApiProblem.WriteAsync(
+                            context, StatusCodes.Status403Forbidden,
+                            "Abre un acceso de soporte a este negocio, con su motivo, para actuar en él.",
+                            ApiErrorCodes.SupportAccessRequired, "Support access required");
+                        return false;
+                }
             }
         }
         catch (Exception ex) when (!context.RequestAborted.IsCancellationRequested)

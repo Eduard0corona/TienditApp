@@ -3642,6 +3642,33 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Domain 1,594, Application 2,400, Infrastructure 812 y WebApi 603 en verde, las dos últimas contra SQL Server 2022 (con Azurite).
     - `e2e:typecheck` y ESLint de `client/e2e` en verde.
 
+- Fase 32G, acceso de soporte con motivo y límite de tiempo (2026-11-24, [ADR 0099](../adr/0099-support-access-with-reason-and-time.md)). Con migración (`AddSupportAccesses`):
+  - **`SupportAccessTests` (dominio, 17):** un motivo de 10 a 500 caracteres, recortado; de 15 a 240 minutos; abierto hasta su hora (el último tick sí, la hora no); cerrarlo antes de tiempo, y cerrar uno cerrado o vencido no cambia nada.
+  - **`TenantResolutionMiddlewareTests`:**
+    - sin acceso, o con uno vencido, el encabezado responde 403 `support_access_required` o `support_access_expired`, sin correr ni registrar nada;
+    - en `/me` y `/platform/tenants` el encabezado no cambia el negocio de la sesión.
+  - **`CrossTenantHttpSqlServerTests.PlatformAdmin_InAnotherBusiness_ShouldNeedAnOpenSupportAccess_AndBeRecordedInItsActivityWithItsReason` (contra SQL Server):**
+    - sin acceso, ni una lectura ni un cambio corren en otro negocio, y sus categorías no cambian;
+    - un dueño no abre accesos; un motivo corto, 241 minutos o un negocio que no existe se rechazan;
+    - abierto, el segundo da 409; con él lee y cambia en A, no en B; cada petición queda en la actividad de A con el acceso y su motivo, sin la búsqueda, y la apertura también;
+    - cerrado, vuelve a dar 403 y cerrarlo otra vez 404; uno vencido da `support_access_expired`; `/me/access` con el encabezado sigue en el negocio de la sesión.
+  - **`SupportAccessesMigrationSqlServerTests` (3):**
+    - la tabla nace vacía y la versión anterior sigue funcionando sin conocerla;
+    - la base rechaza un motivo corto, un vencimiento que no es después del inicio, un cierre fuera de su tiempo, un negocio o una cuenta que no existen y borrar la cuenta que lo abrió (de 15 minutos a 4 horas lo cuida el dominio: una función de fechas en el check no correría en el SQLite de las pruebas de Application);
+    - el rollback se detiene con 50066 mientras haya un acceso y, sin ellos, quita solo la tabla.
+  - **Cliente:** `auditLogModel.test.ts` (4) y una prueba de `AuditLogs` leen las tres acciones con su motivo, hasta cuándo, y el método y la ruta.
+  - **Scripts con `sqlcmd`** sobre una base migrada con EF hasta `AddAssistantConnections`:
+    - `apply.sql` dos veces (la segunda con la caché de planes vacía);
+    - `verify.sql`;
+    - `rollback.sql` con un acceso: se detiene en 50066 sin cambiar nada;
+    - sin él, dos veces, y `apply.sql` otra vez.
+  - **Verificación:**
+    - Domain 1,611, Application 2,400, WebApi 606 y las 180 de migraciones y esquema de Infrastructure en verde, contra SQL Server 2022 (con Azurite). La suite completa de Infrastructure (815) pasó antes de cambiar la restricción de la duración.
+    - **Mutación:** si el registro deja pasar una petición sin acceso abierto, falla la prueba de `CrossTenantHttpSqlServerTests`.
+    - `has-pending-model-changes` sin cambios.
+    - **Cliente:** ESLint, 267 archivos de pruebas (2,297) y el build en verde, con el presupuesto de la primera visita y el typecheck de escenas y de las pruebas de extremo a extremo.
+    - **La primera versión de la restricción** (`DATEDIFF(MINUTE, …) BETWEEN 15 AND 240`) rompía 175 pruebas de Application: crean el esquema en SQLite, donde `MINUTE` es una columna que no existe. Ahora la base solo exige que venza después de empezar.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

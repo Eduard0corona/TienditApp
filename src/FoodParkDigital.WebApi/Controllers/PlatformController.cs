@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Audit;
 using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.OnlineBooking;
@@ -140,6 +141,46 @@ public class PlatformController : ControllerBase
     [HttpPost("reviews/{id:guid}/restore")]
     public Task<IActionResult> RestoreReview(Guid id, CancellationToken cancellationToken)
         => SendAsync(new RestoreReviewCommand(id), cancellationToken);
+
+    /// <summary>
+    /// The admin's open support accesses (Fase 32G, ADR 0099): the businesses whose header they may send now, and until
+    /// when.
+    /// </summary>
+    [HttpGet("support-access")]
+    public async Task<ActionResult<IReadOnlyList<SupportAccessDto>>> GetMySupportAccesses(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetMySupportAccessesQuery(), cancellationToken));
+
+    /// <summary>
+    /// Opens a support access to a business: why (10 to 500 characters) and for how long (15 to 240 minutes). Until it
+    /// ends, the <c>X-Tenant-Id</c> header of that business acts on it, and each request is recorded in its activity with
+    /// the reason. Recorded there too.
+    /// </summary>
+    [HttpPost("support-access")]
+    [ProducesResponseType(typeof(SupportAccessDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> StartSupportAccess([FromBody] StartSupportAccessCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsSuccess)
+            return StatusCode(StatusCodes.Status201Created, result.Value);
+        return result.Error switch
+        {
+            SupportAccessHandlers.BusinessNotFoundMessage => this.ApiError(StatusCodes.Status404NotFound, result.Error),
+            SupportAccessHandlers.AlreadyOpenMessage => this.ApiError(StatusCodes.Status409Conflict, result.Error, ApiErrorCodes.Conflict),
+            _ => this.ApiError(StatusCodes.Status400BadRequest, result.Error!)
+        };
+    }
+
+    /// <summary>Closes the admin's open support access to the business before its time; recorded in its activity.</summary>
+    [HttpPost("support-access/{tenantId:guid}/end")]
+    public async Task<IActionResult> EndSupportAccess(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new EndSupportAccessCommand(tenantId), cancellationToken);
+        if (result.IsSuccess)
+            return NoContent();
+        return result.Error is SupportAccessHandlers.BusinessNotFoundMessage or SupportAccessHandlers.NoneOpenMessage
+            ? this.ApiError(StatusCodes.Status404NotFound, result.Error)
+            : this.ApiError(StatusCodes.Status400BadRequest, result.Error!);
+    }
 
     private async Task<IActionResult> SendAsync(IRequest<Result> command, CancellationToken cancellationToken)
     {

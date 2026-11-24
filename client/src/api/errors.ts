@@ -23,6 +23,9 @@ export type ApiErrorCode =
   | 'tenant_required'
   | 'tenant_access_denied'
   | 'tenant_suspended'
+  // The platform admin's business header without an open support access to it, or with one that ended (ADR 0099).
+  | 'support_access_required'
+  | 'support_access_expired'
   | 'module_disabled'
   | 'not_found'
   | 'conflict'

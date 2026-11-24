@@ -100,6 +100,7 @@ public interface IApplicationDbContext
     DbSet<CashSession> CashSessions { get; }
     DbSet<CashTransaction> CashTransactions { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<SupportAccess> SupportAccesses { get; }
     DbSet<AiAgent> AiAgents { get; }
     DbSet<SupplyItem> SupplyItems { get; }
     DbSet<InventoryLocation> InventoryLocations { get; }
