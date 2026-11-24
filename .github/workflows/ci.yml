@@ -44,7 +44,7 @@ jobs:
       - name: Start Azurite (Blob Storage emulator)
         run: |
           docker run --detach --name azurite --publish 127.0.0.1:10000:10000 \
-            mcr.microsoft.com/azure-storage/azurite:3.37.0@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5 \
+            "$(python3 .github/scripts/ci-image.py azurite)" \
             azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --loose
           for _ in $(seq 30); do
             if curl -s -o /dev/null http://127.0.0.1:10000/; then
@@ -99,7 +99,7 @@ jobs:
           fi
           cp client/openapi/openapi.json "$RUNNER_TEMP/openapi/revision.json"
           docker run --rm -v "$RUNNER_TEMP/openapi:/specs:ro" \
-            tufin/oasdiff@sha256:b0815c30ec6d99027623ff90acc98d3f7157702ceeedae47d924dc0cf4491fb3 \
+            "$(python3 .github/scripts/ci-image.py oasdiff)" \
             breaking /specs/base.json /specs/revision.json --format markdown --lang es > "$RUNNER_TEMP/openapi/breaking.md"
           {
             echo "## Cambios incompatibles en la API respecto a ${{ github.base_ref }}"
@@ -178,7 +178,7 @@ jobs:
           MSSQL_SA_PASSWORD="$password" SQLCMDPASSWORD="$password" docker run --detach --name mssql \
             --env ACCEPT_EULA=Y --env MSSQL_SA_PASSWORD --env SQLCMDPASSWORD \
             --publish 127.0.0.1:1433:1433 --volume "$RUNNER_TEMP/sql:/scripts:ro" \
-            mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
+            "$(python3 .github/scripts/ci-image.py mssql)"
           for _ in $(seq 60); do
             if $SQLCMD -l 2 -Q "SELECT 1" > /dev/null 2>&1; then
               exit 0
@@ -447,8 +447,10 @@ jobs:
       - name: Install
         run: npm ci
 
-      # As in the migrations job: the SA password is created inside the job and masked in the logs.
+      # As in the migrations job: the SA password is created inside the job and masked in the logs. From the root,
+      # where ci-image.py reads the image.
       - name: Start SQL Server 2022
+        working-directory: ${{ github.workspace }}
         run: |
           password="$(openssl rand -hex 24)Aa1"
           echo "::add-mask::$password"
@@ -456,7 +458,7 @@ jobs:
           MSSQL_SA_PASSWORD="$password" SQLCMDPASSWORD="$password" docker run --detach --name mssql \
             --env ACCEPT_EULA=Y --env MSSQL_SA_PASSWORD --env SQLCMDPASSWORD \
             --publish 127.0.0.1:1433:1433 \
-            mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
+            "$(python3 .github/scripts/ci-image.py mssql)"
           for _ in $(seq 60); do
             if docker exec mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -l 2 -Q "SELECT 1" > /dev/null 2>&1; then
               exit 0

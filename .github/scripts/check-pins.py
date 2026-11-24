@@ -6,22 +6,29 @@ digest (`mcr.microsoft.com/dotnet/aspnet:10.0.12@sha256:<digest>`). It checks:
   - every `uses:` of .github/workflows (a local action, `./...`, needs no pin);
   - every image that a workflow passes to `docker run`, `docker create` or `docker pull`;
   - every `FROM` of a Dockerfile that is not one of its own stages;
-  - every `image:` of a docker-compose service that does not build it.
+  - every `image:` of a docker-compose service that does not build it, in any docker-compose file of the repository;
+  - that each image a workflow reads with ci-image.py (`"$(python3 .github/scripts/ci-image.py mssql)"`) is a service
+    of .github/ci-images/docker-compose.yml, where Dependabot keeps it up to date.
 """
 import pathlib
 import re
 import shlex
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+# Nothing to cache: the checkout stays as it was.
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from compose_images import CI_IMAGES, ROOT, compose_services  # noqa: E402
+
 COMMIT = re.compile(r'@[0-9a-f]{40}$')
+CI_IMAGE = re.compile(r'^\$\(python3 \.github/scripts/ci-image\.py ([\w-]+)\)$')
 DIGEST = re.compile(r'@sha256:[0-9a-f]{64}$')
 # Options of `docker run` that take a value: the image is the first argument that is neither an option nor its value.
 VALUED_OPTIONS = {'--name', '--publish', '-p', '--env', '-e', '--env-file', '--volume', '-v', '--mount', '--network',
                   '--workdir', '-w', '--entrypoint', '--user', '-u', '--platform', '--label', '-l', '--hostname', '-h'}
 
 
-def workflow_problems(path, name):
+def workflow_problems(path, name, ci_images):
     text = path.read_text(encoding='utf-8')
     for number, line in enumerate(text.splitlines(), 1):
         match = re.match(r'^\s*(?:- )?uses:\s*([^\s#]+)', line)
@@ -38,7 +45,12 @@ def workflow_problems(path, name):
         for index in range(len(tokens) - 1):
             if tokens[index] == 'docker' and tokens[index + 1] in ('run', 'create', 'pull'):
                 image = first_argument(tokens[index + 2:])
-                if image and not DIGEST.search(image):
+                ci_image = CI_IMAGE.match(image or '')
+                if ci_image:
+                    # Its digest is checked with the other docker-compose files.
+                    if ci_image.group(1) not in ci_images:
+                        yield f'{name}: {CI_IMAGES.relative_to(ROOT)} has no service {ci_image.group(1)} with an image'
+                elif image and not DIGEST.search(image):
                     yield f'{name}: the image {image} is not pinned to a digest'
 
 
@@ -68,43 +80,23 @@ def dockerfile_problems(path, name):
 
 
 def compose_problems(path, name):
-    services = []
-    in_services = False
-    service_indent = child_indent = None
-    for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
-        if not line.strip() or line.lstrip().startswith('#'):
-            continue
-        indent = len(line) - len(line.lstrip())
-        if indent == 0:
-            in_services = line.rstrip() == 'services:'
-            continue
-        if not in_services:
-            continue
-        if service_indent is None or indent <= service_indent:
-            service_indent, child_indent = indent, None
-            services.append({'build': False, 'image': None})
-            continue
-        child_indent = child_indent or indent
-        if indent != child_indent:
-            continue
-        key, _, value = line.strip().partition(':')
-        if key == 'build':
-            services[-1]['build'] = True
-        elif key == 'image':
-            services[-1]['image'] = (number, value.strip().strip('"\''))
-    for service in services:
+    for service in compose_services(path):
         if service['image'] and not service['build'] and not DIGEST.search(service['image'][1]):
             yield f'{name}:{service["image"][0]}: the image {service["image"][1]} is not pinned to a digest'
 
 
 def problems(root):
+    ci_images_file = root / CI_IMAGES.relative_to(ROOT)
+    ci_images = ({service['name'] for service in compose_services(ci_images_file) if service['image']}
+                 if ci_images_file.exists() else set())
     for path in sorted((root / '.github' / 'workflows').glob('*.y*ml')):
-        yield from workflow_problems(path, path.relative_to(root))
+        yield from workflow_problems(path, path.relative_to(root), ci_images)
     for path in sorted(root.rglob('Dockerfile*')):
         if 'node_modules' not in path.parts:
             yield from dockerfile_problems(path, path.relative_to(root))
-    for path in sorted(root.glob('docker-compose*.y*ml')):
-        yield from compose_problems(path, path.relative_to(root))
+    for path in sorted(root.rglob('docker-compose*.y*ml')):
+        if 'node_modules' not in path.parts:
+            yield from compose_problems(path, path.relative_to(root))
 
 
 if __name__ == '__main__':
