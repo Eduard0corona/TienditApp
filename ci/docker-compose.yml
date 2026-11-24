@@ -1,6 +1,7 @@
 # The images that CI starts with `docker run`, here so Dependabot keeps their tag and digest up to date: it reads
-# docker-compose files, not the commands of a workflow. Nothing starts this file; each step of
-# .github/workflows/ci.yml reads its image with `python3 .github/scripts/ci-image.py <service>`.
+# docker-compose files, not the commands of a workflow, and writes in .github only for the actions (a pull request of
+# this file there was refused). Nothing starts this file; each step of .github/workflows/ci.yml reads its image with
+# `python3 .github/scripts/ci-image.py <service>`.
 services:
   # Blob Storage emulator, for the *AzuriteTests of the Backend job.
   azurite:

@@ -1,4 +1,4 @@
-"""Prints the image of a service of .github/ci-images/docker-compose.yml: the images that CI starts with `docker run`.
+"""Prints the image of a service of ci/docker-compose.yml: the images that CI starts with `docker run`.
 
     docker run ... "$(python3 .github/scripts/ci-image.py mssql)"
 

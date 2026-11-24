@@ -8,7 +8,7 @@ digest (`mcr.microsoft.com/dotnet/aspnet:10.0.12@sha256:<digest>`). It checks:
   - every `FROM` of a Dockerfile that is not one of its own stages;
   - every `image:` of a docker-compose service that does not build it, in any docker-compose file of the repository;
   - that each image a workflow reads with ci-image.py (`"$(python3 .github/scripts/ci-image.py mssql)"`) is a service
-    of .github/ci-images/docker-compose.yml, where Dependabot keeps it up to date.
+    of ci/docker-compose.yml, where Dependabot keeps it up to date.
 """
 import pathlib
 import re

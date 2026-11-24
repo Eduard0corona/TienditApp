@@ -7,8 +7,9 @@ of each service of CI_IMAGES. It reads the shape these files have: a top-level `
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-# The images that CI starts with `docker run` (.github/workflows/ci.yml), where Dependabot keeps them up to date.
-CI_IMAGES = ROOT / '.github' / 'ci-images' / 'docker-compose.yml'
+# The images that CI starts with `docker run` (.github/workflows/ci.yml), where Dependabot keeps them up to date. Out of
+# .github: Dependabot writes there only for the actions, and refuses its pull request otherwise.
+CI_IMAGES = ROOT / 'ci' / 'docker-compose.yml'
 
 
 def compose_services(path):
