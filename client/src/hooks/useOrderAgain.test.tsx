@@ -75,6 +75,8 @@ function renderOrders(auth: AuthContextType) {
 }
 
 /** What the account answers when it keeps the cart. */
+// When the account kept it: a moment ago. A cart is good for 7 days from then, read with the real clock.
+const keptAt = () => new Date(Date.now() - 60_000).toISOString();
 const keptCart = (savedAt: string) => ({ slug: 'cafe-luna', businessName: 'Café Luna', savedAt, lines: [], reorderOf: 2, skipped: 1 });
 
 describe('useOrderAgain', () => {
@@ -103,7 +105,7 @@ describe('useOrderAgain', () => {
     const busy = screen.getByRole('button', { name: 'Abriendo la tienda de Café Luna…' });
     expect(busy).toBeDisabled();
     expect(busy).toHaveAttribute('aria-busy', 'true');
-    const savedAt = '2026-11-15T05:00:00.000Z';
+    const savedAt = keptAt();
     await act(async () => kept(keptCart(savedAt)));
 
     expect(await screen.findByTestId('store')).toHaveTextContent('/m/cafe-luna');
@@ -126,7 +128,7 @@ describe('useOrderAgain', () => {
     expect(screen.getByTestId('store')).toHaveTextContent('/m/cafe-luna');
     expect(readCart('cafe-luna')).toEqual(expect.objectContaining({ reorderOf: 2, skipped: 1 }));
     // The saves of a store go one at a time: this one ends before the next test saves.
-    await act(async () => answer(keptCart('2026-11-15T05:00:00.000Z')));
+    await act(async () => answer(keptCart(keptAt())));
   });
 
   it('opens the store as soon as the account says it cannot keep it, and this device keeps the cart', async () => {
@@ -149,7 +151,7 @@ describe('useOrderAgain', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Pedir otra vez ORD-000390 de Café Luna' }));
     await waitFor(() => expect(account.saveCart).toHaveBeenCalled());
     await userEvent.click(screen.getByRole('link', { name: 'Explorar' }));
-    await act(async () => kept(keptCart('2026-11-15T05:00:00.000Z')));
+    await act(async () => kept(keptCart(keptAt())));
 
     expect(screen.getByText('Explorar')).toBeInTheDocument();
     expect(screen.queryByTestId('store')).not.toBeInTheDocument();
@@ -164,7 +166,7 @@ describe('useOrderAgain', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Dos veces' }));
     await waitFor(() => expect(account.saveCart).toHaveBeenCalled());
-    await act(async () => kept(keptCart('2026-11-15T05:00:00.000Z')));
+    await act(async () => kept(keptCart(keptAt())));
     expect(await screen.findByTestId('store')).toHaveTextContent('/m/cafe-luna');
 
     expect(account.saveCart).toHaveBeenCalledTimes(1);
