@@ -47,7 +47,11 @@ public sealed class CrossTenantOnlinePaymentsSqlServerTests
         Assert.Equal(HttpStatusCode.BadRequest, (await theirs.Client.SendAsync(AsOther(mine, HttpMethod.Put, $"{Settings}/accepts-payments", new { accepts = false }))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await theirs.Client.SendAsync(AsOther(mine, HttpMethod.Delete, $"{Settings}/account"))).StatusCode);
         var stolenState = await StartAsync(mine.Client);
-        Assert.Equal(HttpStatusCode.BadRequest, (await theirs.Client.PostAsJsonAsync($"{Settings}/connect/complete", new { state = stolenState, code = "TG-code" })).StatusCode);
+        var stolen = await theirs.Client.PostAsJsonAsync($"{Settings}/connect/complete", new { state = stolenState, code = "TG-code" });
+        Assert.Equal(HttpStatusCode.BadRequest, stolen.StatusCode);
+        // Refused for being another business's authorization, not for how the state is written.
+        Assert.Equal("La autorización de Mercado Pago ya no es válida. Vuelve a conectar la cuenta.",
+            JsonDocument.Parse(await stolen.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
 
         var myView = await mine.Client.GetFromJsonAsync<JsonElement>(Settings);
         Assert.Equal((true, account, true), (
@@ -173,15 +177,16 @@ public sealed class CrossTenantOnlinePaymentsSqlServerTests
         return client;
     }
 
-    private static async Task<Guid> StartAsync(HttpClient owner)
+    /// <returns>The state as Mercado Pago sends it back: the text of the authorization's address, which the page posts as is.</returns>
+    private static async Task<string> StartAsync(HttpClient owner)
     {
         var started = await TwoBusinessesApi.ReadAsync(await owner.PostAsync($"{Settings}/connect", null));
         var url = new Uri(started.GetProperty("authorizationUrl").GetString()!);
-        return Guid.ParseExact(HttpUtility.ParseQueryString(url.Query)["state"]!, "N");
+        return HttpUtility.ParseQueryString(url.Query)["state"]!;
     }
 
     /// <returns>The account Mercado Pago connected.</returns>
-    private static async Task<long> ConnectAsync(HttpClient owner, Guid state)
+    private static async Task<long> ConnectAsync(HttpClient owner, string state)
     {
         var connected = await TwoBusinessesApi.ReadAsync(await owner.PostAsJsonAsync($"{Settings}/connect/complete", new { state, code = "TG-code" }));
         Assert.True(connected.GetProperty("connected").GetBoolean());

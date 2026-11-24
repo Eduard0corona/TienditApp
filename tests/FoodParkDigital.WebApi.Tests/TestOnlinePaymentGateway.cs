@@ -23,7 +23,7 @@ public sealed class TestOnlinePaymentGateway : IOnlinePaymentGateway
     public long? NextAccountId { get; set; }
 
     public Uri AuthorizationUrl(Guid state, string codeChallenge)
-        => new($"https://auth.mercadopago.test/authorization?state={state:N}&code_challenge={codeChallenge}");
+        => new($"https://auth.mercadopago.test/authorization?state={state:D}&code_challenge={codeChallenge}");
 
     public Task<OnlinePaymentCredentials> ConnectAsync(string code, string codeVerifier, CancellationToken cancellationToken)
     {
