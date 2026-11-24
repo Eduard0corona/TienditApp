@@ -45,12 +45,12 @@ updates:
       prefix: "Dependencias"
     open-pull-requests-limit: 5
 
-  # docker-compose.yml (local development) and .github/ci-images/docker-compose.yml, the images CI starts with
-  # `docker run`.
+  # docker-compose.yml (local development) and ci/docker-compose.yml, the images CI starts with `docker run` (out of
+  # .github: Dependabot writes there only for the actions).
   - package-ecosystem: docker-compose
     directories:
       - /
-      - /.github/ci-images
+      - /ci
     schedule:
       interval: weekly
       day: monday

@@ -80,7 +80,9 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
             $"client_id={Uri.EscapeDataString(_options.ClientId!)}",
             "response_type=code",
             "platform_id=mp",
-            $"state={state:N}",
+            // With hyphens: Mercado Pago sends it back as is, and Configuración › Pagos en línea posts it in JSON, where a
+            // Guid is read only in this form (without them the connection never completed).
+            $"state={state:D}",
             $"redirect_uri={Uri.EscapeDataString(RedirectUri)}",
             $"code_challenge={Uri.EscapeDataString(codeChallenge)}",
             "code_challenge_method=S256");

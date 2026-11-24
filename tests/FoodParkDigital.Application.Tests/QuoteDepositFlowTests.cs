@@ -564,7 +564,7 @@ public class QuoteDepositFlowTests
                 FakeOnlinePaymentGateway.AccountId + 1, "APP_USR-other", "TG-other", Clock.UtcNow.AddDays(180), LiveMode: true);
             var started = await new StartOnlinePaymentConnectionCommandHandler(Context, Shop.Fixture.TenantService, Shop.Fixture.CurrentUser, Gateway, Clock)
                 .Handle(new StartOnlinePaymentConnectionCommand(), CancellationToken.None);
-            var state = Guid.ParseExact(System.Web.HttpUtility.ParseQueryString(new Uri(started.Value!.AuthorizationUrl).Query)["state"]!, "N");
+            var state = Guid.Parse(System.Web.HttpUtility.ParseQueryString(new Uri(started.Value!.AuthorizationUrl).Query)["state"]!);
             return await new CompleteOnlinePaymentConnectionCommandHandler(Context, Shop.Fixture.TenantService, Shop.Fixture.CurrentUser, Gateway, Protector, Clock)
                 .Handle(new CompleteOnlinePaymentConnectionCommand(state, "TG-other-code"), CancellationToken.None);
         }

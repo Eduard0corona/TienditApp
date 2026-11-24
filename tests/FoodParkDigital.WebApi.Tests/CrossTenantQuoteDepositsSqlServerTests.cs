@@ -162,7 +162,8 @@ public sealed class CrossTenantQuoteDepositsSqlServerTests
     private static async Task<long> ConnectAsync(HttpClient owner)
     {
         var started = await TwoBusinessesApi.ReadAsync(await owner.PostAsync($"{OnlinePayments}/connect", null));
-        var state = Guid.ParseExact(HttpUtility.ParseQueryString(new Uri(started.GetProperty("authorizationUrl").GetString()!).Query)["state"]!, "N");
+        // As the page posts it: the text Mercado Pago sends back.
+        var state = HttpUtility.ParseQueryString(new Uri(started.GetProperty("authorizationUrl").GetString()!).Query)["state"]!;
         var connected = await TwoBusinessesApi.ReadAsync(await owner.PostAsJsonAsync($"{OnlinePayments}/connect/complete", new { state, code = "TG-code" }));
         Assert.False(connected.GetProperty("acceptsPayments").GetBoolean());
         return connected.GetProperty("accountId").GetInt64();

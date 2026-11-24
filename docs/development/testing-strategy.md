@@ -3625,6 +3625,23 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **El menor del PR 227:** `AssistantAccountSqlServerTests` saca primero los dos códigos, así que los dos canjes salen juntos; sin el candado de la cuenta falla 3 de 3, y con él pasa 3 de 3.
   - **Verificación:** Domain 1,594, Application 2,400, Infrastructure 812 y WebApi 603 en verde, las dos últimas contra SQL Server 2022 (con Azurite). `AssistantAccountSqlServerTests` (3) pasó tres corridas seguidas. Sin cambios en el cliente ni en el contrato.
 
+- Pruebas de extremo a extremo del pago en línea y de las citas en línea (2026-11-24, [ADR 0085](../adr/0085-end-to-end-tests.md)). Sin migración:
+  - **`pago-en-linea.spec.ts` (nueva):**
+    - El negocio conecta Mercado Pago (autoriza, regresa con el código, la API lo canjea con su verificador PKCE) y ofrece pagar en línea.
+    - Un cliente sin cuenta paga su pedido. Al regresar, la API lee el pago con la llave del negocio y crea el pedido. El negocio lo ve pagado en Pedidos, y volver a la misma página no crea otro.
+    - Mercado Pago se simula en la frontera (`client/e2e/fake-mercadopago.ts`): un servidor HTTP para lo que llama la API, y las páginas del navegador contestadas con `context.route`. El simulado revisa el id de la aplicación, el PKCE, la llave de cada llamada y quién cobró cada pago.
+  - **`cita-en-linea.spec.ts` (nueva):** una barbería prende la Agenda y Servicios, pone su horario y prende las citas en línea. Un cliente sin cuenta agenda un corte para mañana a las 10:00 a. m. El negocio lo acepta en la Agenda y el enlace del cliente pasa de «Por confirmar» a «Confirmada».
+  - **El bug que encontró:** conectar Mercado Pago no terminaba.
+    - La dirección de autorización llevaba el `state` sin guiones, y `connect/complete` lo lee en el JSON como Guid, que solo acepta guiones.
+    - Ahora va con guiones.
+    - `MercadoPagoGatewayTests` comprueba que el `state` de la dirección se lee como el Guid del JSON.
+    - `CrossTenantOnlinePaymentsSqlServerTests`, `CrossTenantQuoteDepositsSqlServerTests` y `CrossTenantBookingDepositsSqlServerTests` mandan el texto como la página, sin convertirlo antes, y la del `state` robado comprueba el mensaje: el 400 ya no puede venir del formato.
+    - **Mutaciones:** sin guiones en el gateway real falla `MercadoPagoGatewayTests`; sin guiones en el de las pruebas de la API fallan sus 7.
+  - **Verificación:**
+    - Las 6 pruebas de extremo a extremo pasaron dos corridas seguidas contra SQL Server 2022 (1.4 min cada una).
+    - Domain 1,594, Application 2,400, Infrastructure 812 y WebApi 603 en verde, las dos últimas contra SQL Server 2022 (con Azurite).
+    - `e2e:typecheck` y ESLint de `client/e2e` en verde.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

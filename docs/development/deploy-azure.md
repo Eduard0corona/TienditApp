@@ -115,7 +115,7 @@ El `apply.sql` de la Fase 12 no cambia el esquema ni los datos: solo registra `2
 El `apply.sql` de la Fase 13 borra `Products.StockQuantity`, `LowStockThreshold` y `CustomerProfiles.LoyaltyPoints` (con su valor por omisión) y `LoyaltyTier`, y se aplica, como siempre, antes del merge y con la Fase 12 desplegada: no las mapea, así que sigue funcionando, y volver a ella no necesita `rollback.sql`. Antes de aplicar, su `verify.sql` debe mostrar como única dependencia la restricción del valor por omisión de `LoyaltyPoints`, ninguna estadística creada a mano ni objeto que use las tablas, y cuánto capturado se pierde (solo queda en el respaldo). Volver a la Fase 11 exige antes el `rollback.sql` de esa carpeta, que crea las columnas vacías.
 
 - Las imágenes de Docker van con su etiqueta exacta y su digest: en CI `azurite:3.37.0` y `mssql/server:2022-CU27-ubuntu-22.04` (lo que era `2022-latest`); en el `Dockerfile` `aspnet:10.0.14` (desde el 2026-11-03; la 10.0.13 corrige GHSA-846f-f764-76mx y GHSA-2fmv-rv2c-59x7 en la copia de `System.Security.Cryptography.Pkcs` que trae `Microsoft.AspNetCore.App`), `sdk:10.0.401` y `node:24-alpine` (Node 24.21.0); en `docker-compose.yml` el mismo SQL Server de CI. El paso `Actions and images pinned` del job `Backend` corre `.github/scripts/check-pins.py`, que falla con una action sin SHA completo o una imagen sin digest.
-- Para actualizar una imagen: `docker buildx imagetools inspect <imagen>:<etiqueta>` da el digest que tiene hoy esa etiqueta (el de la lista de plataformas, no el de una sola). Cambia la etiqueta y el digest juntos y revisa las notas de versión; una imagen fijada no recibe los parches de su etiqueta hasta que cambies el digest. Desde el 2026-11-24 Dependabot lo propone ([abajo](#dependabot-para-las-actions-y-las-imágenes)), y las imágenes de CI viven en `.github/ci-images/docker-compose.yml`.
+- Para actualizar una imagen: `docker buildx imagetools inspect <imagen>:<etiqueta>` da el digest que tiene hoy esa etiqueta (el de la lista de plataformas, no el de una sola). Cambia la etiqueta y el digest juntos y revisa las notas de versión; una imagen fijada no recibe los parches de su etiqueta hasta que cambies el digest. Desde el 2026-11-24 Dependabot lo propone ([abajo](#dependabot-para-las-actions-y-las-imágenes)), y las imágenes de CI viven en `ci/docker-compose.yml`.
 - Un controller nuevo con datos del negocio necesita una prueba en la suite entre negocios: `CrossTenantSuiteCoverageTests` falla hasta que una clase `CrossTenant*` llame sus rutas (desde la Fase 14, las de sus acciones).
 
 ## Columna `RequireOpenCashSession` sin mapear
@@ -1218,11 +1218,13 @@ Desde el 2026-11-24, `.github/dependabot.yml` propone cada lunes las versiones n
   - las `uses:` de `.github/workflows`;
   - el `Dockerfile` de la API;
   - `docker-compose.yml`;
-  - `.github/ci-images/docker-compose.yml`, con las imágenes que CI arranca con `docker run`: Azurite, oasdiff y SQL Server. Dependabot no lee los comandos de un workflow, así que cada paso toma su imagen de ese archivo con `python3 .github/scripts/ci-image.py <servicio>`, y `check-pins.py` falla si el servicio no existe o su imagen no tiene digest.
+  - `ci/docker-compose.yml`, con las imágenes que CI arranca con `docker run`: Azurite, oasdiff y SQL Server. Dependabot no lee los comandos de un workflow, así que cada paso toma su imagen de ese archivo con `python3 .github/scripts/ci-image.py <servicio>`, y `check-pins.py` falla si el servicio no existe o su imagen no tiene digest.
+  - Ese archivo vive fuera de `.github` porque ahí Dependabot solo escribe para las actions. Su primer PR, Azurite 3.37.0 → 3.38.0 cuando el archivo estaba en `.github/ci-images`, lo rechazó GitHub: «The request contains invalid or unauthorized changes».
 - **Cuándo y cómo:**
   - Solo propone versiones con una semana de publicadas (`cooldown`).
   - Las versiones menores y los parches de cada grupo van juntos en un PR. Una versión mayor llega en su propio PR.
   - Nunca propone otra versión mayor de .NET (es un cambio de la solución: `TargetFramework`, paquetes y `global.json`) ni de SQL Server (CI prueba el que habla Azure SQL).
+  - **El CU de SQL Server se sigue subiendo a mano.** Dependabot compara etiquetas con el mismo sufijo, y el de `2022-CU27-ubuntu-22.04` cambia en cada CU, así que nunca propone el siguiente; a lo más el digest de la misma etiqueta. Se sube con `imagetools inspect` (arriba), en `ci/docker-compose.yml` y en el `docker-compose.yml` de la raíz.
   - NuGet y npm quedan fuera: sus versiones se mueven con el código que las usa.
 - **Al recibir uno:**
   - Cada merge a `master` despliega, así que nadie los fusiona sin ver CI en verde.

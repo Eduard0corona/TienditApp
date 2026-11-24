@@ -31,7 +31,10 @@ public class MercadoPagoGatewayTests
         Assert.StartsWith("https://auth.mercadopago.com.mx/authorization?", url);
         Assert.Contains("client_id=app-123", url);
         Assert.Contains("response_type=code", url);
-        Assert.Contains($"state={state:N}", url);
+        Assert.Contains($"state={state:D}", url);
+        // The page posts the state back as Mercado Pago returned it, in the JSON of connect/complete: it must read as its Guid.
+        var returned = System.Web.HttpUtility.ParseQueryString(new Uri(url).Query)["state"]!;
+        Assert.Equal(state, System.Text.Json.JsonSerializer.Deserialize<Guid>($"\"{returned}\""));
         Assert.Contains("redirect_uri=https%3A%2F%2Ftienditapp.test%2Fsettings%2Fonline-payments", url);
         Assert.Contains("code_challenge=challenge-value_123", url);
         Assert.Contains("code_challenge_method=S256", url);

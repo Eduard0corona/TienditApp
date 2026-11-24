@@ -922,7 +922,7 @@ public partial class OnlinePaymentsFlowTests
         }
 
         public Guid StateOf(string authorizationUrl)
-            => Guid.ParseExact(System.Web.HttpUtility.ParseQueryString(new Uri(authorizationUrl).Query)["state"]!, "N");
+            => Guid.Parse(System.Web.HttpUtility.ParseQueryString(new Uri(authorizationUrl).Query)["state"]!);
 
         public ValueTask DisposeAsync() => Fixture.DisposeAsync();
 

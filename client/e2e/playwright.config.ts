@@ -3,8 +3,8 @@ import { defineConfig } from '@playwright/test';
 import { apiDir, apiLog, baseURL, usesRunningApi } from './paths';
 
 /**
- * The end-to-end tests (README.md): the client the API serves, against the real API and a real SQL Server. Nothing is
- * mocked. They run one at a time: each signs up its own business, and the API is one process.
+ * The end-to-end tests (README.md): the client the API serves, against the real API and a real SQL Server. Only Mercado
+ * Pago is stood in for (fake-mercadopago.ts). They run one at a time: each signs up its own business, and the API is one process.
  */
 const client = fileURLToPath(new URL('..', import.meta.url));
 
