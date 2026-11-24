@@ -1,0 +1,70 @@
+# Dependabot proposes the new version of each action and each Docker image. They are pinned to a commit and a digest
+# (.github/scripts/check-pins.py), so nothing moves by itself: without this nobody brings their security fixes.
+# Every merge to master deploys, so each pull request goes through CI and someone merges it (the Claude review skips
+# Dependabot: its runs get no secrets). How to read and merge them is in docs/development/deploy-azure.md.
+# NuGet and npm packages stay out: their versions move with the code that uses them and its tests.
+version: 2
+updates:
+  # Every `uses:` of .github/workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Mexico_City
+    # Only versions a week old: a release withdrawn or compromised in its first days never arrives.
+    cooldown:
+      default-days: 7
+    groups:
+      # Minor versions and patches together, once a week. A major version comes in its own pull request.
+      actions:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "Dependencias"
+    open-pull-requests-limit: 5
+
+  # The images of the API's Dockerfile.
+  - package-ecosystem: docker
+    directory: /src/FoodParkDigital.WebApi
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Mexico_City
+    cooldown:
+      default-days: 7
+    ignore:
+      # A new .NET is a change of the solution (TargetFramework, packages, global.json), not of an image.
+      - dependency-name: "*dotnet/*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      dockerfile:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "Dependencias"
+    open-pull-requests-limit: 5
+
+  # docker-compose.yml (local development) and .github/ci-images/docker-compose.yml, the images CI starts with
+  # `docker run`.
+  - package-ecosystem: docker-compose
+    directories:
+      - /
+      - /.github/ci-images
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Mexico_City
+    cooldown:
+      default-days: 7
+    ignore:
+      # Another SQL Server is a decision of its own: production runs Azure SQL, and CI tests the version it speaks.
+      - dependency-name: "*mssql/server"
+        update-types: ["version-update:semver-major"]
+    groups:
+      compose:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "Dependencias"
+    open-pull-requests-limit: 5

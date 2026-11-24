@@ -1,0 +1,13 @@
+# The images that CI starts with `docker run`, here so Dependabot keeps their tag and digest up to date: it reads
+# docker-compose files, not the commands of a workflow. Nothing starts this file; each step of
+# .github/workflows/ci.yml reads its image with `python3 .github/scripts/ci-image.py <service>`.
+services:
+  # Blob Storage emulator, for the *AzuriteTests of the Backend job.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.37.0@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5
+  # The breaking changes of the API against the base branch, reported on each pull request.
+  oasdiff:
+    image: tufin/oasdiff:v1.39.0@sha256:004bef22058ace818b61f0eb2f05efb89fc6a3882f68bf4db0b6a86f40723fe0
+  # SQL Server 2022 of the Migrations and End to end jobs; the docker-compose.yml of the root uses the same one.
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
