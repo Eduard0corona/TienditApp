@@ -5,6 +5,7 @@ import { auditApi } from '../../api/auditApi';
 import { getApiErrorMessage } from '../../api/errors';
 import type { AuditLogDto, PaginatedList } from '../../types';
 import { formatInBusinessZone, businessDayEnd, businessDayStart } from '../../utils/dates';
+import { describeAuditAction } from './auditLogModel';
 
 const COLUMNS = [
   { header: 'Fecha' },
@@ -27,6 +28,11 @@ const EMPTY_PAGE: PaginatedList<AuditLogDto> = {
   hasPreviousPage: false,
   hasNextPage: false,
 };
+
+/** Until when a support access lasts: the day and the time of the business. */
+function toLocalDayAndTime(value: string) {
+  return formatInBusinessZone(value, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
 
 function toLocalDateTime(value: string) {
   return formatInBusinessZone(value, {
@@ -211,15 +217,21 @@ export default function AuditLogs() {
             }}
             searchPlaceholder="Qué cambió, acción o quién"
 
-            renderRow={(item) => (
-              <>
-                <td>{toLocalDateTime(item.timestamp)}</td>
-                <td>{item.entityName}</td>
-                <td>{item.action}</td>
-                <td className="text-muted">{item.entityId}</td>
-                <td>{item.performedBy}</td>
-              </>
-            )}
+            renderRow={(item) => {
+              const action = describeAuditAction(item, toLocalDayAndTime);
+              return (
+                <>
+                  <td>{toLocalDateTime(item.timestamp)}</td>
+                  <td>{item.entityName}</td>
+                  <td title={action.label === item.action ? undefined : item.action}>
+                    {action.label}
+                    {action.detail && <div className="small text-muted text-break">{action.detail}</div>}
+                  </td>
+                  <td className="text-muted">{item.entityId}</td>
+                  <td>{item.performedBy}</td>
+                </>
+              );
+            }}
           />
         </div>
       </div>

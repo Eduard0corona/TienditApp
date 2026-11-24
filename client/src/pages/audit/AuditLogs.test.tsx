@@ -68,6 +68,30 @@ describe('AuditLogs', () => {
     });
   });
 
+  it('reads the support accesses of the platform: who entered, why, until when and what it did', async () => {
+    setBusinessTimeZone('America/Cancun');
+    const reason = 'El dueño reporta que su corte de caja no cuadra.';
+    getLogs.mockResolvedValue(page([
+      {
+        id: 's2', entityName: 'Tenant', entityId: 'b7', action: 'SupportAccess', performedBy: 'soporte@tienditapp.mx',
+        timestamp: '2026-11-24T18:05:00Z', metadata: JSON.stringify({ Method: 'POST', Path: '/api/v1/categories', Reason: reason }),
+      },
+      {
+        id: 's1', entityName: 'SupportAccess', entityId: 'c9', action: 'SupportAccessStarted', performedBy: 'soporte@tienditapp.mx',
+        timestamp: '2026-11-24T18:00:00Z', metadata: JSON.stringify({ Reason: reason, ExpiresAt: '2026-11-24T18:30:00+00:00' }),
+      },
+    ]));
+    render(<AuditLogs />);
+
+    const request = (await screen.findByText(`POST /api/v1/categories · Motivo: ${reason}`)).closest('td') as HTMLElement;
+    expect(request).toHaveTextContent(/^Soporte de la plataforma/);
+    // The recorded action stays at hand, for the Acción filter.
+    expect(request).toHaveAttribute('title', 'SupportAccess');
+    const opened = screen.getByText('Soporte de la plataforma: abrió un acceso').closest('td') as HTMLElement;
+    // Until 18:30 UTC, 13:30 in Cancún.
+    expect(opened).toHaveTextContent(new RegExp(`Motivo: ${reason} · hasta 24/11, 01:30\\sp\\.\\s?m\\.$`));
+  });
+
   it('asks for the entity and the action once typing stops, whole, and from the first page', async () => {
     const user = userEvent.setup();
     getLogs.mockResolvedValue(page([INVOICE, PERMISSIONS], 45));
